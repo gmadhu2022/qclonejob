@@ -107,6 +107,10 @@ the generated passwords appear in the results table **and** print to the backend
 
 ## Deploying
 
+**Render Blueprint (recommended):** [DEPLOY_BLUEPRINT.md](DEPLOY_BLUEPRINT.md) — step by step,
+with the exact environment variables to paste in.
+
+
 Free deployment on Render (API + static frontend, Supabase for the database):
 **[DEPLOY_RENDER.md](DEPLOY_RENDER.md)**. The repo includes a `render.yaml` blueprint, so
 Render can create both services in one step.

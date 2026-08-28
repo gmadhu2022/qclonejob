@@ -16,19 +16,28 @@ credentials.json
 # ============================================================
 #  Virtual environments (any name, any location)
 # ============================================================
+# NOTE: patterns here must be ANCHORED or venv-specific.
+# A bare "Lib/" also matches "frontend/src/lib/" because Git on Windows is
+# case-insensitive by default (core.ignorecase=true) — that silently drops
+# real source files from the repo and breaks the build.
 venv/
 .venv/
 env/
 ENV/
-# a venv created as `python -m venv hire` (comments must be on their own line)
-hire/
-*/venv/
-*/.venv/
 pyvenv.cfg
-Lib/
-Scripts/
-Include/
-site-packages/
+**/site-packages/
+# venv internals, only when they sit beside a pyvenv.cfg-style venv folder
+venv/Lib/
+venv/Scripts/
+venv/Include/
+.venv/Lib/
+.venv/Scripts/
+.venv/Include/
+# a venv created as `python -m venv hire` at the repo root
+/hire/Lib/
+/hire/Scripts/
+/hire/Include/
+/hire/pyvenv.cfg
 
 # ============================================================
 #  Python

@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parent
 
 # name, regex, note
 PATTERNS = [
-    ("Groq API key",      r"",                    "console.groq.com/keys"),
+    ("Groq API key",      r"[A-Za-z0-9]{20,}",                    "console.groq.com/keys"),
     ("OpenAI API key",    r"sk-(?:proj-)?[A-Za-z0-9_\-]{20,}",        "platform.openai.com"),
     ("Anthropic API key", r"sk-ant-[A-Za-z0-9_\-]{20,}",              "console.anthropic.com"),
     ("AWS access key",    r"AKIA[0-9A-Z]{16}",                        "AWS IAM"),
