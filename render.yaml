@@ -1,0 +1,75 @@
+# Render Blueprint — deploys the backend API and the frontend in one go.
+# In Render: New > Blueprint > connect this repo. Render reads this file.
+#
+# Free tier notes:
+#   - The static site is genuinely free and never sleeps.
+#   - The free web service sleeps after 15 min idle; first request after that
+#     takes 30-60s to wake. Fine for demos, not for real users.
+#   - Do NOT use Render's free Postgres: it is deleted after ~30 days.
+#     Point DATABASE_URL at Supabase instead (see SUPABASE_SETUP.md).
+
+services:
+  # ---------------- Backend API (FastAPI) ----------------
+  - type: web
+    name: qclonejob-api
+    runtime: python
+    plan: free
+    region: singapore              # closest Render region to India
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.4"
+      # Secrets: set these in the Render dashboard, never in this file.
+      - key: DATABASE_URL
+        sync: false               # Supabase session-pooler URI
+      - key: JWT_SECRET
+        generateValue: true       # Render generates a strong random value
+      - key: FRONTEND_URL
+        sync: false               # https://qclonejob-web.onrender.com
+      - key: CORS_ORIGINS
+        sync: false               # same as FRONTEND_URL (comma-separated if several)
+      # Optional integrations — leave blank to run without them.
+      - key: AI_ENABLED
+        value: "False"
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-20b
+      - key: EMAIL_ENABLED
+        value: "False"
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+
+  # ---------------- Frontend (React static site) ----------------
+  - type: web
+    name: qclonejob-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    autoDeploy: true
+    envVars:
+      - key: VITE_API_BASE
+        sync: false               # https://qclonejob-api.onrender.com
+    routes:
+      # Single-page app: every unknown path must serve index.html,
+      # otherwise refreshing /jobseeker/profile returns 404.
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable

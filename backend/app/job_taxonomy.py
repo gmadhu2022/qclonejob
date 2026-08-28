@@ -1,0 +1,387 @@
+"""Job taxonomy covering the whole Indian worker market — not just white-collar roles.
+
+Deliberately spans every education level, from no formal schooling (daily wage, domestic,
+agriculture) through skilled trades and ITI, to graduate and postgraduate professions.
+Each sector carries the education level and wage basis typical for it, so the UI can
+default sensibly and job seekers aren't shown fields that don't apply to them.
+"""
+
+# wage_basis: daily | monthly | annual | contract | piece_rate
+# education: none | 8th | 10th | 12th | iti | diploma | graduate | pg
+SECTORS = [
+    {
+        "key": "skilled_trades", "name": "Skilled Trades & Technicians", "icon": "tools",
+        "education": "iti", "wage_basis": "daily", "blurb": "Electricians, plumbers, welders, mechanics",
+        "roles": ["Electrician", "Plumber", "Welder", "Carpenter", "Painter", "Mason", "Fitter",
+                  "AC & Refrigeration Technician", "Mobile Repair Technician", "Two-Wheeler Mechanic",
+                  "Car Mechanic", "Lathe / CNC Operator", "Lift Technician", "Solar Panel Installer",
+                  "Borewell Operator", "Tile Layer", "Fabricator", "Sheet Metal Worker", "Turner",
+                  "Wireman", "Pump Operator", "Generator Technician"],
+    },
+    {
+        "key": "daily_wage", "name": "Daily Wage & Construction", "icon": "hardhat",
+        "education": "none", "wage_basis": "daily", "blurb": "Worker, helpers, loading, construction",
+        "roles": ["Construction Worker", "Helper", "Loader / Unloader", "Mazdoor", "Road Worker",
+                  "Building Cleaner", "Demolition Worker", "Scaffolder", "Concrete Mixer Operator",
+                  "Site Watchman", "Earthwork Worker", "Packing Helper", "Warehouse Loader",
+                  "Municipality Contract Worker", "Sanitation Worker", "Drainage Worker",
+                  "Garbage Collection Staff", "Street Light Maintenance"],
+    },
+    {
+        "key": "domestic", "name": "Domestic & Home Services", "icon": "home",
+        "education": "none", "wage_basis": "monthly", "blurb": "Housekeeping, cooks, caretakers, nannies",
+        "roles": ["House Maid", "Housekeeping Staff", "Home Cook", "Nanny / Babysitter",
+                  "Elderly Caretaker", "Patient Attendant (Home)", "Gardener / Mali", "Watchman",
+                  "Driver (Personal)", "Cleaner", "Dishwasher (Home)", "Laundry / Ironing Staff",
+                  "Pet Caretaker", "Home Nurse", "Cook (Vegetarian)", "Cook (Non-Vegetarian)",
+                  "Part-time Maid", "Live-in Caretaker"],
+    },
+    {
+        "key": "hospitality", "name": "Hotels, Restaurants & Catering", "icon": "utensils",
+        "education": "10th", "wage_basis": "monthly", "blurb": "Chefs, servers, hotel and restaurant staff",
+        "roles": ["Chef", "Head Chef", "Sous Chef", "Commis Chef", "Tandoor Chef", "Chinese Chef",
+                  "South Indian Cook", "Kitchen Helper", "Dishwasher", "Waiter / Server", "Bearer",
+                  "Steward", "Captain", "Bartender", "Barista", "Hotel Receptionist", "Front Office Executive",
+                  "Housekeeping Supervisor", "Room Attendant", "Laundry Staff", "Banquet Staff",
+                  "Catering Staff", "Restaurant Manager", "Cashier", "Delivery Boy", "Food Packer",
+                  "Bakery Assistant", "Sweet Shop Staff", "Juice Counter Staff"],
+    },
+    {
+        "key": "healthcare", "name": "Hospital & Healthcare", "icon": "heart",
+        "education": "12th", "wage_basis": "monthly", "blurb": "All hospital roles, clinical and support",
+        "roles": ["Doctor (MBBS)", "Specialist Doctor", "Dentist", "Staff Nurse", "ANM / GNM Nurse",
+                  "Ward Boy", "Ward Aaya", "Patient Attendant", "Lab Technician", "Radiographer",
+                  "X-Ray Technician", "Pharmacist", "Physiotherapist", "Dialysis Technician",
+                  "OT Technician", "ECG Technician", "Ambulance Driver", "Hospital Receptionist",
+                  "Medical Records Clerk", "Hospital Housekeeping", "Biomedical Engineer",
+                  "Optometrist", "Dietician", "Medical Representative", "Hospital Billing Executive"],
+    },
+    {
+        "key": "agriculture", "name": "Agriculture & Rural", "icon": "leaf",
+        "education": "none", "wage_basis": "daily", "blurb": "Farm work, dairy, poultry, rural trades",
+        "roles": ["Farm Worker", "Tractor Driver", "Harvester Operator", "Irrigation Worker",
+                  "Dairy Farm Worker", "Milkman", "Poultry Farm Worker", "Goat / Sheep Herder",
+                  "Fish Farm Worker", "Plantation Worker", "Nursery Worker", "Horticulture Assistant",
+                  "Pesticide Sprayer", "Seed Processing Worker", "Cold Storage Worker",
+                  "Mandi / Market Helper", "Agri Equipment Mechanic", "Beekeeper", "Sericulture Worker",
+                  "Agriculture Field Officer", "Veterinary Assistant"],
+    },
+    {
+        "key": "retail", "name": "Retail, Kirana & Sales", "icon": "store",
+        "education": "10th", "wage_basis": "monthly", "blurb": "Shops, kirana stores, showrooms, field sales",
+        "roles": ["Kirana Store Helper", "Shop Assistant", "Counter Salesman", "Cashier",
+                  "Store Manager", "Showroom Executive", "Field Sales Executive", "Medical Store Assistant",
+                  "Textile Shop Staff", "Jewellery Shop Staff", "Mobile Shop Salesman", "Stock Boy",
+                  "Merchandiser", "Billing Operator", "Supermarket Staff", "Vegetable Vendor Assistant",
+                  "Hardware Store Staff", "Petrol Pump Attendant", "Sales Officer", "Area Sales Manager"],
+    },
+    {
+        "key": "logistics", "name": "Driving, Delivery & Logistics", "icon": "truck",
+        "education": "8th", "wage_basis": "monthly", "blurb": "Drivers, delivery, warehouse, transport",
+        "roles": ["Auto Driver", "Taxi / Cab Driver", "Truck Driver", "Heavy Vehicle Driver",
+                  "Bus Driver", "Tempo Driver", "Delivery Executive", "Courier Boy", "Rider (Bike)",
+                  "Warehouse Staff", "Packing Staff", "Inventory Assistant", "Forklift Operator",
+                  "Logistics Coordinator", "Dispatch Clerk", "Loading Supervisor", "Fleet Supervisor"],
+    },
+    {
+        "key": "security", "name": "Security & Facility", "icon": "shield",
+        "education": "10th", "wage_basis": "monthly", "blurb": "Guards, supervisors, facility management",
+        "roles": ["Security Guard", "Head Security Guard", "Gunman", "Bouncer", "CCTV Operator",
+                  "Facility Supervisor", "Building Manager", "Society Caretaker", "Fire Safety Officer",
+                  "Gatekeeper", "Parking Attendant"],
+    },
+    {
+        "key": "manufacturing", "name": "Manufacturing & Factory", "icon": "factory",
+        "education": "iti", "wage_basis": "monthly", "blurb": "Production, machine operation, quality",
+        "roles": ["Machine Operator", "Production Helper", "Assembly Line Worker", "Quality Inspector",
+                  "Packing Operator", "Boiler Operator", "Maintenance Technician", "Store Keeper",
+                  "Production Supervisor", "Shift Incharge", "Tool Room Operator", "Textile Worker",
+                  "Garment Tailor", "Embroidery Worker", "Printing Operator", "Plastic Moulding Operator",
+                  "Food Processing Worker", "Chemical Plant Operator"],
+    },
+    {
+        "key": "it", "name": "IT & Software", "icon": "code",
+        "education": "graduate", "wage_basis": "annual", "blurb": "Engineering, data, design, QA, support",
+        "roles": ["Software Engineer", "Senior Software Engineer", "Full Stack Developer",
+                  "Frontend Developer", "Backend Developer", "Mobile App Developer", "DevOps Engineer",
+                  "Data Analyst", "Data Scientist", "ML Engineer", "QA / Test Engineer",
+                  "Business Analyst", "Product Manager", "UI/UX Designer", "Cloud Engineer",
+                  "Database Administrator", "Cybersecurity Analyst", "Technical Support Engineer",
+                  "IT Helpdesk", "Network Engineer", "Scrum Master", "Solution Architect"],
+    },
+    {
+        "key": "corporate", "name": "Corporate, Finance & Consulting", "icon": "briefcase",
+        "education": "graduate", "wage_basis": "annual", "blurb": "Finance, HR, admin, consulting, insurance",
+        "roles": ["Accountant", "Junior Accountant", "Tally Operator", "Chartered Accountant",
+                  "Finance Manager", "Auditor", "HR Executive", "HR Manager", "Recruiter",
+                  "Talent Acquisition Specialist", "Payroll Executive", "Admin Executive",
+                  "Office Assistant", "Data Entry Operator", "Receptionist", "Back Office Executive",
+                  "Customer Support Executive", "Tele Caller", "Insurance Advisor", "Insurance Agent",
+                  "Loan Officer", "Bank Clerk", "Relationship Manager", "Management Consultant",
+                  "Operations Manager", "Business Development Executive", "Digital Marketing Executive",
+                  "Content Writer", "Graphic Designer", "Legal Advisor", "Company Secretary"],
+    },
+    {
+        "key": "education", "name": "Education & Training", "icon": "cap",
+        "education": "graduate", "wage_basis": "monthly", "blurb": "Teachers, trainers, school staff",
+        "roles": ["School Teacher", "Primary Teacher", "Subject Teacher", "Lecturer", "Professor",
+                  "Home Tutor", "Coaching Faculty", "Lab Assistant", "Librarian", "Physical Education Teacher",
+                  "Anganwadi Worker", "Special Educator", "Training Coordinator", "Placement Officer",
+                  "School Admin", "School Bus Driver", "Ayah / Attendant"],
+    },
+    {
+        "key": "government", "name": "Government & Municipality", "icon": "building",
+        "education": "10th", "wage_basis": "monthly", "blurb": "Municipal contracts, public works, civic roles",
+        "roles": ["Municipality Contractor", "Contract Worker (Civic)", "Sanitary Supervisor",
+                  "Water Works Operator", "Public Health Worker", "Field Surveyor", "Clerk",
+                  "Peon / Attendant", "Data Entry (Government Scheme)", "ASHA Worker",
+                  "Panchayat Assistant", "Revenue Assistant", "Forest Guard", "Home Guard"],
+    },
+    {
+        "key": "beauty_events", "name": "Beauty, Events & Personal Services", "icon": "sparkle",
+        "education": "none", "wage_basis": "monthly", "blurb": "Salon, tailoring, events, photography",
+        "roles": ["Beautician", "Hair Stylist", "Barber", "Makeup Artist", "Spa Therapist",
+                  "Massage Therapist", "Tailor", "Boutique Assistant", "Event Helper",
+                  "Decorator", "Photographer", "Videographer", "DJ", "Wedding Planner Assistant",
+                  "Mehendi Artist", "Fitness Trainer", "Yoga Instructor", "Swimming Coach"],
+    },
+    {
+        "key": "bfsi", "name": "Banking, Finance & Insurance", "icon": "bank",
+        "education": "graduate", "wage_basis": "monthly", "blurb": "Banks, NBFCs, insurance, microfinance",
+        "roles": ["Bank Clerk", "Bank PO", "Branch Manager", "Loan Officer", "Credit Analyst",
+                  "Collections Executive", "Recovery Agent", "Insurance Advisor", "Insurance Surveyor",
+                  "Claims Executive", "Underwriter", "Actuarial Analyst", "Investment Advisor",
+                  "Wealth Manager", "Mutual Fund Distributor", "Stock Broker", "Sub-Broker",
+                  "Microfinance Field Officer", "Business Correspondent", "ATM Technician",
+                  "Cashier (Bank)", "KYC Executive", "Risk Analyst", "Treasury Executive",
+                  "Chartered Accountant", "Cost Accountant", "Tax Consultant", "GST Practitioner",
+                  "Bookkeeper", "Accounts Payable Executive", "Payroll Executive", "Internal Auditor"],
+    },
+    {
+        "key": "telecom", "name": "Telecom & Networking", "icon": "signal",
+        "education": "iti", "wage_basis": "monthly", "blurb": "Towers, fibre, broadband, field engineering",
+        "roles": ["Tower Technician", "Fibre Splicer", "Optical Fibre Technician", "Cable Puller",
+                  "Broadband Installer", "DTH Installer", "Network Field Engineer", "RF Engineer",
+                  "Transmission Engineer", "BTS Engineer", "Telecom Site Supervisor", "NOC Engineer",
+                  "Telecom Sales Executive", "SIM Distributor", "Customer Care Executive (Telecom)"],
+    },
+    {
+        "key": "energy", "name": "Power, Energy & Utilities", "icon": "bolt",
+        "education": "iti", "wage_basis": "monthly", "blurb": "Power plants, solar, grid, water utilities",
+        "roles": ["Lineman", "Substation Operator", "Power Plant Operator", "Turbine Technician",
+                  "Boiler Attendant", "Electrical Supervisor", "Solar Installer", "Solar Site Engineer",
+                  "Wind Turbine Technician", "Meter Reader", "Energy Auditor", "Grid Operator",
+                  "Water Treatment Operator", "Pipeline Technician", "Gas Pipeline Fitter",
+                  "LPG Delivery Staff", "Petrol Pump Manager", "Electrical Safety Officer"],
+    },
+    {
+        "key": "automotive", "name": "Automotive & Workshop", "icon": "car",
+        "education": "iti", "wage_basis": "monthly", "blurb": "Service centres, dealerships, EV, body shops",
+        "roles": ["Automobile Technician", "Service Advisor", "Auto Electrician", "Denter", "Painter (Auto)",
+                  "Wheel Alignment Technician", "Tyre Fitter", "EV Technician", "Battery Technician",
+                  "Diesel Mechanic", "Bike Mechanic", "Workshop Supervisor", "Spare Parts In-charge",
+                  "Vehicle Inspector", "Car Washer", "Driving Instructor", "Showroom Sales Consultant",
+                  "Insurance Claims Coordinator (Auto)"],
+    },
+    {
+        "key": "pharma", "name": "Pharma, Biotech & Life Sciences", "icon": "flask",
+        "education": "graduate", "wage_basis": "monthly", "blurb": "Manufacturing, QA/QC, R&D, field",
+        "roles": ["Production Chemist", "QA Executive", "QC Analyst", "Microbiologist",
+                  "Regulatory Affairs Executive", "Formulation Scientist", "R&D Associate",
+                  "Clinical Research Associate", "Pharmacovigilance Executive", "Medical Writer",
+                  "Medical Representative", "Area Business Manager", "Packing Operator (Pharma)",
+                  "Warehouse Executive (Pharma)", "Validation Engineer", "Bioinformatics Analyst"],
+    },
+    {
+        "key": "ecommerce", "name": "E-commerce, Startups & Gig Work", "icon": "cart",
+        "education": "12th", "wage_basis": "monthly", "blurb": "Marketplaces, quick commerce, gig platforms",
+        "roles": ["Warehouse Picker", "Packer", "Sorting Executive", "Last Mile Delivery Partner",
+                  "Quick Commerce Rider", "Dark Store Associate", "Inventory Executive",
+                  "Catalogue Executive", "Seller Support Executive", "Category Manager",
+                  "Growth Marketer", "Performance Marketing Executive", "Community Manager",
+                  "Customer Success Executive", "Operations Associate", "Field Verification Executive"],
+    },
+    {
+        "key": "media", "name": "Media, Print & Entertainment", "icon": "camera",
+        "education": "12th", "wage_basis": "monthly", "blurb": "News, film, printing, production, OTT",
+        "roles": ["Journalist", "Sub Editor", "Content Writer", "Copywriter", "Proofreader",
+                  "News Anchor", "Camera Operator", "Video Editor", "Sound Engineer", "Light Man",
+                  "Spot Boy", "Production Assistant", "Set Designer", "Costume Assistant",
+                  "Animator", "VFX Artist", "Motion Graphics Designer", "Radio Jockey",
+                  "Printing Press Operator", "DTP Operator", "Screen Printer", "Bookbinder",
+                  "Flex Board Designer", "Social Media Manager", "Podcast Producer"],
+    },
+    {
+        "key": "legal", "name": "Legal & Compliance", "icon": "scale",
+        "education": "graduate", "wage_basis": "monthly", "blurb": "Advocates, paralegal, compliance, courts",
+        "roles": ["Advocate", "Junior Lawyer", "Legal Associate", "Paralegal", "Legal Clerk",
+                  "Company Secretary", "Compliance Officer", "Contract Analyst", "Notary Assistant",
+                  "Court Stenographer", "Typist (Legal)", "Document Verification Executive",
+                  "Intellectual Property Analyst", "Worker Law Consultant"],
+    },
+    {
+        "key": "realestate", "name": "Real Estate & Construction Management", "icon": "key",
+        "education": "12th", "wage_basis": "monthly", "blurb": "Sales, site management, surveying, interiors",
+        "roles": ["Real Estate Sales Executive", "Property Consultant", "Channel Partner Manager",
+                  "Site Engineer", "Project Engineer", "Quantity Surveyor", "Estimation Engineer",
+                  "Civil Supervisor", "Site Safety Officer", "Architect", "Draughtsman",
+                  "Interior Designer", "Interior Site Supervisor", "Land Surveyor", "Valuer",
+                  "Facility Manager", "Society Manager", "Leasing Executive"],
+    },
+    {
+        "key": "travel", "name": "Travel, Tourism & Aviation", "icon": "plane",
+        "education": "12th", "wage_basis": "monthly", "blurb": "Airlines, airports, travel agencies, guides",
+        "roles": ["Cabin Crew", "Ground Staff", "Airport Loader", "Check-in Agent", "Ramp Agent",
+                  "Aircraft Maintenance Technician", "Air Ticketing Executive", "Travel Consultant",
+                  "Tour Operator", "Tour Guide", "Visa Executive", "Tourist Bus Driver",
+                  "Hotel Reservation Executive", "Cruise Staff", "Adventure Sports Instructor"],
+    },
+    {
+        "key": "transport_rail", "name": "Railways, Shipping & Ports", "icon": "ship",
+        "education": "10th", "wage_basis": "monthly", "blurb": "Rail, ports, warehousing, freight, marine",
+        "roles": ["Railway Technician", "Track Maintainer", "Loco Pilot Assistant", "Signal Technician",
+                  "Station Cleaner", "Porter", "Freight Handler", "Crane Operator", "Port Worker",
+                  "Container Handler", "Customs Clearance Executive", "Freight Forwarder",
+                  "Shipping Coordinator", "Marine Engineer", "Deck Cadet", "Seafarer", "Fisherman",
+                  "Boat Operator"],
+    },
+    {
+        "key": "mining", "name": "Mining, Oil & Gas", "icon": "pickaxe",
+        "education": "iti", "wage_basis": "monthly", "blurb": "Quarries, mines, rigs, refineries",
+        "roles": ["Mine Worker", "Blaster", "Drill Operator", "Quarry Supervisor", "Mining Engineer",
+                  "Geologist", "Surveyor (Mines)", "Heavy Earth Mover Operator", "Rig Operator",
+                  "Refinery Operator", "Pipeline Inspector", "Safety Officer (Mines)",
+                  "Explosives Handler", "Crusher Operator"],
+    },
+    {
+        "key": "textiles", "name": "Textiles, Handicrafts & Artisans", "icon": "thread",
+        "education": "none", "wage_basis": "piece_rate", "blurb": "Weaving, garments, crafts, cottage industry",
+        "roles": ["Handloom Weaver", "Powerloom Operator", "Spinner", "Dyer", "Printer (Textile)",
+                  "Garment Tailor", "Cutting Master", "Checker (Garments)", "Ironing Staff",
+                  "Embroidery Artisan", "Zari Worker", "Block Printer", "Potter", "Basket Weaver",
+                  "Leather Worker", "Cobbler", "Goldsmith", "Silversmith", "Bangle Maker",
+                  "Carpet Weaver", "Wood Carver", "Stone Carver", "Toy Maker", "Candle Maker",
+                  "Agarbatti Roller", "Papad Maker", "Pickle Maker"],
+    },
+    {
+        "key": "food_processing", "name": "Food Processing & FMCG", "icon": "package",
+        "education": "10th", "wage_basis": "monthly", "blurb": "Dairy, bakery, packaged foods, cold chain",
+        "roles": ["Food Processing Operator", "Dairy Plant Operator", "Bakery Baker", "Confectioner",
+                  "Butcher", "Meat Processor", "Fish Processor", "Cold Storage Attendant",
+                  "Quality Checker (Food)", "Food Safety Officer", "FMCG Sales Representative",
+                  "Distributor Sales Man", "Merchandiser (FMCG)", "Bottling Plant Operator",
+                  "Flour Mill Operator", "Oil Mill Worker", "Sugar Mill Worker"],
+    },
+    {
+        "key": "sports_wellness", "name": "Sports, Fitness & Wellness", "icon": "run",
+        "education": "12th", "wage_basis": "monthly", "blurb": "Gyms, coaching, therapy, yoga",
+        "roles": ["Gym Trainer", "Personal Trainer", "Yoga Instructor", "Zumba Instructor",
+                  "Sports Coach", "Cricket Coach", "Football Coach", "Swimming Instructor",
+                  "Physiotherapist (Sports)", "Sports Nutritionist", "Umpire / Referee",
+                  "Groundsman", "Sports Equipment Technician", "Ayurveda Therapist",
+                  "Naturopathy Assistant", "Spa Manager"],
+    },
+    {
+        "key": "social", "name": "NGO, Social Work & Development", "icon": "hands",
+        "education": "graduate", "wage_basis": "monthly", "blurb": "NGOs, CSR, field programmes, community",
+        "roles": ["Social Worker", "Field Coordinator", "Community Mobiliser", "Project Officer (NGO)",
+                  "CSR Executive", "Fundraising Executive", "Grant Writer", "M&E Officer",
+                  "Counsellor", "Child Protection Officer", "Rural Development Officer",
+                  "SHG Coordinator", "Health Worker", "Sanitation Promoter", "Volunteer Coordinator"],
+    },
+    {
+        "key": "defence", "name": "Defence, Police & Emergency", "icon": "badge",
+        "education": "12th", "wage_basis": "monthly", "blurb": "Armed forces, police, fire, disaster response",
+        "roles": ["Police Constable", "Head Constable", "Sub Inspector", "Home Guard",
+                  "Fire Fighter", "Fire Safety Technician", "Disaster Response Volunteer",
+                  "Ambulance Paramedic", "Emergency Dispatcher", "Ex-Serviceman Security Consultant",
+                  "Armed Guard", "Prison Warder"],
+    },
+    {
+        "key": "research", "name": "Research, Science & Academia", "icon": "microscope",
+        "education": "pg", "wage_basis": "monthly", "blurb": "Labs, universities, think tanks, surveys",
+        "roles": ["Research Assistant", "Research Associate", "Lab Technician (Research)",
+                  "Data Collector", "Field Investigator", "Survey Enumerator", "Statistician",
+                  "Scientist", "Junior Research Fellow", "Post-Doctoral Fellow", "Lab Manager",
+                  "Scientific Officer", "Patent Analyst", "Academic Editor"],
+    },
+    {
+        "key": "veterinary", "name": "Veterinary & Animal Care", "icon": "paw",
+        "education": "12th", "wage_basis": "monthly", "blurb": "Vets, livestock, pet care, hatcheries",
+        "roles": ["Veterinary Doctor", "Veterinary Assistant", "Livestock Supervisor",
+                  "Artificial Insemination Technician", "Poultry Supervisor", "Hatchery Worker",
+                  "Pet Groomer", "Pet Trainer", "Animal Shelter Attendant", "Cattle Feed Sales Executive",
+                  "Fisheries Officer", "Dairy Extension Officer"],
+    },
+    {
+        "key": "waste", "name": "Sanitation, Waste & Environment", "icon": "recycle",
+        "education": "none", "wage_basis": "monthly", "blurb": "Waste management, recycling, environment",
+        "roles": ["Waste Collector", "Segregation Worker", "Recycling Plant Operator",
+                  "Composting Supervisor", "Sewage Treatment Operator", "Septic Tank Cleaner",
+                  "Housekeeping Supervisor (Public)", "Pest Control Technician", "Fumigation Operator",
+                  "Environment Officer", "EHS Executive", "Scrap Dealer Assistant"],
+    },
+    {
+        "key": "religious", "name": "Community, Religious & Event Services", "icon": "bell",
+        "education": "none", "wage_basis": "contract", "blurb": "Temples, functions, catering, community roles",
+        "roles": ["Priest / Pandit", "Temple Attendant", "Caretaker (Religious Place)",
+                  "Function Hall Manager", "Marriage Bureau Executive", "Band Musician",
+                  "Dhol Player", "Cook (Bulk / Function)", "Serving Staff (Function)",
+                  "Tent House Worker", "Flower Decorator", "Purohit Assistant", "Choir Member"],
+    },
+]
+
+# Flat lookups used by search filters and AI prompts.
+ALL_ROLES = sorted({r for s in SECTORS for r in s["roles"]})
+SECTOR_KEYS = [s["key"] for s in SECTORS]
+
+EDUCATION_LEVELS = [
+    {"key": "none", "label": "No formal education required"},
+    {"key": "8th", "label": "8th pass"},
+    {"key": "10th", "label": "10th pass"},
+    {"key": "12th", "label": "12th / Intermediate"},
+    {"key": "iti", "label": "ITI / Certificate"},
+    {"key": "diploma", "label": "Diploma"},
+    {"key": "graduate", "label": "Graduate"},
+    {"key": "pg", "label": "Post Graduate"},
+]
+
+WAGE_BASIS = [
+    {"key": "daily", "label": "Daily wage"},
+    {"key": "weekly", "label": "Weekly"},
+    {"key": "monthly", "label": "Monthly salary"},
+    {"key": "annual", "label": "Annual (LPA)"},
+    {"key": "contract", "label": "Contract / project"},
+    {"key": "piece_rate", "label": "Piece rate"},
+]
+
+JOB_TYPES = [
+    {"key": "full_time", "label": "Full time"},
+    {"key": "part_time", "label": "Part time"},
+    {"key": "daily", "label": "Daily / casual"},
+    {"key": "contract", "label": "Contract"},
+    {"key": "temporary", "label": "Temporary / seasonal"},
+    {"key": "apprentice", "label": "Apprentice / trainee"},
+    {"key": "wfh", "label": "Work from home"},
+]
+
+
+def sector_for_role(role: str) -> dict | None:
+    r = (role or "").strip().lower()
+    for s in SECTORS:
+        if any(r == x.lower() for x in s["roles"]):
+            return s
+    for s in SECTORS:   # partial match fallback
+        if any(r in x.lower() or x.lower() in r for x in s["roles"] if r):
+            return s
+    return None
+
+
+def taxonomy_payload() -> dict:
+    return {
+        "sectors": [{k: v for k, v in s.items()} for s in SECTORS],
+        "education_levels": EDUCATION_LEVELS,
+        "wage_basis": WAGE_BASIS,
+        "job_types": JOB_TYPES,
+        "role_count": len(ALL_ROLES),
+    }

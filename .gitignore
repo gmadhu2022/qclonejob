@@ -1,0 +1,80 @@
+# ============================================================
+#  SECRETS — never commit these
+# ============================================================
+.env
+*.env
+!*.env.example
+.env.*
+!.env.example
+backend/.env
+frontend/.env
+*.pem
+*.key
+secrets.json
+credentials.json
+
+# ============================================================
+#  Virtual environments (any name, any location)
+# ============================================================
+venv/
+.venv/
+env/
+ENV/
+# a venv created as `python -m venv hire` (comments must be on their own line)
+hire/
+*/venv/
+*/.venv/
+pyvenv.cfg
+Lib/
+Scripts/
+Include/
+site-packages/
+
+# ============================================================
+#  Python
+# ============================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ============================================================
+#  Database
+# ============================================================
+*.db
+*.sqlite
+*.sqlite3
+backend/hire.db
+
+# ============================================================
+#  Node / frontend
+# ============================================================
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+.eslintcache
+npm-debug.log*
+yarn-error.log*
+
+# ============================================================
+#  Uploads (user content — not source code)
+# ============================================================
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# ============================================================
+#  Editors / OS
+# ============================================================
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

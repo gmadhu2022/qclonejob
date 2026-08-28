@@ -1,0 +1,101 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body { @apply bg-slate-50 text-slate-800 antialiased; }
+  * { @apply transition-colors duration-150; }
+}
+
+@layer components {
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-navy px-4 py-2.5 text-sm font-semibold text-white
+           shadow-sm hover:bg-navy-600 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none
+           transition-all duration-150;
+  }
+  .btn-green {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-brandgreen px-4 py-2.5 text-sm font-semibold text-white
+           shadow-sm hover:bg-brandgreen-600 active:scale-[0.98] disabled:opacity-50 transition-all duration-150;
+  }
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm
+           font-semibold text-slate-700 hover:border-navy hover:text-navy hover:bg-navy-50 active:scale-[0.98]
+           transition-all duration-150;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-600
+           hover:bg-slate-100 hover:text-navy transition-colors;
+  }
+  .btn-sm { @apply px-3 py-1.5 text-xs; }
+
+  /* Inputs */
+  .input {
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder-slate-400
+           focus:border-navy focus:ring-2 focus:ring-navy/15 focus:outline-none transition-shadow;
+  }
+  .input-error { @apply border-red-400 focus:border-red-500 focus:ring-red-500/15; }
+  .label { @apply mb-1.5 block text-sm font-medium text-slate-700; }
+
+  /* Cards */
+  .card {
+    @apply rounded-xl border border-slate-200 bg-white p-6 shadow-card;
+  }
+  .card-hover {
+    @apply rounded-xl border border-slate-200 bg-white p-6 shadow-card hover:shadow-cardhover hover:-translate-y-0.5
+           hover:border-navy-200 transition-all duration-200;
+  }
+
+  /* Tables */
+  .table { @apply w-full border-collapse text-sm; }
+  .table th { @apply border-b border-slate-200 bg-slate-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500; }
+  .table td { @apply border-b border-slate-100 px-4 py-3 text-slate-700; }
+  .table tr:hover td { @apply bg-slate-50/70; }
+
+  .badge { @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold; }
+
+  .navlink {
+    @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600
+           hover:bg-navy-50 hover:text-navy transition-colors;
+  }
+  .navlink-active {
+    @apply flex items-center gap-3 rounded-lg bg-navy px-3 py-2.5 text-sm font-semibold text-white shadow-sm;
+  }
+}
+
+/* Print: A4 resume only */
+@page { size: A4; margin: 10mm; }
+@media print {
+  body * { visibility: hidden; }
+  .printable, .printable * { visibility: visible; }
+  .printable {
+    position: absolute; left: 0; top: 0; width: 100%;
+    max-width: none !important; box-shadow: none !important;
+  }
+  .printable * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .no-print { display: none !important; }
+}
+
+/* ---- premium auth visuals ---- */
+@keyframes aurora {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(6%, -4%) scale(1.12); }
+  66%      { transform: translate(-5%, 5%) scale(0.94); }
+}
+.aurora-blob { animation: aurora 18s ease-in-out infinite; will-change: transform; }
+.aurora-blob-2 { animation: aurora 22s ease-in-out infinite reverse; }
+
+@keyframes floatUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-in { animation: floatUp .45s cubic-bezier(.2,.7,.3,1) both; }
+.delay-1 { animation-delay: .07s; } .delay-2 { animation-delay: .14s; }
+.delay-3 { animation-delay: .21s; } .delay-4 { animation-delay: .28s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora-blob, .aurora-blob-2, .animate-in { animation: none !important; }
+}
+
+.glass { background: rgba(255,255,255,.08); backdrop-filter: blur(12px); }
