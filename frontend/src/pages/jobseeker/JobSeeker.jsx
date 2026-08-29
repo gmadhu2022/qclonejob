@@ -2,16 +2,17 @@ import { useEffect, useState } from "react";
 import { Routes, Route, Navigate, Link } from "react-router-dom";
 import { api } from "../../lib/api";
 import { DashboardLayout, StatusBadge, useToast } from "../../components/ui";
+import { useDialog } from "../../components/Dialog";
 import Chat from "../../components/Chat";
 import BannerSlot from "../../components/BannerSlot";
-import { SectorGrid, useTaxonomy } from "../../components/SectorPicker";
+import { SectorList, useTaxonomy } from "../../components/SectorPicker";
 import ImageUpload from "../../components/ImageUpload";
 import ResumeView from "./ResumeView";
 import {
   IconUser, IconDoc, IconLayers, IconSearch, IconClipboard, IconEye, IconChat, IconDownload, IconCheck,
   IconSparkle, IconBriefcase, IconChart, IconStar, IconBookmark,
 } from "../../components/icons";
-import { BarChart, Donut, MatchBar } from "../../components/charts";
+import { Donut, MatchBar, SwitchableChart } from "../../components/charts";
 import { AIButton, AIResult, AIList, useAI, useAICall } from "../../components/AIPanel";
 import { Combobox, TagInput } from "../../components/fields";
 import { CITIES, SKILLS, LANGUAGES, SALARY } from "../../lib/options";
@@ -72,10 +73,12 @@ function Overview() {
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
-        <div className="card lg:col-span-2">
-          <h3 className="mb-4 font-bold text-slate-800">Application pipeline</h3>
-          {statusData.length ? <BarChart data={statusData} height={190} />
-            : <p className="py-10 text-center text-sm text-slate-400">Apply to a job to see your pipeline here.</p>}
+        <div className="lg:col-span-2">
+          {statusData.length
+            ? <SwitchableChart title="Application pipeline" data={statusData}
+                               types={["bar", "hbar", "donut", "pie"]} height={210} />
+            : <div className="card"><h3 className="mb-4 font-bold text-slate-800">Application pipeline</h3>
+                <p className="py-10 text-center text-sm text-slate-400">Apply to a job to see your pipeline here.</p></div>}
         </div>
 
         <div className="card">
@@ -286,6 +289,8 @@ function MyProfile() {
           </p>
         </div>
 
+        <AccountCard />
+
         <EditCard title="Photo & basics" open={editing === "basics"} onOpen={() => setEditing(editing === "basics" ? null : "basics")}
                   summary={`${s.first_name || "—"} ${s.last_name || ""} · ${s.phone || "no phone"}`}>
           <ImageUpload kind="avatar" currentUrl={s.profile_picture_url}
@@ -376,6 +381,76 @@ function MyProfile() {
           <SaveRow onSave={() => save({})} saving={saving} />
         </EditCard>
       </div>
+    </div>
+  );
+}
+
+/* Account settings — photo and password, where a user expects them (J2). */
+function AccountCard() {
+  const toast = useToast();
+  const dialog = useDialog();
+  const [open, setOpen] = useState(false);
+  const [pic, setPic] = useState(null);
+  const [pw, setPw] = useState({ old_password: "", new_password: "", confirm: "" });
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => { api.get("/api/jobseeker/profile").then((p) => setPic(p.profile_picture_url)).catch(() => {}); }, []);
+
+  const change = async () => {
+    if (pw.new_password.length < 6) return toast("New password must be at least 6 characters.", "error");
+    if (pw.new_password !== pw.confirm) return toast("The two new passwords don't match.", "error");
+    setBusy(true);
+    try {
+      await api.post("/api/auth/change-password",
+        { old_password: pw.old_password || null, new_password: pw.new_password });
+      setPw({ old_password: "", new_password: "", confirm: "" });
+      dialog({ tone: "success", title: "Password changed",
+               message: "Your password has been updated. Use it next time you sign in.",
+               confirmLabel: "Done" });
+    } catch (err) { toast(err.message, "error"); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className={`rounded-xl border bg-white transition-all ${open ? "border-navy shadow-card" : "border-slate-200 hover:border-navy-200"}`}>
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between px-4 py-3 text-left">
+        <span>
+          <span className="block text-[13.5px] font-semibold text-slate-800">Account & security</span>
+          <span className="block text-xs text-slate-400">Profile photo and password</span>
+        </span>
+        <span className={`text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}>▾</span>
+      </button>
+      {open && (
+        <div className="space-y-5 border-t border-slate-100 px-4 py-4">
+          <div>
+            <p className="mb-2 text-[12.5px] font-semibold text-slate-700">Profile photo</p>
+            <ImageUpload kind="avatar" currentUrl={pic} onUploaded={setPic} />
+          </div>
+          <div className="border-t border-slate-100 pt-4">
+            <p className="mb-2 text-[12.5px] font-semibold text-slate-700">Change password</p>
+            <div className="space-y-2.5">
+              <div>
+                <label className="label !text-xs">Current password</label>
+                <input className="input" type="password" value={pw.old_password}
+                       onChange={(e) => setPw({ ...pw, old_password: e.target.value })} />
+              </div>
+              <div>
+                <label className="label !text-xs">New password</label>
+                <input className="input" type="password" value={pw.new_password}
+                       onChange={(e) => setPw({ ...pw, new_password: e.target.value })} />
+              </div>
+              <div>
+                <label className="label !text-xs">Confirm new password</label>
+                <input className="input" type="password" value={pw.confirm}
+                       onChange={(e) => setPw({ ...pw, confirm: e.target.value })} />
+              </div>
+              <button className="btn w-full !py-2 text-sm" onClick={change} disabled={busy}>
+                {busy ? "Updating…" : "Update password"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -615,30 +690,6 @@ function FindJobs() {
         ))}
       </div>
 
-      {tab === "browse" && (
-        <div className="mb-5">
-          <div className="mb-3">
-            <h3 className="font-bold text-slate-800">Every kind of work</h3>
-            <p className="text-sm text-slate-500">
-              {tax ? `${tax.sectors.length} sectors · ${tax.role_count}+ roles — daily wage, skilled trades, farm work, hospitality, healthcare, IT and more.`
-                   : "Loading sectors…"}
-            </p>
-          </div>
-          <SectorGrid sectors={tax?.sectors || []} value={sector}
-                      onChange={(v) => { setSector(v); if (v) searchSector(v); else setJobs([]); }} />
-          {sector && (
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {(tax?.sectors.find((x) => x.key === sector)?.roles || []).slice(0, 24).map((r) => (
-                <button key={r} onClick={() => { setQ(r); setTab("search"); }}
-                        className="badge bg-slate-100 text-slate-600 transition-colors hover:bg-navy-50 hover:text-navy">
-                  {r}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
       {tab === "search" && (
         <>
           {aiOn && (
@@ -667,6 +718,7 @@ function FindJobs() {
 
       {busy && <p className="text-sm text-slate-400">Loading…</p>}
 
+      <div className={tab === "browse" ? "grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]" : ""}>
       <div className="space-y-3">
         {list.map((j) => (
           <div key={j.id} className="card-hover">
@@ -731,8 +783,41 @@ function FindJobs() {
         {!busy && list.length === 0 && (
           <Empty text={tab === "saved" ? "You haven't saved any jobs yet."
             : tab === "recommended" ? "No matches yet — add skills to your profile."
+            : tab === "browse" ? "Pick an industry on the right to see its jobs."
             : "No jobs found. Try different keywords."} />
         )}
+      </div>
+
+      {/* industry rail — only on Browse, kept on the right so jobs get the width */}
+      {tab === "browse" && (
+        <aside className="order-first lg:order-last">
+          <div className="lg:sticky lg:top-20 space-y-4">
+            <div className="card !p-4">
+              <h3 className="text-[13.5px] font-bold text-slate-800">Browse by industry</h3>
+              <p className="mt-0.5 text-[11.5px] leading-snug text-slate-400">
+                {tax ? `${tax.sectors.length} sectors · ${tax.role_count}+ roles` : "Loading…"}
+              </p>
+              <div className="mt-3">
+                <SectorList sectors={tax?.sectors || []} value={sector}
+                            onChange={(v) => { setSector(v); if (v) searchSector(v); else setJobs([]); }} />
+              </div>
+            </div>
+            {sector && (
+              <div className="card !p-4">
+                <h3 className="mb-2 text-[13.5px] font-bold text-slate-800">Popular roles</h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {(tax?.sectors.find((x) => x.key === sector)?.roles || []).slice(0, 22).map((r) => (
+                    <button key={r} onClick={() => { setQ(r); setTab("search"); }}
+                            className="badge bg-slate-100 text-slate-600 transition-colors hover:bg-navy hover:text-white">
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </aside>
+      )}
       </div>
     </div>
   );

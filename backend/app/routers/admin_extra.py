@@ -89,6 +89,57 @@ def approval_queue(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/registrations")
+def registrations(kind: str = "all", status: str = "all", q: str | None = None,
+                  db: Session = Depends(get_db)):
+    """Every registration in one place — pending, approved and rejected.
+
+    Powers the consolidated Registrations tab: one screen, filter by type and
+    status, search as you type.
+    """
+    out = []
+
+    def add(rows, k, name_fn):
+        for r in rows:
+            out.append({
+                "kind": k, "id": r.id, "name": name_fn(r), "email": r.email,
+                "phone": getattr(r, "phone", None),
+                "city": getattr(r, "city", None) or getattr(r, "location", None),
+                "status": r.approval_status or "approved",
+                "source": getattr(r, "registration_source", "admin"),
+                "created_at": r.created_at,
+                "approved_at": getattr(r, "approved_at", None),
+                "reason": getattr(r, "rejection_reason", None),
+                "extra": (", ".join(getattr(r, "courses", None) or [])
+                          if k == "institute" else
+                          (r.gst_no or "") if k == "enterprise" else
+                          ", ".join(getattr(r, "key_skills", None) or [])),
+                "active": bool(r.user.is_active) if r.user else False,
+            })
+
+    if kind in ("all", "institute"):
+        add(db.query(models.Institute).all(), "institute", lambda r: r.name)
+    if kind in ("all", "enterprise"):
+        add(db.query(models.Enterprise).all(), "enterprise", lambda r: r.name)
+    if kind in ("all", "jobseeker"):
+        add(db.query(models.JobSeeker).all(), "jobseeker",
+            lambda r: f"{r.first_name or ''} {r.last_name or ''}".strip() or r.email)
+
+    if status != "all":
+        out = [o for o in out if o["status"] == status]
+    if q:
+        ql = q.lower()
+        out = [o for o in out
+               if ql in (o["name"] or "").lower() or ql in (o["email"] or "").lower()
+               or ql in (o["city"] or "").lower() or ql in (o["extra"] or "").lower()]
+
+    out.sort(key=lambda o: (o["created_at"] or ""), reverse=True)
+    counts = {"all": len(out)}
+    for st in ("pending", "approved", "rejected"):
+        counts[st] = sum(1 for o in out if o["status"] == st)
+    return {"counts": counts, "items": out[:400]}
+
+
 MODEL_FOR = {"institute": models.Institute, "enterprise": models.Enterprise,
              "jobseeker": models.JobSeeker}
 
@@ -141,6 +192,59 @@ def decide_approval(kind: str, obj_id: int, body: dict,
     except Exception:
         pass
     return {"message": f"{name} {decision}."}
+
+
+@router.get("/registrations")
+def registrations(kind: str = "all", status: str = "all", q: str | None = None,
+                  db: Session = Depends(get_db)):
+    """One list for every account type — pending, approved or rejected.
+
+    Replaces the separate Institutes / Enterprises / Job seekers tabs with a
+    single searchable view.
+    """
+    out = []
+
+    def add(rows, k):
+        for r in rows:
+            name = getattr(r, "name", None) or \
+                   f"{getattr(r, 'first_name', '') or ''} {getattr(r, 'last_name', '') or ''}".strip() or r.email
+            out.append({
+                "kind": k, "id": r.id, "name": name, "email": r.email,
+                "phone": getattr(r, "phone", None), "city": getattr(r, "city", None),
+                "status": getattr(r, "approval_status", "approved") or "approved",
+                "source": getattr(r, "registration_source", "admin"),
+                "created_at": r.created_at,
+                "approved_at": getattr(r, "approved_at", None),
+                "rejection_reason": getattr(r, "rejection_reason", None),
+                "extra": (r.courses or []) if k == "institute"
+                         else ([r.gst_no, r.pan_no] if k == "enterprise"
+                               else (getattr(r, "key_skills", None) or [])),
+                "logo_url": getattr(r, "logo_url", None) or getattr(r, "profile_picture_url", None),
+                "is_active": bool(r.user.is_active) if r.user else True,
+            })
+
+    if kind in ("all", "institute"):
+        add(db.query(models.Institute).all(), "institute")
+    if kind in ("all", "enterprise"):
+        add(db.query(models.Enterprise).all(), "enterprise")
+    if kind in ("all", "jobseeker"):
+        add(db.query(models.JobSeeker).all(), "jobseeker")
+
+    if status != "all":
+        out = [r for r in out if r["status"] == status]
+    if q:
+        ql = q.lower()
+        out = [r for r in out
+               if ql in (r["name"] or "").lower() or ql in (r["email"] or "").lower()
+               or ql in (r["city"] or "").lower()]
+
+    out.sort(key=lambda r: r["created_at"] or "", reverse=True)
+    counts = {"all": len(out)}
+    for k in ("institute", "enterprise", "jobseeker"):
+        counts[k] = sum(1 for r in out if r["kind"] == k)
+    for st in ("pending", "approved", "rejected"):
+        counts[st] = sum(1 for r in out if r["status"] == st)
+    return {"counts": counts, "items": out[:300]}
 
 
 # ---------------------------------------------------------------- 3e: reset password
@@ -280,6 +384,17 @@ def email_log(limit: int = 50, status: str | None = None, db: Session = Depends(
                    "status": r.status, "error": r.error, "provider": r.provider,
                    "created_at": r.created_at} for r in rows],
     }
+
+
+@router.delete("/email-log", response_model=schemas.Message)
+def clear_email_log(status: str | None = None, db: Session = Depends(get_db)):
+    """Clear delivery history. Pass ?status=failed to clear only failures."""
+    q = db.query(models.EmailLog)
+    if status:
+        q = q.filter(models.EmailLog.status == status)
+    n = q.delete(synchronize_session=False)
+    db.commit()
+    return {"message": f"Cleared {n} email log entr{'y' if n == 1 else 'ies'}."}
 
 
 @router.post("/email-log/{log_id}/resend", response_model=schemas.Message)

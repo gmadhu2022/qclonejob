@@ -147,10 +147,62 @@ def view_resume(jobseeker_id: int, action: str = "Viewed",
 
 
 # ---------------- Jobs ----------------
-@router.get("/jobs", response_model=list[schemas.JobOut])
+@router.get("/jobs")
 def my_jobs(current: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Jobs with their applicant counts, so the cards can show pipeline at a glance."""
     ent = _enterprise(current, db)
-    return db.query(models.Job).filter(models.Job.enterprise_id == ent.id).order_by(models.Job.created_at.desc()).all()
+    jobs = (db.query(models.Job).filter(models.Job.enterprise_id == ent.id)
+            .order_by(models.Job.created_at.desc()).all())
+    out = []
+    for j in jobs:
+        apps = j.applications
+        by_status = {}
+        for a in apps:
+            by_status[a.status] = by_status.get(a.status, 0) + 1
+        out.append({
+            "id": j.id, "title": j.title, "job_code": j.job_code, "location": j.location,
+            "category": j.category, "sector": j.sector, "experience": j.experience,
+            "salary": j.salary, "wage_min": j.wage_min, "wage_max": j.wage_max,
+            "wage_basis": j.wage_basis, "education_level": j.education_level,
+            "key_skills": j.key_skills or [], "description": j.description,
+            "no_of_positions": j.no_of_positions or 1, "status": j.status,
+            "is_urgent": j.is_urgent, "created_at": j.created_at,
+            "applicants": len(apps),
+            "new_applicants": by_status.get("Applied", 0),
+            "shortlisted": by_status.get("Shortlisted", 0),
+            "hired": by_status.get("Hired", 0),
+            "by_status": by_status,
+        })
+    return out
+
+
+@router.get("/jobs/overview")
+def jobs_overview(current: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Jobs with their pipeline counts, for the Manage jobs cards."""
+    ent = _enterprise(current, db)
+    jobs = (db.query(models.Job).filter_by(enterprise_id=ent.id)
+            .order_by(models.Job.created_at.desc()).all())
+    out = []
+    for j in jobs:
+        apps = j.applications
+        by_status = {}
+        for a in apps:
+            by_status[a.status] = by_status.get(a.status, 0) + 1
+        out.append({
+            "id": j.id, "title": j.title, "job_code": j.job_code, "location": j.location,
+            "category": j.category, "sector": j.sector, "status": j.status,
+            "experience": j.experience, "wage_min": j.wage_min, "wage_max": j.wage_max,
+            "wage_basis": j.wage_basis, "salary": j.salary,
+            "no_of_positions": j.no_of_positions or 1, "key_skills": j.key_skills or [],
+            "is_urgent": bool(j.is_urgent), "created_at": j.created_at,
+            "applicants": len(apps),
+            "shortlisted": sum(1 for a in apps if a.status == "Shortlisted"),
+            "interviewing": sum(1 for a in apps if a.status.startswith("Interview")
+                                or a.status == "Managerial Round"),
+            "hired": sum(1 for a in apps if a.status == "Hired"),
+            "by_status": by_status,
+        })
+    return out
 
 
 @router.post("/jobs", response_model=schemas.JobOut)

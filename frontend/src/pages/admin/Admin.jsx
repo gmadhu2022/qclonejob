@@ -6,14 +6,12 @@ import { useDialog } from "../../components/Dialog";
 import { IconChart, IconBuilding, IconBriefcase, IconUser, IconSparkle, IconCheck, IconShield, IconStar } from "../../components/icons";
 import BannerAnalytics from "../../components/BannerAnalytics";
 import { BarChart } from "../../components/charts";
-import { Approvals, Managers, Subscriptions } from "./AdminExtra";
+import { Registrations, Managers, Subscriptions } from "./AdminExtra";
 
 const MENU = [
   { to: "/admin", label: "Reports", icon: IconChart },
-  { to: "/admin/institutes", label: "Institutes", icon: IconBuilding },
-  { to: "/admin/enterprises", label: "Enterprises", icon: IconBriefcase },
-  { to: "/admin/jobseekers", label: "Job seekers", icon: IconUser },
-  { to: "/admin/approvals", label: "Approvals", icon: IconCheck },
+  { to: "/admin/registrations", label: "Registrations", icon: IconCheck },
+  { to: "/admin/add", label: "Add accounts", icon: IconBuilding },
   { to: "/admin/managers", label: "Manager users", icon: IconShield },
   { to: "/admin/subscriptions", label: "Subscriptions", icon: IconStar },
   { to: "/admin/banners", label: "Banner analytics", icon: IconSparkle },
@@ -24,10 +22,12 @@ export default function Admin() {
     <DashboardLayout title="Admin" menu={MENU}>
       <Routes>
         <Route index element={<Reports />} />
+        <Route path="add" element={<AddAccounts />} />
         <Route path="institutes" element={<Institutes />} />
         <Route path="enterprises" element={<Enterprises />} />
         <Route path="jobseekers" element={<JobSeekers />} />
-        <Route path="approvals" element={<Approvals />} />
+        <Route path="registrations" element={<Registrations />} />
+        <Route path="approvals" element={<Registrations />} />
         <Route path="managers" element={<Managers />} />
         <Route path="subscriptions" element={<Subscriptions />} />
         <Route path="banners" element={
@@ -42,6 +42,8 @@ export default function Admin() {
 }
 
 function Reports() {
+  const toast = useToast();
+  const dialog = useDialog();
   const [s, setS] = useState(null);
   const [appr, setAppr] = useState(null);
   const [mail, setMail] = useState(null);
@@ -55,6 +57,23 @@ function Reports() {
     };
     load(); const id = setInterval(load, 15000); return () => clearInterval(id);
   }, []);
+  const clearLog = (status) => dialog({
+    tone: "info",
+    title: status === "failed" ? "Clear failed emails?" : "Clear all email history?",
+    message: status === "failed"
+      ? "This removes only the failed delivery records."
+      : "This permanently removes every email delivery record. Sent emails are unaffected.",
+    confirmLabel: "Clear",
+    secondary: { label: "Keep history" },
+    onConfirm: async () => {
+      try {
+        const r = await api.del(`/api/admin/email-log${status ? `?status=${status}` : ""}`);
+        toast(r.message);
+        api.get("/api/admin/email-log?limit=8").then(setMail).catch(() => {});
+      } catch (err) { toast(err.message, "error"); }
+    },
+  });
+
   if (!s) return <p className="text-slate-400">Loading…</p>;
 
   const pending = appr ? Object.values(appr.counts).reduce((a, b) => a + b, 0) : 0;
@@ -72,7 +91,7 @@ function Reports() {
       {(pending > 0 || mailFailed > 0) && (
         <div className="grid gap-3 sm:grid-cols-2">
           {pending > 0 && (
-            <Link to="/admin/approvals"
+            <Link to="/admin/registrations"
                   className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 transition-colors hover:bg-amber-100">
               <span className="text-sm font-semibold text-amber-800">
                 {pending} account{pending === 1 ? "" : "s"} waiting for approval
@@ -120,6 +139,15 @@ function Reports() {
               <span className="text-xs text-slate-400">
                 {mail.totals.sent} sent · {mail.totals.failed} failed · {mail.totals.console} console
               </span>
+            )}
+          </div>
+          <div className="mb-2 flex justify-end gap-2">
+            {mail?.totals?.failed > 0 && (
+              <button className="btn-outline btn-sm !text-red-600 hover:!bg-red-50"
+                      onClick={() => clearLog("failed")}>Clear failures</button>
+            )}
+            {mail?.totals?.total > 0 && (
+              <button className="btn-outline btn-sm" onClick={() => clearLog()}>Clear all history</button>
             )}
           </div>
           <div className="space-y-1.5">
@@ -246,6 +274,27 @@ function CredResult({ res }) {
       <p className="font-semibold">{res.status}</p>
       <p>User ID: <b>{res.user_id}</b></p>
       <p>Temporary password: <b>{res.password}</b> (also emailed)</p>
+    </div>
+  );
+}
+
+function AddAccounts() {
+  const [tab, setTab] = useState("institute");
+  const TABS = [["institute", "Institute"], ["enterprise", "Employer"], ["jobseeker", "Job seeker"]];
+  return (
+    <div className="max-w-4xl">
+      <h2 className="mb-1 text-xl font-bold text-navy">Add accounts</h2>
+      <p className="mb-4 text-sm text-slate-500">Create an account directly — credentials are emailed automatically.</p>
+      <div className="mb-5 flex gap-1.5 rounded-xl bg-slate-100 p-1.5">
+        {TABS.map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={`flex-1 rounded-lg px-3 py-2 text-[13px] font-semibold transition-all ${
+              tab === k ? "bg-white text-navy shadow-sm" : "text-slate-500 hover:text-navy"}`}>{label}</button>
+        ))}
+      </div>
+      {tab === "institute" && <Institutes />}
+      {tab === "enterprise" && <Enterprises />}
+      {tab === "jobseeker" && <JobSeekers />}
     </div>
   );
 }

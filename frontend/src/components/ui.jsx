@@ -67,7 +67,7 @@ export function DashboardLayout({ title, menu, children }) {
         <div className="px-5 pb-2 pt-4">
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{title}</p>
         </div>
-        <nav className="flex-1 space-y-1 px-3 pb-4">
+        <nav className="flex-1 space-y-1 px-3 pb-2">
           {menu.map((m) => {
             const active = location.pathname === m.to;
             const Icon = m.icon;
@@ -82,6 +82,9 @@ export function DashboardLayout({ title, menu, children }) {
             );
           })}
         </nav>
+        <p className="px-4 pb-3 text-[10px] text-slate-300" title="Build version — quote this when reporting an issue">
+          v{BUILD_VERSION}
+        </p>
       </aside>
 
       <div className="flex flex-1 flex-col">
@@ -100,6 +103,8 @@ export function DashboardLayout({ title, menu, children }) {
     </div>
   );
 }
+
+export const BUILD_VERSION = "2026.08.28-r2";
 
 export function StatusBadge({ status }) {
   const map = {

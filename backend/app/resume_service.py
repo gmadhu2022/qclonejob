@@ -40,6 +40,21 @@ COLUMN_ALIASES = {
     "experience": ["experience", "work experience", "exp"],
     "certifications": ["certifications", "certificates", "certification"],
     "languages": ["languages", "language"],
+    # richer candidate detail (requested: experience, years, city, address)
+    "address": ["address", "residential address", "permanent address", "full address"],
+    "district": ["district"],
+    "pincode": ["pincode", "pin code", "postal code", "zip"],
+    "total_experience": ["total experience", "years of experience", "experience years",
+                         "exp years", "yoe"],
+    "previous_company": ["previous company", "last company", "company", "employer",
+                         "organisation", "organization"],
+    "previous_role": ["previous role", "designation", "last designation", "job title", "role"],
+    "previous_duration": ["duration", "work duration", "period", "from to"],
+    "current_salary": ["current salary", "present salary", "ctc", "current ctc"],
+    "expected_salary": ["expected salary", "expected ctc", "salary expectation"],
+    "availability": ["availability", "notice period", "available from"],
+    "gender_col": ["gender", "sex"],
+    "headline": ["headline", "profile summary", "about", "summary"],
 }
 
 
@@ -174,9 +189,31 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
                 "percentage": _get(row, mapping, "percentage"),
             })
 
+        # Previous experience, when the sheet provides it
+        experience = []
+        if _get(row, mapping, "previous_company") or _get(row, mapping, "previous_role"):
+            experience.append({
+                "company": _get(row, mapping, "previous_company"),
+                "role": _get(row, mapping, "previous_role"),
+                "years": _get(row, mapping, "previous_duration") or _get(row, mapping, "total_experience"),
+                "description": "",
+            })
+
+        address_parts = [_get(row, mapping, "address"), _get(row, mapping, "city"),
+                         _get(row, mapping, "district"), _get(row, mapping, "state"),
+                         _get(row, mapping, "pincode")]
+        full_address = ", ".join(p for p in address_parts if p)
+
         seeker = models.JobSeeker(
             user_id=user.id,
             institute_id=institute.id,
+            experience=experience,
+            headline=_get(row, mapping, "headline"),
+            total_experience=_get(row, mapping, "total_experience"),
+            expected_salary=_get(row, mapping, "expected_salary"),
+            availability=_get(row, mapping, "availability"),
+            additional_info=(f"Address: {full_address}" if full_address else None),
+            profile_type=("worker" if not _get(row, mapping, "degree") else "professional"),
             first_name=first,
             last_name=last,
             email=email,
@@ -211,7 +248,11 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
 
 
 def sample_template_dataframe() -> pd.DataFrame:
-    """The blank template institutes can download and fill in."""
+    """The blank template institutes can download and fill in.
+
+    Every column is optional except Email — whatever is present gets mapped onto
+    the resume, and anything missing the student can add later.
+    """
     return pd.DataFrame([{
         "First Name": "Ramesh",
         "Last Name": "Kumar",
@@ -231,4 +272,15 @@ def sample_template_dataframe() -> pd.DataFrame:
         "Career Objective": "Seeking a trainee mechanical engineer role.",
         "Certifications": "CAD Certified",
         "Languages": "English, Telugu, Hindi",
+        "Address": "12-3-45, Ashok Nagar",
+        "District": "Hyderabad",
+        "Pincode": "500001",
+        "Total Experience": "2 years",
+        "Previous Company": "ABC Engineering Works",
+        "Previous Role": "Junior Draughtsman",
+        "Duration": "2022 - 2024",
+        "Current Salary": "18000",
+        "Expected Salary": "25000",
+        "Availability": "Immediate",
+        "Headline": "Mechanical draughtsman with CAD experience",
     }])

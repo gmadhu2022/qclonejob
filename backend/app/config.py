@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     # --- Database ---
     # SQLite default for instant local run. Swap to Supabase in .env:
     # DATABASE_URL=postgresql+psycopg2://postgres:[PASSWORD]@db.[REF].supabase.co:5432/postgres
-    DATABASE_URL: str = "sqlite:///./hire.db"
+    DATABASE_URL: str = "postgresql+psycopg2://postgres.ysgzpkpggpkmhumpidmy:Hire%40001122334455@aws-0-ap-south-1.pooler.supabase.com:5432/postgres"
 
     # --- Auth ---
     JWT_SECRET: str = "change-me-in-production-use-a-long-random-string"
@@ -21,27 +21,26 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 1 day
 
     # --- Email (SMTP). If EMAIL_ENABLED is False, emails are printed to console. ---
-    EMAIL_ENABLED: bool = False
+    EMAIL_ENABLED: bool = True
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
-    EMAIL_FROM: str = "no-reply@qclonejob.com"
+    SMTP_USER: str = "gmadhudatascientist@gmail.com"
+    SMTP_PASSWORD: str = "zupgkxthbtlqrkgu"
+    EMAIL_FROM: str = "gmadhudatascientist@gmail.com"
 
     # --- AI (Groq) ---
     # Get a free key at https://console.groq.com/keys
-    AI_ENABLED: bool = False
+    AI_ENABLED: bool = True
     GROQ_API_KEY: str = ""
     # Model IDs change over time. Check what YOUR key supports:
     #   GET /api/ai/models   (or console.groq.com/docs/models)
     GROQ_MODEL: str = "openai/gpt-oss-20b"
 
     # --- App ---
-    APP_NAME: str = "QCloneJob"
+    APP_NAME: str = "Hire"
     FRONTEND_URL: str = "http://localhost:5173"
-    # Extra origins allowed to call the API, comma-separated.
-    # On Render set this to your static site URL, e.g. https://qclonejob-web.onrender.com
-    CORS_ORIGINS: str = ""
+    # The institute all voluntary self-registrations are attached to (per user story).
+    DEFAULT_INSTITUTE_NAME: str = "Coco Soft Institute"
 
     @property
     def cors_list(self) -> list[str]:

@@ -7,7 +7,7 @@ from ..auth import hash_password, generate_password
 from ..email_utils import send_credentials_email, send_email
 from ..notify_service import notify
 from ..config import settings
-from ..job_taxonomy import taxonomy_payload
+from ..job_taxonomy import taxonomy_payload, skills_for_sector, ALL_SKILLS, SKILLS_BY_SECTOR
 from .. import banner_service
 
 router = APIRouter(prefix="/api/public", tags=["public"])
@@ -112,6 +112,19 @@ def register_institute(body: schemas.InstituteBase, db: Session = Depends(get_db
 def taxonomy():
     """Every sector and role the platform covers — daily wage through postgraduate."""
     return taxonomy_payload()
+
+
+@router.get("/skills")
+def skills(sector: str | None = None, q: str | None = None, limit: int = 400):
+    """Skills for a sector (or all), optionally filtered as the user types."""
+    pool = skills_for_sector(sector) if sector else ALL_SKILLS
+    if q:
+        ql = q.lower()
+        starts = [s for s in pool if s.lower().startswith(ql)]
+        contains = [s for s in pool if ql in s.lower() and s not in starts]
+        pool = starts + contains          # prefix matches first — feels faster to type against
+    return {"skills": pool[:limit], "total": len(pool),
+            "sector": sector, "sectors": sorted(SKILLS_BY_SECTOR.keys())}
 
 
 @router.get("/banners")

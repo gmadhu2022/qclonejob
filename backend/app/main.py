@@ -88,7 +88,7 @@ def _startup_checks() -> None:
     print(f"[startup] CORS allows: {_cors_origins()}", flush=True)
 
 
-APP_REVISION = "2026-08-24"   # bump when shipping; surfaced by /healthz
+APP_REVISION = "2026.08.28-r2"   # bump when shipping; surfaced by /healthz
 
 
 @app.get("/healthz")

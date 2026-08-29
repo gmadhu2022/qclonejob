@@ -5,7 +5,9 @@ import { DashboardLayout, useToast } from "../../components/ui";
 import { useDialog } from "../../components/Dialog";
 import { IconBuilding, IconUpload, IconSearch, IconBriefcase } from "../../components/icons";
 import ImageUpload from "../../components/ImageUpload";
+import RichText, { Markdown } from "../../components/RichText";
 import { AIResult, AIList, useAI, useAICall } from "../../components/AIPanel";
+import SkillPicker from "../../components/SkillPicker";
 import { Combobox, TagInput } from "../../components/fields";
 import { QUALIFICATIONS, CITIES, EXPERIENCE, SKILLS } from "../../lib/options";
 import { IconSparkle } from "../../components/icons";
@@ -34,6 +36,12 @@ export default function Institute() {
 function Profile() {
   const [d, setD] = useState(null);
   const [p, setP] = useState(null);
+  const [editAbout, setEditAbout] = useState(false);
+  const toast = useToast();
+  const saveAbout = async () => {
+    try { setP(await api.put("/api/institute/profile", p)); setEditAbout(false); toast("About updated."); }
+    catch (err) { toast(err.message, "error"); }
+  };
   useEffect(() => {
     api.get("/api/institute/summary").then(setD).catch(() => {});
     api.get("/api/institute/profile").then(setP).catch(() => {});
@@ -76,6 +84,21 @@ function Profile() {
         <h3 className="mb-3 font-semibold text-slate-700">Institute logo</h3>
         <ImageUpload kind="logo" round={false} currentUrl={p.logo_url}
                      onUploaded={(u) => setP({ ...p, logo_url: u })} />
+      </div>
+
+      <div className="card">
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="font-bold text-slate-800">About the institute</h3>
+          <button className="btn-outline btn-sm" onClick={() => setEditAbout((e) => !e)}>
+            {editAbout ? "Cancel" : "Edit"}
+          </button>
+        </div>
+        {editAbout ? (
+          <>
+            <RichText value={p.about} onChange={(v) => setP({ ...p, about: v })} rows={8} />
+            <button className="btn btn-sm mt-3" onClick={saveAbout}>Save</button>
+          </>
+        ) : <Markdown text={p.about} />}
       </div>
 
       <div className="card space-y-1 text-sm">
@@ -268,6 +291,35 @@ function PostJob() {
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const setV = (k) => (v) => setForm({ ...form, [k]: v });
 
+  const [jdText, setJdText] = useState("");
+  const [jdOpen, setJdOpen] = useState(false);
+
+  // Accepts a pasted JD or an uploaded .txt/.md/.csv file; AI fills every field.
+  const readFile = async (file) => {
+    if (!file) return;
+    const text = await file.text().catch(() => "");
+    if (!text.trim()) return toast("Couldn't read that file. Paste the text instead.", "error");
+    setJdText(text.slice(0, 20000));
+  };
+
+  const parseJD = async () => {
+    const r = await call("/api/ai/job/parse", { text: jdText });
+    if (!r) return;
+    setForm((f) => ({
+      ...f,
+      title: r.title || f.title, job_code: r.job_code || f.job_code,
+      category: r.category || f.category, location: r.location || f.location,
+      experience: r.experience || f.experience, salary: r.salary || f.salary,
+      wage_min: r.wage_min || f.wage_min, wage_max: r.wage_max || f.wage_max,
+      requirement_education: r.requirement_education || f.requirement_education,
+      requirement_technical: r.requirement_technical || f.requirement_technical,
+      description: r.description || f.description,
+      key_skills: r.key_skills?.length ? r.key_skills : f.key_skills,
+    }));
+    setJdOpen(false); setJdText("");
+    toast("Fields filled from your JD — review, then post.");
+  };
+
   const draftWithAI = async () => {
     if (!form.title?.trim()) return toast("Enter a job title first.", "error");
     const r = await call("/api/ai/job/describe", {
@@ -309,11 +361,39 @@ function PostJob() {
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-bold text-navy">Post a job</h2>
         {aiOn && (
-          <button className="btn-outline btn-sm" onClick={draftWithAI} disabled={aiBusy}>
-            <IconSparkle size={14} /> {aiBusy ? "Drafting…" : "Draft with AI"}
-          </button>
+          <div className="flex gap-2">
+            <button className="btn-outline btn-sm" onClick={() => setJdOpen((o) => !o)}>
+              <IconSparkle size={14} /> Upload / paste a JD
+            </button>
+            <button className="btn-outline btn-sm" onClick={draftWithAI} disabled={aiBusy}>
+              <IconSparkle size={14} /> {aiBusy ? "Drafting…" : "Draft from title"}
+            </button>
+          </div>
         )}
       </div>
+
+      {jdOpen && (
+        <div className="card mb-4 border-navy-200 bg-navy-50/40">
+          <h3 className="font-semibold text-navy">Upload or paste your job description</h3>
+          <p className="mt-0.5 text-xs text-slate-500">
+            AI reads it and fills every field below. You review and correct anything before posting.
+          </p>
+          <label className="btn-outline btn-sm mt-3 inline-flex cursor-pointer">
+            Choose a file (.txt, .md, .csv)
+            <input type="file" accept=".txt,.md,.csv,.json" className="hidden"
+                   onChange={(e) => readFile(e.target.files?.[0])} />
+          </label>
+          <textarea className="input mt-3" rows={8} value={jdText}
+                    placeholder="…or paste the full job description here"
+                    onChange={(e) => setJdText(e.target.value)} />
+          <div className="mt-3 flex gap-2">
+            <button className="btn-green btn-sm" onClick={parseJD} disabled={aiBusy || jdText.trim().length < 40}>
+              {aiBusy ? "Reading…" : "Auto-fill the form"}
+            </button>
+            <button className="btn-outline btn-sm" onClick={() => setJdOpen(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
       <div className="card grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2"><label className="label">Job title *</label>
           <input className="input" value={form.title || ""} onChange={set("title")} /></div>
@@ -330,7 +410,9 @@ function PostJob() {
           </div>
         </div>
         <div className="sm:col-span-2">
-          <TagInput label="Key skills" values={form.key_skills || []} options={SKILLS} onChange={setV("key_skills")} />
+          <SkillPicker values={form.key_skills || []} onChange={setV("key_skills")} sector={form.sector}
+                           aiSuggestPath={aiOn && form.title ? "/api/ai/job/classify" : null}
+                           aiBody={{ title: form.title }} />
         </div>
         {aiDraft && (
           <div className="sm:col-span-2">

@@ -4,102 +4,158 @@ import { useToast } from "../../components/ui";
 import { useDialog } from "../../components/Dialog";
 import { IconCheck, IconBlock, IconSearch } from "../../components/icons";
 
-/* ================= Approvals (3b, 3c, 3d) ================= */
-export function Approvals() {
+/* ================= Registrations — one tab for everything ================= */
+export function Registrations() {
   const toast = useToast();
+  const dialog = useDialog();
   const [data, setData] = useState(null);
-  const [tab, setTab] = useState("institutes");
+  const [kind, setKind] = useState("all");
+  const [status, setStatus] = useState("pending");
+  const [q, setQ] = useState("");
   const [reason, setReason] = useState({});
 
   const load = useCallback(() => {
-    api.get("/api/admin/approvals").then(setData).catch(() => {});
-  }, []);
-  useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, [load]);
+    const p = new URLSearchParams({ kind, status });
+    if (q) p.set("q", q);
+    api.get(`/api/admin/registrations?${p}`).then(setData).catch(() => {});
+  }, [kind, status, q]);
 
-  const decide = async (kind, id, decision) => {
+  useEffect(() => {
+    const t = setTimeout(load, q ? 250 : 0);      // debounce search-as-you-type
+    return () => clearTimeout(t);
+  }, [load, q]);
+  useEffect(() => { const i = setInterval(load, 20000); return () => clearInterval(i); }, [load]);
+
+  const decide = async (row, decision) => {
     try {
-      const r = await api.post(`/api/admin/approvals/${kind}/${id}`,
-        { decision, reason: reason[`${kind}${id}`] || "" });
-      toast(r.message);
+      const r = await api.post(`/api/admin/approvals/${row.kind}/${row.id}`,
+        { decision, reason: reason[`${row.kind}${row.id}`] || "" });
+      dialog({ tone: decision === "approved" ? "success" : "info",
+               title: decision === "approved" ? "Account approved" : "Registration rejected",
+               message: r.message,
+               note: decision === "approved"
+                 ? "They can log in now and have been emailed."
+                 : "They've been emailed with the reason you gave.",
+               confirmLabel: "Done" });
       load();
     } catch (err) { toast(err.message, "error"); }
   };
 
-  if (!data) return <p className="text-slate-400">Loading…</p>;
-  const TABS = [
-    ["institutes", "Institutes", "institute"],
-    ["enterprises", "Employers", "enterprise"],
-    ["jobseekers", "Job seekers", "jobseeker"],
-  ];
-  const rows = data[tab] || [];
-  const kind = TABS.find((t) => t[0] === tab)[2];
-  const total = Object.values(data.counts).reduce((a, b) => a + b, 0);
+  const KINDS = [["all", "All types"], ["institute", "Institutes"],
+                 ["enterprise", "Employers"], ["jobseeker", "Job seekers"]];
+  const STATUSES = [["pending", "Pending"], ["approved", "Approved"],
+                    ["rejected", "Rejected"], ["all", "All"]];
+  const KIND_STYLE = { institute: "bg-navy-50 text-navy",
+                       enterprise: "bg-blue-50 text-blue-700",
+                       jobseeker: "bg-brandgreen-50 text-brandgreen-600" };
 
   return (
-    <div className="max-w-5xl">
-      <h2 className="mb-1 text-xl font-bold text-navy">Approvals</h2>
-      <p className="mb-4 text-sm text-slate-500">
-        {total === 0 ? "Nothing waiting — you're all caught up."
-                     : `${total} account${total === 1 ? "" : "s"} waiting for review.`}
-      </p>
+    <div className="max-w-6xl space-y-5">
+      <div>
+        <h2 className="text-xl font-bold text-navy">Registrations</h2>
+        <p className="text-sm text-slate-500">
+          Institutes, employers and job seekers — pending, approved and rejected, all in one place.
+        </p>
+      </div>
 
-      <div className="mb-5 flex gap-1.5 rounded-xl bg-slate-100 p-1.5">
-        {TABS.map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)}
+      {/* status tabs with live counts */}
+      <div className="flex flex-wrap gap-1.5 rounded-xl bg-slate-100 p-1.5">
+        {STATUSES.map(([k, label]) => (
+          <button key={k} onClick={() => setStatus(k)}
             className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-[13px] font-semibold transition-all ${
-              tab === k ? "bg-white text-navy shadow-sm" : "text-slate-500 hover:text-navy"}`}>
+              status === k ? "bg-white text-navy shadow-sm" : "text-slate-500 hover:text-navy"}`}>
             {label}
-            {data.counts[k] > 0 && (
-              <span className="rounded-full bg-amber-100 px-1.5 text-[10px] font-bold text-amber-700">
-                {data.counts[k]}
+            {data && k === status && (
+              <span className="rounded-full bg-slate-100 px-1.5 text-[10px] font-bold text-slate-500">
+                {data.counts.all}
               </span>
             )}
           </button>
         ))}
       </div>
 
-      <div className="space-y-3">
-        {rows.map((r) => (
-          <div key={r.id} className="card">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="min-w-0">
-                <h3 className="font-bold text-slate-800">{r.name}</h3>
-                <p className="text-sm text-slate-500">{r.email}{r.phone ? ` · ${r.phone}` : ""}</p>
-                <p className="mt-0.5 text-xs text-slate-400">
-                  {[r.city, r.location, r.website].filter(Boolean).join(" · ")}
-                  {r.gst_no && ` · GST ${r.gst_no}`}
-                  {r.pan_no && ` · PAN ${r.pan_no}`}
-                </p>
-                {(r.courses?.length > 0 || r.skills?.length > 0) && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {(r.courses || r.skills || []).slice(0, 8).map((c) => (
-                      <span key={c} className="badge bg-slate-100 text-slate-600">{c}</span>
-                    ))}
-                  </div>
-                )}
-                <p className="mt-2 text-[11px] text-slate-400">
-                  Registered {new Date(r.created_at).toLocaleString()}
-                </p>
-              </div>
-              <div className="flex shrink-0 flex-col gap-2">
-                <button className="btn-green btn-sm" onClick={() => decide(kind, r.id, "approved")}>
-                  <IconCheck size={14} /> Approve
-                </button>
-                <button className="btn-outline btn-sm !text-red-600 hover:!border-red-300 hover:!bg-red-50"
-                        onClick={() => decide(kind, r.id, "rejected")}>
-                  <IconBlock size={14} /> Reject
-                </button>
-              </div>
-            </div>
-            <input className="input mt-3 !py-2 !text-xs" placeholder="Reason (shown to them if rejected)"
-                   value={reason[`${kind}${r.id}`] || ""}
-                   onChange={(e) => setReason({ ...reason, [`${kind}${r.id}`]: e.target.value })} />
-          </div>
-        ))}
-        {rows.length === 0 && (
-          <div className="card text-center text-slate-400">No pending {tab}.</div>
-        )}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex gap-1.5 rounded-lg bg-slate-100 p-1">
+          {KINDS.map(([k, label]) => (
+            <button key={k} onClick={() => setKind(k)}
+              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
+                kind === k ? "bg-white text-navy shadow-sm" : "text-slate-500 hover:text-navy"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="relative min-w-[240px] flex-1">
+          <input className="input !py-2 !pl-8 !text-[13px]"
+                 placeholder="Search name, email, city, course or skill…"
+                 value={q} onChange={(e) => setQ(e.target.value)} />
+          <IconSearch size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+        </div>
       </div>
+
+      {!data ? <p className="text-slate-400">Loading…</p> : (
+        <div className="space-y-3">
+          {data.items.map((r) => (
+            <div key={`${r.kind}${r.id}`}
+                 className="group rounded-xl border border-slate-200 bg-white p-4 transition-all duration-200
+                            hover:-translate-y-0.5 hover:border-navy-200 hover:shadow-cardhover">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex min-w-0 gap-3">
+                  <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-sm font-bold ${KIND_STYLE[r.kind]}`}>
+                    {(r.name || "?")[0].toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-bold text-slate-800">{r.name}</h3>
+                      <span className={`badge ${KIND_STYLE[r.kind]}`}>{r.kind}</span>
+                      <span className={`badge ${
+                        r.status === "approved" ? "bg-brandgreen-50 text-brandgreen-600"
+                        : r.status === "pending" ? "bg-amber-100 text-amber-700"
+                        : "bg-red-100 text-red-700"}`}>{r.status}</span>
+                      {r.source === "self" && <span className="badge bg-slate-100 text-slate-500">self-registered</span>}
+                    </div>
+                    <p className="text-[13px] text-slate-500">
+                      {[r.email, r.phone, r.city].filter(Boolean).join(" · ")}
+                    </p>
+                    {r.extra && <p className="mt-0.5 truncate text-[12px] text-slate-400">{r.extra}</p>}
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      Registered {new Date(r.created_at).toLocaleString()}
+                      {r.approved_at && ` · decided ${new Date(r.approved_at).toLocaleDateString()}`}
+                    </p>
+                    {r.reason && <p className="mt-1 text-[12px] text-red-500">Reason: {r.reason}</p>}
+                  </div>
+                </div>
+
+                {r.status === "pending" ? (
+                  <div className="flex shrink-0 flex-col gap-2">
+                    <button className="btn-green btn-sm" onClick={() => decide(r, "approved")}>
+                      <IconCheck size={14} /> Approve
+                    </button>
+                    <button className="btn-outline btn-sm !text-red-600 hover:!border-red-300 hover:!bg-red-50"
+                            onClick={() => decide(r, "rejected")}>
+                      <IconBlock size={14} /> Reject
+                    </button>
+                  </div>
+                ) : (
+                  <span className={`shrink-0 text-[11px] font-semibold ${r.active ? "text-brandgreen-600" : "text-slate-400"}`}>
+                    {r.active ? "Can log in" : "Login disabled"}
+                  </span>
+                )}
+              </div>
+
+              {r.status === "pending" && (
+                <input className="input mt-3 !py-2 !text-xs" placeholder="Reason (emailed to them if rejected)"
+                       value={reason[`${r.kind}${r.id}`] || ""}
+                       onChange={(e) => setReason({ ...reason, [`${r.kind}${r.id}`]: e.target.value })} />
+              )}
+            </div>
+          ))}
+          {data.items.length === 0 && (
+            <div className="card text-center text-slate-400">
+              {q ? "Nothing matches your search." : `No ${status === "all" ? "" : status} registrations.`}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

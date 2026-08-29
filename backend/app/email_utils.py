@@ -13,6 +13,8 @@ Gmail needs an App Password (2-Step Verification must be on). Easiest setup:
 import smtplib
 import ssl
 import logging
+import queue
+import threading
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -21,23 +23,59 @@ from .config import settings
 logger = logging.getLogger("qclonejob.email")
 
 
-def _log(to_email: str, subject: str, kind: str, status: str, error: str | None = None) -> None:
-    """Record the attempt. Never let logging break the calling flow."""
-    try:
-        from .database import SessionLocal
-        from . import models
-        db = SessionLocal()
+# Email log rows are buffered and written by a background worker.
+#
+# Writing them inline opened a SECOND database connection while the caller's
+# transaction was still open. On SQLite that deadlocks ("database is locked")
+# and could abort a whole bulk upload; on Postgres it wastes a connection from
+# a small pool. Buffering keeps logging completely off the request path.
+_log_queue: "queue.Queue[dict]" = queue.Queue(maxsize=1000)
+_worker_started = False
+_worker_lock = threading.Lock()
+
+
+def _drain_queue() -> None:
+    from .database import SessionLocal
+    from . import models
+    while True:
+        item = _log_queue.get()
         try:
-            db.add(models.EmailLog(
-                to_email=to_email, subject=subject[:250], kind=kind, status=status,
-                error=(error or "")[:1000] or None,
-                provider=settings.SMTP_HOST if settings.EMAIL_ENABLED else "console",
-            ))
-            db.commit()
+            db = SessionLocal()
+            try:
+                db.add(models.EmailLog(**item))
+                db.commit()
+            finally:
+                db.close()
+        except Exception as e:                   # pragma: no cover
+            logger.warning("Could not write email log: %s", e)
         finally:
-            db.close()
+            _log_queue.task_done()
+
+
+def _ensure_worker() -> None:
+    global _worker_started
+    if _worker_started:
+        return
+    with _worker_lock:
+        if _worker_started:
+            return
+        threading.Thread(target=_drain_queue, daemon=True, name="email-log").start()
+        _worker_started = True
+
+
+def _log(to_email: str, subject: str, kind: str, status: str, error: str | None = None) -> None:
+    """Queue the attempt for background writing. Never blocks or fails the caller."""
+    try:
+        _ensure_worker()
+        _log_queue.put_nowait({
+            "to_email": to_email, "subject": subject[:250], "kind": kind, "status": status,
+            "error": (error or "")[:1000] or None,
+            "provider": settings.SMTP_HOST if settings.EMAIL_ENABLED else "console",
+        })
+    except queue.Full:                           # pragma: no cover
+        logger.warning("Email log queue full; dropping entry for %s", to_email)
     except Exception as e:                       # pragma: no cover
-        logger.warning("Could not write email log: %s", e)
+        logger.warning("Could not queue email log: %s", e)
 
 
 def send_email(to_email: str, subject: str, body: str, kind: str = "other") -> dict:

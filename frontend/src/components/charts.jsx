@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 /* Lightweight charts — pure SVG/CSS, no chart library needed. */
 
 export function BarChart({ data, height = 150 }) {
@@ -111,5 +113,102 @@ export function Sparkline({ values = [], width = 70, height = 20, color = "#1025
     <svg width={width} height={height} className="overflow-visible">
       <polyline points={pts} fill="none" stroke={color} strokeWidth="1.6" strokeLinejoin="round" />
     </svg>
+  );
+}
+
+
+/** Donut/pie built from SVG arcs. data: [{label, value, color}] with tailwind bg-* colours. */
+const HEX = { "bg-navy": "#10256b", "bg-brandgreen": "#4faa38", "bg-blue-500": "#3b82f6",
+  "bg-blue-400": "#60a5fa", "bg-blue-600": "#2563eb", "bg-amber-400": "#fbbf24",
+  "bg-violet-500": "#8b5cf6", "bg-red-400": "#f87171", "bg-slate-400": "#94a3b8",
+  "bg-slate-300": "#cbd5e1", "bg-brandgreen-400": "#6ec24f" };
+const hexOf = (c) => HEX[c] || "#10256b";
+
+export function PieChart({ data = [], size = 190, donut = true }) {
+  const total = data.reduce((a, d) => a + d.value, 0);
+  if (!total) return <p className="py-10 text-center text-sm text-slate-400">No data yet.</p>;
+  const R = size / 2, r = donut ? R * 0.58 : 0;
+  let angle = -Math.PI / 2;
+  const arcs = data.filter((d) => d.value > 0).map((d, i) => {
+    const slice = (d.value / total) * Math.PI * 2;
+    const [x1, y1] = [R + R * 0.92 * Math.cos(angle), R + R * 0.92 * Math.sin(angle)];
+    angle += slice;
+    const [x2, y2] = [R + R * 0.92 * Math.cos(angle), R + R * 0.92 * Math.sin(angle)];
+    const large = slice > Math.PI ? 1 : 0;
+    const inner = donut
+      ? ` L${R + r * Math.cos(angle)},${R + r * Math.sin(angle)}` +
+        ` A${r},${r} 0 ${large} 0 ${R + r * Math.cos(angle - slice)},${R + r * Math.sin(angle - slice)} Z`
+      : ` L${R},${R} Z`;
+    return (
+      <path key={i} d={`M${x1},${y1} A${R * 0.92},${R * 0.92} 0 ${large} 1 ${x2},${y2}${inner}`}
+            fill={hexOf(d.color)} className="transition-opacity hover:opacity-80">
+        <title>{`${d.label}: ${d.value} (${Math.round((d.value / total) * 100)}%)`}</title>
+      </path>
+    );
+  });
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-6">
+      <svg width={size} height={size}>{arcs}
+        {donut && <text x={R} y={R} textAnchor="middle" dominantBaseline="central"
+                        className="fill-slate-800" style={{ fontSize: 22, fontWeight: 800 }}>{total}</text>}
+      </svg>
+      <ul className="space-y-1.5">
+        {data.filter((d) => d.value > 0).map((d) => (
+          <li key={d.label} className="flex items-center gap-2 text-[12.5px] text-slate-600">
+            <span className="h-2.5 w-2.5 rounded-sm" style={{ background: hexOf(d.color) }} />
+            {d.label}<span className="font-semibold text-slate-800">{d.value}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Horizontal bars — better than vertical when labels are long. */
+export function HBarChart({ data = [] }) {
+  const max = Math.max(1, ...data.map((d) => d.value));
+  if (!data.length) return <p className="py-10 text-center text-sm text-slate-400">No data yet.</p>;
+  return (
+    <div className="space-y-2">
+      {data.map((d) => (
+        <div key={d.label} className="group flex items-center gap-3">
+          <span className="w-32 shrink-0 truncate text-right text-[12px] text-slate-500">{d.label}</span>
+          <div className="h-6 flex-1 overflow-hidden rounded-lg bg-slate-100">
+            <div className={`h-full rounded-lg ${d.color || "bg-navy"} transition-all duration-500 group-hover:opacity-85`}
+                 style={{ width: `${Math.max(3, (d.value / max) * 100)}%` }} />
+          </div>
+          <span className="w-8 shrink-0 text-right text-[12px] font-bold text-slate-700">{d.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Chart with a type switcher — bar / horizontal bar / donut / line. */
+export function SwitchableChart({ title, data = [], types = ["bar", "hbar", "donut"], height = 200 }) {
+  const [type, setType] = useState(types[0]);
+  const LABELS = { bar: "Bars", hbar: "Rows", donut: "Donut", pie: "Pie", line: "Line" };
+  return (
+    <div className="card">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-bold text-slate-800">{title}</h3>
+        <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
+          {types.map((t) => (
+            <button key={t} onClick={() => setType(t)}
+              className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-all ${
+                type === t ? "bg-white text-navy shadow-sm" : "text-slate-500 hover:text-navy"}`}>
+              {LABELS[t] || t}
+            </button>
+          ))}
+        </div>
+      </div>
+      {type === "bar" && <BarChart data={data} height={height} />}
+      {type === "hbar" && <HBarChart data={data} />}
+      {type === "donut" && <PieChart data={data} donut />}
+      {type === "pie" && <PieChart data={data} donut={false} />}
+      {type === "line" && (
+        <TrendChart series={data.map((d, i) => ({ day: d.label, impressions: d.value, clicks: 0 }))} height={height} />
+      )}
+    </div>
   );
 }

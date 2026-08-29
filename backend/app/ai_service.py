@@ -5,7 +5,7 @@ around a single HTTP call plus a JSON-mode helper.
 
 Configuration (backend/.env):
     AI_ENABLED=True
-    GROQ_API_KEY=
+    GROQ_API_KEY=xxx...
     GROQ_MODEL=llama-3.3-70b-versatile
 
 Model names change over time — if you get a "model not found" error, check

@@ -9,11 +9,13 @@ import {
   IconBuilding, IconSearch, IconBriefcase, IconClipboard, IconSparkle, IconChat, IconEye, IconDownload,
   IconChart, IconLayers,
 } from "../../components/icons";
-import { BarChart, MatchBar } from "../../components/charts";
+import { MatchBar, SwitchableChart } from "../../components/charts";
+import RichText, { Markdown } from "../../components/RichText";
 import ImageUpload from "../../components/ImageUpload";
 import BannerSlot from "../../components/BannerSlot";
 import BannerAnalytics from "../../components/BannerAnalytics";
 import { SectorList, RolePicker, useTaxonomy } from "../../components/SectorPicker";
+import SkillPicker from "../../components/SkillPicker";
 import { AIButton, AIResult, AIList, useAI, useAICall } from "../../components/AIPanel";
 import { Combobox, TagInput } from "../../components/fields";
 import { QUALIFICATIONS, CITIES, EXPERIENCE, SKILLS } from "../../lib/options";
@@ -25,7 +27,6 @@ const MENU = [
   { to: "/enterprise/post-job", label: "Post a job", icon: IconBriefcase },
   { to: "/enterprise/manage-jobs", label: "Manage jobs", icon: IconLayers },
   { to: "/enterprise/applications", label: "Applications", icon: IconClipboard },
-  { to: "/enterprise/banner", label: "Post a banner", icon: IconSparkle },
   { to: "/enterprise/messages", label: "Messages", icon: IconChat, badge: true },
 ];
 
@@ -41,7 +42,7 @@ export default function Enterprise() {
         <Route path="resumes" element={<ResumeSearch />} />
         <Route path="post-job" element={<PostJob />} />
         <Route path="applications" element={<Applications />} />
-        <Route path="banner" element={<PostBanner />} />
+        {/* Banner posting moved to Admin only (requirement 12). */}
         <Route path="messages" element={<Chat canBlock />} />
         <Route path="*" element={<Navigate to="/enterprise" replace />} />
       </Routes>
@@ -51,29 +52,40 @@ export default function Enterprise() {
 
 function Overview() {
   const [d, setD] = useState(null);
+  const [jobs, setJobs] = useState([]);
   useEffect(() => {
-    const load = () => api.get("/api/enterprise/dashboard").then(setD).catch(() => {});
-    load(); const id = setInterval(load, 8000); return () => clearInterval(id);
+    const load = () => {
+      api.get("/api/enterprise/dashboard").then(setD).catch(() => {});
+      api.get("/api/enterprise/jobs").then(setJobs).catch(() => {});
+    };
+    load(); const id = setInterval(load, 10000); return () => clearInterval(id);
   }, []);
   if (!d) return <Loading />;
-  const statusData = Object.entries(d.by_status || {}).map(([label, value]) => ({
-    label, value,
-    color: { Applied: "bg-slate-400", "Under Review": "bg-amber-400", Shortlisted: "bg-navy",
-             Rejected: "bg-red-400", Selected: "bg-brandgreen" }[label],
-  }));
+
+  const STATUS_COLOR = {
+    Applied: "bg-slate-400", "Under Review": "bg-amber-400", Shortlisted: "bg-navy",
+    "Interview - Phase 1": "bg-blue-400", "Interview - Phase 2": "bg-blue-500",
+    "Interview - Phase 3": "bg-blue-600", "Managerial Round": "bg-violet-500",
+    Offered: "bg-brandgreen-400", Hired: "bg-brandgreen", "On Hold": "bg-slate-300",
+    Rejected: "bg-red-400",
+  };
+  const pipeline = Object.entries(d.by_status || {}).filter(([, v]) => v > 0)
+    .map(([label, value]) => ({ label: label.replace("Interview - ", ""), value, color: STATUS_COLOR[label] }));
+  const byJob = jobs.filter((j) => j.applicants > 0).slice(0, 8)
+    .map((j) => ({ label: j.title, value: j.applicants, color: "bg-navy" }));
+
   return (
     <div className="space-y-6">
+      <BannerSlot audience="recruiters" compact />
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat label="Jobs posted" value={d.jobs_total} />
         <Stat label="Active jobs" value={d.jobs_active} tone="green" />
         <Stat label="Applications" value={d.applications} />
         <Stat label="Resumes viewed" value={d.resumes_viewed} tone="green" />
       </div>
-      <BannerSlot audience="recruiters" compact />
-
-      <div className="card">
-        <h3 className="mb-4 font-bold text-slate-800">Hiring pipeline</h3>
-        <BarChart data={statusData} height={180} />
+      <div className="grid gap-5 xl:grid-cols-2">
+        <SwitchableChart title="Hiring pipeline" data={pipeline} types={["bar", "hbar", "donut", "pie"]} height={210} />
+        <SwitchableChart title="Applications per job" data={byJob} types={["hbar", "bar", "donut"]} height={210} />
       </div>
     </div>
   );
@@ -92,8 +104,11 @@ function ManageJobs() {
   const toast = useToast();
   const [jobs, setJobs] = useState(null);
   const [open, setOpen] = useState(null);
+  const [q, setQ] = useState("");
+  const [tab, setTab] = useState("all");
   const load = () => api.get("/api/enterprise/jobs").then(setJobs);
   useEffect(() => { load(); }, []);
+
   const toggle = async (job) => {
     const status = job.status === "active" ? "closed" : "active";
     try { toast((await api.put(`/api/enterprise/jobs/${job.id}/status`, { status })).message); load(); }
@@ -103,80 +118,225 @@ function ManageJobs() {
     try { setOpen(await api.get(`/api/enterprise/jobs/${id}/applicants`)); }
     catch (err) { toast(err.message, "error"); }
   };
+
   if (!jobs) return <Loading />;
+
   if (open) {
     return (
       <div>
         <button className="btn-outline btn-sm mb-4" onClick={() => setOpen(null)}>← Back to jobs</button>
-        <h2 className="mb-4 text-xl font-bold text-navy">Applicants — {open.job.title}</h2>
-        <div className="card overflow-hidden !p-0">
-          <table className="table">
-            <thead><tr><th>Candidate</th><th>Location</th><th>Skills</th><th>Applied</th><th>Status</th></tr></thead>
-            <tbody>
-              {open.applicants.map((a) => (
-                <tr key={a.application_id}>
-                  <td className="font-medium text-slate-800">{a.candidate_name}</td>
-                  <td>{a.location}</td><td>{(a.key_skills || []).join(", ")}</td>
-                  <td>{new Date(a.applied_on).toLocaleDateString()}</td>
-                  <td><StatusBadge status={a.status} /></td>
-                </tr>
-              ))}
-              {open.applicants.length === 0 && <tr><td colSpan={5} className="py-8 text-center text-slate-400">No applicants yet.</td></tr>}
-            </tbody>
-          </table>
+        <h2 className="mb-1 text-xl font-bold text-navy">Applicants — {open.job.title}</h2>
+        <p className="mb-4 text-sm text-slate-500">{open.applicants.length} candidate(s)</p>
+        <div className="grid gap-3 md:grid-cols-2">
+          {open.applicants.map((a) => (
+            <div key={a.application_id} className="card-hover">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-bold text-slate-800">{a.candidate_name}</p>
+                  <p className="text-xs text-slate-500">{a.location}</p>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {(a.key_skills || []).slice(0, 6).map((k) => (
+                      <span key={k} className="badge bg-slate-100 text-slate-600">{k}</span>
+                    ))}
+                  </div>
+                </div>
+                <StatusBadge status={a.status} />
+              </div>
+              <p className="mt-2 text-[11px] text-slate-400">
+                Applied {new Date(a.applied_on).toLocaleDateString()}
+              </p>
+            </div>
+          ))}
+          {open.applicants.length === 0 && (
+            <div className="card col-span-full text-center text-slate-400">No applicants yet.</div>
+          )}
         </div>
       </div>
     );
   }
+
+  const filtered = jobs
+    .filter((j) => tab === "all" || j.status === tab)
+    .filter((j) => !q || `${j.title} ${j.location} ${(j.key_skills || []).join(" ")}`.toLowerCase().includes(q.toLowerCase()));
+  const counts = { all: jobs.length, active: jobs.filter((j) => j.status === "active").length,
+                   closed: jobs.filter((j) => j.status === "closed").length };
+
   return (
     <div>
-      <h2 className="mb-5 text-xl font-bold text-navy">Manage jobs</h2>
-      <div className="space-y-3">
-        {jobs.map((j) => (
-          <div key={j.id} className="card-hover flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3">
-                <h3 className="font-bold text-slate-800">{j.title}</h3>
-                <span className={`badge ${j.status === "active" ? "bg-brandgreen-50 text-brandgreen-600" : "bg-slate-100 text-slate-500"}`}>
-                  {j.status}
-                </span>
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-navy">Manage jobs</h2>
+          <p className="text-sm text-slate-500">
+            {jobs.reduce((a, j) => a + j.applicants, 0)} applications across {jobs.length} jobs
+          </p>
+        </div>
+        <input className="input max-w-xs" placeholder="Search jobs, location or skill…"
+               value={q} onChange={(e) => setQ(e.target.value)} />
+      </div>
+
+      <div className="mb-5 flex gap-1.5 rounded-xl bg-slate-100 p-1.5">
+        {["all", "active", "closed"].map((k) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={`flex-1 rounded-lg px-3 py-2 text-[13px] font-semibold capitalize transition-all ${
+              tab === k ? "bg-white text-navy shadow-sm" : "text-slate-500 hover:text-navy"}`}>
+            {k} <span className="text-[11px] text-slate-400">({counts[k]})</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {filtered.map((j) => (
+          <div key={j.id}
+               className="group overflow-hidden rounded-xl border border-slate-200 bg-white transition-all duration-200
+                          hover:-translate-y-1 hover:border-navy-200 hover:shadow-cardhover">
+            <div className="p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-bold text-slate-800">{j.title}</h3>
+                    {j.is_urgent && <span className="badge bg-red-100 text-red-700">Urgent</span>}
+                    <span className={`badge ${j.status === "active" ? "bg-brandgreen-50 text-brandgreen-600" : "bg-slate-100 text-slate-500"}`}>
+                      {j.status}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-[13px] text-slate-500">
+                    {[j.job_code, j.location, j.experience].filter(Boolean).join(" · ")}
+                  </p>
+                  <p className="text-[12px] text-slate-400">
+                    {j.no_of_positions} position(s)
+                    {(j.wage_min || j.salary) && ` · ${j.salary || `${j.wage_min}${j.wage_max ? " – " + j.wage_max : ""}`}`}
+                  </p>
+                </div>
+                <div className="shrink-0 text-center">
+                  <div className="text-2xl font-extrabold text-navy">{j.applicants}</div>
+                  <div className="text-[10px] uppercase tracking-wide text-slate-400">applicants</div>
+                </div>
               </div>
-              <p className="mt-0.5 text-sm text-slate-500">
-                {j.job_code ? `${j.job_code} · ` : ""}{j.location} · {j.no_of_positions} position(s)
-              </p>
+
+              {(j.key_skills || []).length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {j.key_skills.slice(0, 6).map((k) => (
+                    <span key={k} className="badge bg-slate-100 text-slate-600">{k}</span>
+                  ))}
+                  {j.key_skills.length > 6 && (
+                    <span className="badge bg-slate-50 text-slate-400">+{j.key_skills.length - 6}</span>
+                  )}
+                </div>
+              )}
+
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {[["New", j.new_applicants, "text-slate-600"],
+                  ["Shortlisted", j.shortlisted, "text-navy"],
+                  ["Hired", j.hired, "text-brandgreen-600"]].map(([label, val, cls]) => (
+                  <div key={label} className="rounded-lg bg-slate-50 py-1.5 text-center transition-colors group-hover:bg-navy-50/60">
+                    <div className={`text-sm font-bold ${cls}`}>{val}</div>
+                    <div className="text-[10px] text-slate-400">{label}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="flex shrink-0 gap-2">
-              <button className="btn-outline btn-sm" onClick={() => viewApplicants(j.id)}>Applicants</button>
+
+            <div className="flex gap-2 border-t border-slate-100 bg-slate-50/60 px-5 py-3">
+              <button className="btn-outline btn-sm flex-1" onClick={() => viewApplicants(j.id)}>
+                View applicants
+              </button>
               <button className="btn-outline btn-sm" onClick={() => toggle(j)}>
                 {j.status === "active" ? "Close" : "Reopen"}
               </button>
             </div>
           </div>
         ))}
-        {jobs.length === 0 && <div className="card text-center text-slate-400">You haven't posted any jobs yet.</div>}
+        {filtered.length === 0 && (
+          <div className="card col-span-full text-center text-slate-400">
+            {q ? "No jobs match your search." : "You haven't posted any jobs yet."}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 function Profile() {
+  const toast = useToast();
   const [p, setP] = useState(null);
+  const [edit, setEdit] = useState(false);
+  const [saving, setSaving] = useState(false);
   useEffect(() => { api.get("/api/enterprise/profile").then(setP).catch(() => {}); }, []);
+  const set = (k) => (v) => setP({ ...p, [k]: v });
+  const save = async () => {
+    setSaving(true);
+    try { setP(await api.put("/api/enterprise/profile", p)); setEdit(false); toast("Company profile updated."); }
+    catch (err) { toast(err.message, "error"); }
+    finally { setSaving(false); }
+  };
   if (!p) return <Loading />;
   return (
-    <div className="max-w-4xl">
-      <h2 className="mb-5 text-xl font-bold text-navy">{p.name}</h2>
-      <div className="card mb-5">
+    <div className="max-w-4xl space-y-5">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-navy to-navy-600 p-6 text-white">
+        <div className="flex flex-wrap items-center gap-5">
+          <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl bg-white/10 ring-2 ring-white/25">
+            {p.logo_url ? <img src={p.logo_url} alt="" className="h-full w-full object-cover" />
+                        : <span className="text-2xl font-extrabold">{(p.name || "?")[0]}</span>}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-2xl font-extrabold">{p.name}</h2>
+            <p className="text-sm text-navy-100">{[p.city, p.state, p.country].filter(Boolean).join(", ")}</p>
+            {p.designation && <p className="text-xs text-white/60">{p.authorised_person_name} · {p.designation}</p>}
+          </div>
+          <button className="rounded-lg border border-white/25 px-4 py-2 text-sm font-semibold hover:bg-white/10"
+                  onClick={() => setEdit((e) => !e)}>{edit ? "Cancel" : "Edit profile"}</button>
+        </div>
+      </div>
+
+      <div className="card">
         <h3 className="mb-3 font-semibold text-slate-700">Company logo</h3>
         <ImageUpload kind="logo" round={false} currentUrl={p.logo_url}
                      onUploaded={(u) => setP({ ...p, logo_url: u })} />
       </div>
-      <div className="card space-y-1 text-sm">
-        <Row k="Email" v={p.email} /><Row k="Phone" v={p.phone} />
-        <Row k="City / State" v={`${p.city || "—"}, ${p.state || "—"}`} />
-        <Row k="Authorised person" v={p.authorised_person_name} /><Row k="Designation" v={p.designation} />
-        <Row k="GST / PAN" v={`${p.gst_no || "—"} / ${p.pan_no || "—"}`} /><Row k="About" v={p.about} />
-      </div>
+
+      {edit ? (
+        <div className="card grid gap-4 sm:grid-cols-2">
+          <F2 label="Company name" value={p.name} onChange={set("name")} span />
+          <F2 label="Phone" value={p.phone} onChange={set("phone")} />
+          <Combobox label="City" value={p.city} options={CITIES} onChange={set("city")} />
+          <F2 label="State" value={p.state} onChange={set("state")} />
+          <F2 label="Authorised person" value={p.authorised_person_name} onChange={set("authorised_person_name")} />
+          <F2 label="Designation" value={p.designation} onChange={set("designation")} />
+          <F2 label="GST No." value={p.gst_no} onChange={set("gst_no")} />
+          <F2 label="PAN No." value={p.pan_no} onChange={set("pan_no")} />
+          <div className="sm:col-span-2">
+            <RichText label="About the organisation" value={p.about} onChange={set("about")} rows={10}
+                      hint="Describe your company, culture and what you're hiring for. Formatting: **bold**, ## heading, - list." />
+          </div>
+          <div className="sm:col-span-2 flex gap-2">
+            <button className="btn flex-1" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save profile"}</button>
+            <button className="btn-outline" onClick={() => setEdit(false)}>Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="card">
+            <h3 className="mb-2 font-bold text-slate-800">About us</h3>
+            <Markdown text={p.about} />
+          </div>
+          <div className="card grid gap-x-8 gap-y-1 text-sm sm:grid-cols-2">
+            <Row k="Email" v={p.email} /><Row k="Phone" v={p.phone} />
+            <Row k="City / State" v={`${p.city || "—"}, ${p.state || "—"}`} />
+            <Row k="Authorised person" v={p.authorised_person_name} />
+            <Row k="Designation" v={p.designation} />
+            <Row k="GST / PAN" v={`${p.gst_no || "—"} / ${p.pan_no || "—"}`} />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function F2({ label, value, onChange, span }) {
+  return (
+    <div className={span ? "sm:col-span-2" : ""}>
+      <label className="label">{label}</label>
+      <input className="input" value={value || ""} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
 }
@@ -202,6 +362,7 @@ function ResumeSearch() {
   const open = async (id, action) => {
     try {
       const full = await api.get(`/api/enterprise/resumes/${id}?action=${action}`);
+      setBrief(null);            // resume view shows ONLY the resume
       setViewing(full);
       if (!tplMeta.length) {
         // template metadata drives which layout to render
@@ -229,7 +390,8 @@ function ResumeSearch() {
     return (
       <div>
         <div className="no-print mb-4 flex flex-wrap items-center justify-between gap-3">
-          <button className="btn-outline btn-sm" onClick={() => setViewing(null)}>← Back to candidates</button>
+          <button className="btn-outline btn-sm"
+                  onClick={() => { setViewing(null); setBrief(null); }}>← Back to candidates</button>
           <div className="flex flex-wrap gap-2">
             <AIButton path={`/api/ai/candidate/${viewing.id}/summary`} className="btn-outline btn-sm"
                       onResult={(r) => setBrief({ name, data: r })}>AI screening brief</AIButton>
@@ -298,11 +460,18 @@ function ResumeSearch() {
               <button className="btn-outline btn-sm flex-1" onClick={() => open(s.id, "Viewed")}>
                 <IconEye size={14} /> View resume
               </button>
-              <AIButton path={`/api/ai/candidate/${s.id}/summary`} className="btn-outline btn-sm"
-                        title="AI brief about this candidate"
-                        onResult={(r) => setBrief({ name: `${s.first_name || ""} ${s.last_name || ""}`.trim() || s.email, data: r })}>
-                Brief
-              </AIButton>
+              {brief?.id === s.id ? (
+                <button className="btn-outline btn-sm !border-navy !text-navy"
+                        onClick={() => setBrief(null)} title="Hide brief">
+                  Hide brief
+                </button>
+              ) : (
+                <AIButton path={`/api/ai/candidate/${s.id}/summary`} className="btn-outline btn-sm"
+                          title="AI brief about this candidate"
+                          onResult={(r) => setBrief({ id: s.id, name: `${s.first_name || ""} ${s.last_name || ""}`.trim() || s.email, data: r })}>
+                  Brief
+                </AIButton>
+              )}
               <button className="btn-outline btn-sm" onClick={() => message(s.id)}><IconChat size={14} /></button>
             </div>
           </div>
@@ -410,7 +579,7 @@ function PostJob() {
         {aiOn && (
           <div className="flex gap-2">
             <button className="btn-outline btn-sm" onClick={() => setJdOpen((o) => !o)}>
-              <IconSparkle size={14} /> Paste a JD
+              <IconSparkle size={14} /> Upload / paste a JD
             </button>
             <button className="btn-outline btn-sm" onClick={draftWithAI} disabled={aiBusy}>
               <IconSparkle size={14} /> {aiBusy ? "Drafting…" : "Draft from title"}
@@ -425,7 +594,18 @@ function PostJob() {
           <p className="mt-0.5 text-xs text-slate-500">
             Paste a JD from anywhere — AI fills in every field below automatically.
           </p>
-          <textarea className="input mt-3" rows={8} value={jdText} placeholder="Paste the full job description here…"
+          <label className="btn-outline btn-sm mt-3 inline-flex cursor-pointer">
+            Choose a file (.txt, .md, .csv)
+            <input type="file" accept=".txt,.md,.csv,.json" className="hidden"
+                   onChange={async (e) => {
+                     const f = e.target.files?.[0];
+                     if (!f) return;
+                     const text = await f.text().catch(() => "");
+                     if (text.trim()) setJdText(text.slice(0, 20000));
+                     else toast("Couldn't read that file. Paste the text instead.", "error");
+                   }} />
+          </label>
+          <textarea className="input mt-3" rows={8} value={jdText} placeholder="…or paste the full job description here"
                     onChange={(e) => setJdText(e.target.value)} />
           <div className="mt-3 flex gap-2">
             <button className="btn-green btn-sm" onClick={parseJD} disabled={aiBusy || jdText.trim().length < 40}>
@@ -485,7 +665,9 @@ function PostJob() {
               <input className="input" value={form.shift || ""} onChange={set("shift")} placeholder="Day / Night / Rotational" /></div>
 
             <div className="sm:col-span-2 2xl:col-span-3">
-              <TagInput label="Key skills" values={form.key_skills || []} options={SKILLS} onChange={setV("key_skills")} />
+              <SkillPicker values={form.key_skills || []} onChange={setV("key_skills")} sector={form.sector}
+                           aiSuggestPath={aiOn && form.title ? "/api/ai/job/classify" : null}
+                           aiBody={{ title: form.title }} />
             </div>
 
             <div className="flex flex-wrap gap-4 sm:col-span-2 2xl:col-span-3">

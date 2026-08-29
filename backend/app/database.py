@@ -26,9 +26,25 @@ def _check_placeholders(url: str) -> None:
 _check_placeholders(settings.DATABASE_URL)
 
 # SQLite needs a special connect arg; Postgres (Supabase) does not.
-connect_args = {"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {}
+_is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+# `timeout` makes SQLite wait for a lock instead of failing instantly with
+# "database is locked" when a background writer is active.
+connect_args = {"check_same_thread": False, "timeout": 30} if _is_sqlite else {}
 
 engine = create_engine(settings.DATABASE_URL, connect_args=connect_args, pool_pre_ping=True)
+
+if _is_sqlite:
+    from sqlalchemy import event
+
+    @event.listens_for(engine, "connect")
+    def _sqlite_pragmas(dbapi_conn, _record):
+        """WAL lets readers and a writer work at the same time, which a plain
+        SQLite file does not allow. Without this, background logging blocks uploads."""
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.execute("PRAGMA synchronous=NORMAL")
+        cur.execute("PRAGMA busy_timeout=30000")
+        cur.close()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

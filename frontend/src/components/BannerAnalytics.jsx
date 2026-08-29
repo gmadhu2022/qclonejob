@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
-import { TrendChart } from "./charts";
+import { TrendChart, PieChart, HBarChart, Donut } from "./charts";
 
 /**
  * Banner performance dashboard, shared by recruiters (their own banners)
@@ -24,6 +24,16 @@ export default function BannerAnalytics({ endpoint, title = "Banner performance"
   if (!data) return <p className="text-slate-400">Loading…</p>;
 
   const t = data.totals;
+  const top = [...data.banners].filter((b) => b.impressions > 0)
+    .sort((a, b) => b.ctr - a.ctr).slice(0, 5);
+  const typeAgg = {};
+  data.banners.forEach((b) => {
+    const k = b.media_type || "image";
+    typeAgg[k] = (typeAgg[k] || 0) + b.impressions;
+  });
+  const TYPE_COLOR = { image: "bg-navy", video: "bg-brandgreen", gif: "bg-amber-400", audio: "bg-violet-500" };
+  const byType = Object.entries(typeAgg).map(([label, value]) => ({
+    label, value, color: TYPE_COLOR[label] || "bg-slate-400" }));
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -104,29 +114,53 @@ export default function BannerAnalytics({ endpoint, title = "Banner performance"
         </table>
       </div>
 
-      {data.by_slot?.length > 0 && (
+      {/* performance leaderboard */}
+      <div className="grid gap-5 lg:grid-cols-2">
         <div className="card">
-          <h3 className="mb-3 font-bold text-slate-800">Where they were seen</h3>
-          <div className="space-y-2">
-            {data.by_slot.map((s) => {
-              const max = Math.max(...data.by_slot.map((x) => x.impressions), 1);
-              return (
-                <div key={s.slot} className="flex items-center gap-3">
-                  <code className="w-56 shrink-0 truncate text-xs text-slate-600">{s.slot}</code>
-                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
-                    <div className="h-full rounded-full bg-navy transition-all"
-                         style={{ width: `${(s.impressions / max) * 100}%` }} />
-                  </div>
-                  <span className="w-24 shrink-0 text-right text-xs text-slate-500">
-                    {s.impressions} / {s.clicks}
+          <h3 className="mb-3 font-bold text-slate-800">Best performing</h3>
+          {top.length ? (
+            <div className="space-y-2.5">
+              {top.map((b, i) => (
+                <div key={b.id} className="group flex items-center gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-navy-50 text-[11px] font-bold text-navy">
+                    {i + 1}
                   </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-semibold text-slate-800">{b.title}</p>
+                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full rounded-full bg-brandgreen transition-all duration-500"
+                           style={{ width: `${Math.min(100, (b.ctr / Math.max(1, top[0].ctr)) * 100)}%` }} />
+                    </div>
+                  </div>
+                  <span className="w-14 shrink-0 text-right text-[12px] font-bold text-brandgreen-600">{b.ctr}%</span>
                 </div>
-              );
-            })}
-          </div>
-          <p className="mt-2 text-xs text-slate-400">views / clicks per page</p>
+              ))}
+            </div>
+          ) : <p className="py-8 text-center text-sm text-slate-400">No data yet.</p>}
+          <p className="mt-3 text-xs text-slate-400">Ranked by click-through rate.</p>
         </div>
-      )}
+
+        <div className="card">
+          <h3 className="mb-3 font-bold text-slate-800">Views by media type</h3>
+          <PieChart data={byType} donut />
+        </div>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-3">
+        <div className="card">
+          <h3 className="mb-1 font-bold text-slate-800">Engagement</h3>
+          <p className="mb-3 text-xs text-slate-400">How many views turn into clicks</p>
+          <div className="flex items-center justify-center py-2">
+            <Donut value={Math.round(t.ctr)} label="click rate" size={140} />
+          </div>
+        </div>
+        <div className="card lg:col-span-2">
+          <h3 className="mb-3 font-bold text-slate-800">Views vs clicks per banner</h3>
+          <HBarChart data={data.banners.slice(0, 6).map((b) => ({
+            label: b.title, value: b.impressions, color: "bg-navy" }))} />
+        </div>
+      </div>
+
     </div>
   );
 }
