@@ -154,36 +154,18 @@ export function Register() {
     /* Unverified contact details are the most common reason a registration is
        rejected by the server, and a toast for it is too easy to miss. */
     if (role === "enterprise" || role === "institute") {
-      // At least ONE code must be verified. Requiring both would block anyone
-      // whose SMS is delayed, which is common on Indian networks.
-      if (!form.phone_verified && !form.email_verified) {
+      /* Email only. The phone number is collected but not code-verified, so
+         gating on it would block registration on a number nobody checked. */
+      if (!form.email_verified) {
         return dialog({
           tone: "info",
-          title: "Verification not completed",
-          message: "Verify your mobile number or your email address before submitting.\n\n"
-                 + "Enter the 6-digit code we sent you under \u201cVerify your details\u201d.",
+          title: "Verify your email address",
+          message: "Enter the 6-digit code we sent to "
+                 + `${(form.email || "your email address")} before submitting.`,
           confirmLabel: "Got it",
-          note: "Codes expire after a few minutes — use Resend if yours has lapsed.",
+          note: "Not arrived? Check your spam folder, or press Resend. Codes expire after a "
+              + "few minutes.",
           noteTone: "warn",
-        });
-      }
-      // One verified, one not: allowed, but say so plainly rather than letting
-      // an unverified address quietly become the account's login.
-      //
-      // Deliberately NOT `await new Promise(...)` around the dialog: the
-      // backdrop closes it via close(), which fires neither onConfirm nor the
-      // secondary handler, so such a promise never settles and Submit would be
-      // dead until reload. Continuing from onConfirm has no such failure mode.
-      if (!(form.phone_verified && form.email_verified)) {
-        const pending = form.phone_verified ? "email address" : "mobile number";
-        return dialog({
-          tone: "info",
-          title: `Your ${pending} isn't verified`,
-          message: `You can register now, but we won't be able to reach you on that ${pending} `
-                 + "for password resets or job alerts.",
-          confirmLabel: "Register anyway",
-          secondary: { label: `Go back and verify` },
-          onConfirm: () => doSubmit(),
         });
       }
     }
@@ -282,7 +264,7 @@ export function Register() {
                 </button>
               ) : stage === 2 ? (
                 <button type="button" className="btn !py-3" disabled>
-                  Verify a code to continue
+                  Verify your email to continue
                 </button>
               ) : (
                 <button className="btn !py-3" disabled={busy}>
@@ -296,8 +278,8 @@ export function Register() {
 
             {stage === 1 && (
               <p className="text-center text-xs text-slate-400">
-                We'll send a code to your mobile and your email to confirm them,
-                then show the rest of the form.
+                We'll email you a 6-digit code to confirm your address, then show the
+                rest of the form.
               </p>
             )}
             <p className="text-center text-sm text-slate-500">

@@ -182,32 +182,36 @@ export function RegistrationFields({
            so the codes are next to the fields they confirm. ---- */}
       {!admin && stage >= 2 && (
         <div className="card !bg-slate-50/70">
-          <h4 className="text-sm font-bold text-slate-700">Verify your details</h4>
+          <h4 className="text-sm font-bold text-slate-700">Verify your email address</h4>
           <p className="mb-3 text-xs text-slate-400">
-            We've sent a 6-digit code to your mobile number and your email. Enter both below.
-            The resend button counts down the seconds until you can request another.
+            We've sent a 6-digit code to <b className="text-slate-600">{form.email || "your email"}</b>.
+            Enter it below to continue. The resend button counts down the seconds until you can
+            request another.
           </p>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <OtpField key={`phone-${formKey}`} label="Mobile OTP" channel="sms" hideInput
-                      autoSend={otpSendTick}
-                      value={form.phone} onChange={setV("phone")}
-                      onVerified={() => { setV("phone_verified")(true); onVerified?.("phone"); }} />
+
+          {/* Email only. SMS verification is deliberately not used here: an OTP
+              that depends on an SMS gateway fails silently when the gateway is
+              down or a number is mistyped, and email is where the account's
+              login credentials are sent anyway — so it is the address that
+              actually has to be correct. The phone number is still collected,
+              just not verified by code. */}
+          <div className="max-w-md">
             <OtpField key={`mail-${formKey}`} label="Email OTP" channel="email" hideInput
                       autoSend={otpSendTick}
                       value={form.email} onChange={setV("email")}
                       onVerified={() => { setV("email_verified")(true); onVerified?.("email"); }} />
           </div>
 
-          {/* One verified code unlocks the rest of the form, but the other is
-              still requested rather than quietly dropped — otherwise an
-              unverified address silently becomes the account's login. */}
-          {(form.phone_verified || form.email_verified) && !(form.phone_verified && form.email_verified) && (
-            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
-              {form.phone_verified ? "Mobile number verified." : "Email verified."} Please also verify
-              your {form.phone_verified ? "email address" : "mobile number"} — both are used for
-              account recovery.
+          {form.email_verified && (
+            <p className="mt-3 rounded-lg bg-brandgreen-50 px-3 py-2 text-xs font-medium text-brandgreen-600">
+              Email verified — the rest of the form is below.
             </p>
           )}
+
+          <p className="mt-3 text-xs text-slate-400">
+            Not arrived? Check your spam folder, or press Resend. If the address is wrong, edit it
+            above and a new code is sent.
+          </p>
         </div>
       )}
     </>
