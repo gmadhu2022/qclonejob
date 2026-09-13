@@ -33,7 +33,7 @@ import { useTaxonomy } from "../../components/SectorPicker";
 import SkillPicker from "../../components/SkillPicker";
 import { AIButton, AIResult, AIList, useAI, useAICall } from "../../components/AIPanel";
 import { Combobox, TagInput } from "../../components/fields";
-import { QUALIFICATIONS, CITIES, EXPERIENCE } from "../../lib/options";
+import { QUALIFICATIONS, CITIES, EXPERIENCE, SHIFTS } from "../../lib/options";
 
 const MENU = [
   { to: "/enterprise", label: "Dashboard", icon: IconChart },
@@ -227,7 +227,9 @@ function ManageJobs() {
   const [profile, setProfile] = useState(null);    // candidate profile being viewed
   const [tplMeta, setTplMeta] = useState([]);
   const [q, setQ] = useState("");
-  const [tab, setTab] = useState("all");
+  /* Active by default: a closed job is history, and landing on "All" meant
+     the useful list was diluted by every posting ever made. */
+  const [tab, setTab] = useState("active");
   const [jobView, setJobView] = useState("grid");
   const [saving, setSaving] = useState(false);
 
@@ -430,7 +432,10 @@ function ManageJobs() {
             <Col k="salary" label="Salary (free text)" hint="Shown when a range isn't set.">
               <Txt k="salary" />
             </Col>
-            <Col k="shift" label="Shift"><Txt k="shift" placeholder="Day / Night / Rotational" /></Col>
+            <Col k="shift" label="Shift">
+              <Combobox value={editing.shift} options={SHIFTS} onChange={set("shift")}
+                        placeholder="Select or type a shift" />
+            </Col>
             <Col k="education_level" label="Education required">
               <Combobox value={editing.education_level}
                         options={(tax?.education_levels || []).map((t) => t.label)}
@@ -580,9 +585,9 @@ function ManageJobs() {
   }
 
   const filtered = jobs
-    .filter((j) => tab === "all" || j.status === tab)
+    .filter((j) => j.status === tab)
     .filter((j) => !q || `${j.title} ${j.location} ${(j.key_skills || []).join(" ")}`.toLowerCase().includes(q.toLowerCase()));
-  const counts = { all: jobs.length, active: jobs.filter((j) => j.status === "active").length,
+  const counts = { active: jobs.filter((j) => j.status === "active").length,
                    closed: jobs.filter((j) => j.status === "closed").length };
 
   return (
@@ -643,14 +648,25 @@ function ManageJobs() {
       ) : (
         <>
           <div className="mb-4 flex flex-wrap items-center gap-2">
-          <div className="flex gap-1.5 rounded-lg bg-slate-100 p-1">
-            {["all", "active", "closed"].map((k) => (
-              <button key={k} onClick={() => setTab(k)}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold capitalize transition-all ${
-                  tab === k ? "bg-white text-navy shadow-sm" : "text-slate-500 hover:text-navy"}`}>
-                {k} ({counts[k]})
-              </button>
-            ))}
+          {/* Two states, not three. A job is either open or it isn't, and the
+              count sits in a pill so the label stays readable at a glance. */}
+          <div className="flex gap-2">
+            {[["active", "Active", "bg-brandgreen-50 text-brandgreen-600", "bg-brandgreen text-white"],
+              ["closed", "Closed", "bg-slate-100 text-slate-500", "bg-slate-500 text-white"]].map(
+              ([k, label, idleChip, activeChip]) => {
+                const on = tab === k;
+                return (
+                  <button key={k} onClick={() => setTab(k)}
+                    className={`flex items-center gap-2 rounded-xl border px-4 py-2 text-[13px] font-bold transition-all
+                      ${on ? "border-navy bg-navy-50 text-navy shadow-sm"
+                           : "border-slate-200 bg-white text-slate-500 hover:border-navy-200 hover:text-navy"}`}>
+                    {label}
+                    <span className={`rounded-md px-1.5 py-0.5 text-[11px] tabular-nums ${on ? activeChip : idleChip}`}>
+                      {counts[k]}
+                    </span>
+                  </button>
+                );
+              })}
           </div>
             <div className="flex-1" />
             <ViewSwitcher value={jobView} onChange={setJobView} />
@@ -762,7 +778,9 @@ function ManageJobs() {
             ))}
             {filtered.length === 0 && (
               <div className="card col-span-full text-center text-slate-400">
-                {q ? "No jobs match your search." : "You haven't posted any jobs yet."}
+                {q ? "No jobs match your search."
+                   : tab === "active" ? "No active jobs. Post one, or check the Closed tab."
+                   : "No closed jobs."}
               </div>
             )}
           </div>
@@ -1252,9 +1270,12 @@ function ResumeSearch() {
       {/* One search bar by default. Everything else is behind "Advanced
           search", so the common case (type a skill, press enter) stays a
           single field instead of a wall of filters. */}
-      <div className="relative mb-3 flex gap-2">
-        <div className="relative flex-1">
-          <input className="input w-full" value={q}
+      {/* Skill and location in one bar. Location was buried in Advanced search,
+          but it is the second thing every recruiter narrows by — a role in the
+          wrong city is no use however well the skills match. Both are live. */}
+      <div className="relative mb-3 flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-1.5 sm:flex-nowrap">
+        <div className="relative min-w-[200px] flex-[2]">
+          <input className="w-full bg-transparent px-3 py-2.5 text-sm outline-none" value={q}
                  onChange={(e) => { setQ(e.target.value); setSuggestOpen(true); }}
                  onFocus={() => setSuggestOpen(true)}
                  onBlur={() => setTimeout(() => setSuggestOpen(false), 150)}
@@ -1262,7 +1283,7 @@ function ResumeSearch() {
                  placeholder="Type a skill — results update as you type. Separate several with commas." />
 
           {suggestOpen && suggestions.length > 0 && (
-            <div className="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-xl
+            <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-xl
                             border border-slate-200 bg-white py-1 shadow-cardhover">
               <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                 Skills from your postings
@@ -1278,6 +1299,30 @@ function ResumeSearch() {
             </div>
           )}
         </div>
+
+        <div className="hidden w-px self-stretch bg-slate-200 sm:block" />
+
+        <div className="relative min-w-[170px] flex-1">
+          <input list="resume-locations" value={location}
+                 onChange={(e) => setLocation(e.target.value)}
+                 onKeyDown={(e) => e.key === "Enter" && search()}
+                 className="w-full bg-transparent px-3 py-2.5 text-sm outline-none"
+                 placeholder="Location — any city" />
+          {/* A datalist rather than a custom dropdown: it filters as you type,
+              accepts a city that isn't on the list, and can't be clipped by the
+              bar's own overflow. */}
+          <datalist id="resume-locations">
+            {CITIES.map((c) => <option key={c} value={c} />)}
+          </datalist>
+          {location && (
+            <button type="button" onClick={() => setLocation("")}
+                    title="Clear location"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full px-2 text-slate-300 hover:text-navy">
+              ×
+            </button>
+          )}
+        </div>
+
         <button className="btn shrink-0" onClick={search}><IconSearch size={16} /> Search</button>
       </div>
 
@@ -1316,8 +1361,6 @@ function ResumeSearch() {
       {advanced && (
         <div className="card mb-5">
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            <Combobox label="Location" value={location} options={CITIES} onChange={setLocation}
-                      placeholder="e.g. Hyderabad" />
             <div>
               <label className="label">Institute</label>
               <select className="input" value={instituteId}

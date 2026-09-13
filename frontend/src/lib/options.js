@@ -123,3 +123,22 @@ export const QUALIFICATIONS = [
   "LLM", "M.Pharm", "Ph.D", "Trade Certificate", "Apprenticeship",
   "Experience in place of qualification",
 ];
+
+/* Shift patterns offered when posting a job.
+   A free-text box produced "Day", "day shift", "DAY/NIGHT" and blanks for what
+   is really one field, which makes it useless to filter on later. Kept short
+   enough to scan, and covers the patterns Indian employers actually run. */
+export const SHIFTS = [
+  "Day",
+  "Night",
+  "Rotational",
+  "General (9 to 6)",
+  "Morning (6 AM - 2 PM)",
+  "Afternoon (2 PM - 10 PM)",
+  "Evening",
+  "Split shift",
+  "Flexible",
+  "Weekend only",
+  "Work from home",
+  "Any shift",
+];

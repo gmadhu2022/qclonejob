@@ -7,7 +7,7 @@ import { Combobox } from "./fields";
 import SkillPicker from "./SkillPicker";
 import { useTaxonomy, SectorList, RolePicker } from "./SectorPicker";
 import { IconSparkle } from "./icons";
-import { CITIES, QUALIFICATIONS, EXPERIENCE } from "../lib/options";
+import { CITIES, QUALIFICATIONS, EXPERIENCE, SHIFTS } from "../lib/options";
 
 /* =====================================================================
    Post a job — shared by the recruiter and institute portals.
@@ -259,8 +259,12 @@ export default function PostJobForm({
                        placeholder="e.g. 25,000" aria-label="Salary to" />
               </div>
             </div>
-            <div><label className="label">Shift</label>
-              <input className="input" value={form.shift || ""} onChange={set("shift")} placeholder="Day / Night / Rotational" /></div>
+            {/* Combobox, not a plain select: the list covers the common
+                patterns but a recruiter with an unusual one can still type it,
+                which a select would make impossible. */}
+            <Combobox label="Shift" value={form.shift} options={SHIFTS}
+                      onChange={(v) => setForm((f) => ({ ...f, shift: v }))}
+                      placeholder="Select or type a shift" />
 
             <div className="sm:col-span-2 2xl:col-span-3">
               <SkillPicker values={form.key_skills || []} onChange={setV("key_skills")} sector={form.sector}
