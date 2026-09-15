@@ -145,22 +145,36 @@ export default function ImageCropper({ file, round = false, title = "Position yo
   /* ---------- formats the browser can't decode ---------- */
   if (failed) {
     return (
-      <Shell title="Can't preview this image">
-        <p className="text-sm text-slate-600">
+      <Shell title="Can't preview this image" footer={
+        <div className="flex gap-2">
+          <button className="btn flex-1" onClick={() => onApply(null)}>Upload without cropping</button>
+          <button className="btn-outline" onClick={onCancel}>Cancel</button>
+        </div>
+      }>
+        <p className="pb-2 text-sm text-slate-600">
           Your browser can't open this format for cropping — HEIC and some AVIF
           files can only be read by the server. You can still upload it as-is,
           and it will be converted automatically.
         </p>
-        <div className="mt-5 flex gap-2">
-          <button className="btn flex-1" onClick={() => onApply(null)}>Upload without cropping</button>
-          <button className="btn-outline" onClick={onCancel}>Cancel</button>
-        </div>
       </Shell>
     );
   }
 
   return (
-    <Shell title={title}>
+    <Shell title={title} footer={
+      <>
+        <div className="flex gap-2">
+          <button type="button" className="btn flex-1" onClick={apply} disabled={!ready || busy}>
+            {busy ? "Preparing…" : "Apply and upload"}
+          </button>
+          <button type="button" className="btn-outline" onClick={onCancel} disabled={busy}>Cancel</button>
+        </div>
+        <button type="button" onClick={() => onApply(null)} disabled={busy}
+                className="mt-3 w-full text-center text-xs font-medium text-slate-400 hover:text-navy">
+          Skip cropping and upload the original
+        </button>
+      </>
+    }>
       <p className="mb-4 text-sm text-slate-500">
         Drag to move, scroll or use the slider to zoom. The square is exactly what gets saved.
       </p>
@@ -215,26 +229,28 @@ export default function ImageCropper({ file, round = false, title = "Position yo
         </p>
       )}
 
-      <div className="mt-5 flex gap-2 border-t border-slate-100 pt-4">
-        <button type="button" className="btn flex-1" onClick={apply} disabled={!ready || busy}>
-          {busy ? "Preparing…" : "Apply and upload"}
-        </button>
-        <button type="button" className="btn-outline" onClick={onCancel} disabled={busy}>Cancel</button>
-      </div>
-      <button type="button" onClick={() => onApply(null)} disabled={busy}
-              className="mt-3 w-full text-center text-xs font-medium text-slate-400 hover:text-navy">
-        Skip cropping and upload the original
-      </button>
     </Shell>
   );
 }
 
-function Shell({ title, children }) {
+function Shell({ title, children, footer }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-        <h3 className="mb-1 text-lg font-extrabold text-navy">{title}</h3>
-        {children}
+    /* items-start + overflow-y-auto on the backdrop: with items-center a modal
+       taller than the viewport is centred, so BOTH ends get clipped and the
+       Apply button sits off-screen with nothing to scroll. That is why it was
+       invisible on shorter laptop screens and fine on taller ones. */
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto
+                    bg-slate-900/50 p-4 backdrop-blur-sm sm:p-6">
+      <div className="my-auto flex max-h-[calc(100vh-2rem)] w-full max-w-md flex-col
+                      overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <h3 className="shrink-0 px-6 pt-6 text-lg font-extrabold text-navy">{title}</h3>
+
+        {/* The body scrolls; the action row never does. */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-2">{children}</div>
+
+        {footer && (
+          <div className="shrink-0 border-t border-slate-100 bg-white px-6 py-4">{footer}</div>
+        )}
       </div>
     </div>
   );

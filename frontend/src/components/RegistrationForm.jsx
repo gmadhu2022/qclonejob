@@ -3,6 +3,7 @@ import ImageUpload from "./ImageUpload";
 import OtpField from "./OtpField";
 import PhoneField from "./PhoneField";
 import { Field as FField, Combobox, TagInput } from "./fields";
+import SkillPicker from "./SkillPicker";
 import { CITIES, STATES, COURSES, SKILLS } from "../lib/options";
 
 /* =====================================================================
@@ -55,10 +56,13 @@ export function RegistrationFields({
             <Combobox label="Location" value={form.location} options={CITIES} onChange={setV("location")}
                       placeholder="e.g. Hyderabad" />
             <div className="sm:col-span-2">
-              <TagInput label="Key skills" values={form.skillList || []} options={SKILLS}
-                        onChange={(v) => setForm((f) => ({ ...f, skillList: v }))}
-                        placeholder="e.g. Python, Excel, Welding"
-                        hint="Add the skills you want employers to find you by." />
+              {/* SkillPicker, not a 29-item local array: job posting already
+                  searched the full 1,147-skill library from the server, so a
+                  seeker could only tag themselves with skills recruiters
+                  mostly weren't asking for. One source, both sides. */}
+              <SkillPicker label="Key skills" values={form.skillList || []}
+                           onChange={(v) => setForm((f) => ({ ...f, skillList: v }))}
+                           placeholder="Type a skill — e.g. Python, Excel, Welding" />
             </div>
       </div>
     );
@@ -91,6 +95,15 @@ export function RegistrationFields({
                                doneText="Uploaded — it will be saved with your registration."
                                onUploaded={(u) => setV("logo_url")(u)} />
                 </div>
+              </div>
+
+              <div className="sm:col-span-2">
+                {/* Contact person sits with the contact NUMBER, because they
+                    describe the same thing: who to call and on what number.
+                    It was previously three sections apart. */}
+                <FField label="Contact Person" value={form.authorised_person_name}
+                        onChange={setV("authorised_person_name")}
+                        placeholder={isInst ? "e.g. Priya Sharma, Placement Officer" : "e.g. Priya Sharma, HR Manager"} />
               </div>
 
               <div className="sm:col-span-2">
@@ -130,8 +143,6 @@ export function RegistrationFields({
             </RegSection>
 
             <RegSection title="Contact person">
-              <FField label="Authorised person" value={form.authorised_person_name}
-                      onChange={setV("authorised_person_name")} placeholder="e.g. Priya Sharma" />
               <FField label="Designation" value={form.designation} onChange={setV("designation")}
                       placeholder="e.g. HR Manager" />
               <FField label="Promoter's name" value={form.promoter_name} onChange={setV("promoter_name")}

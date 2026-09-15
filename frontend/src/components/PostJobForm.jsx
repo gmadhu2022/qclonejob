@@ -7,7 +7,7 @@ import { Combobox } from "./fields";
 import SkillPicker from "./SkillPicker";
 import { useTaxonomy, SectorList, RolePicker } from "./SectorPicker";
 import { IconSparkle } from "./icons";
-import { CITIES, QUALIFICATIONS, EXPERIENCE, SHIFTS } from "../lib/options";
+import { CITIES, QUALIFICATIONS, EXPERIENCE, SHIFTS, SALARY_STEPS, formatSalary } from "../lib/options";
 
 /* =====================================================================
    Post a job — shared by the recruiter and institute portals.
@@ -251,14 +251,32 @@ export default function PostJobForm({
             <Combobox label="Experience" value={form.experience} options={EXPERIENCE} onChange={setV("experience")} />
             <div className="sm:col-span-2 2xl:col-span-3">
               <label className="label">Salary Range</label>
+              {/* Dropdowns rather than free text: typed figures arrived as
+                  "15000", "15,000", "15k" and "15000/month" for the same
+                  number, which makes the field impossible to filter or sort on
+                  later. Monthly steps, because this board covers daily-wage and
+                  skilled roles as well as salaried ones. */}
               <div className="flex items-center gap-2">
-                <input className="input" value={form.wage_min || ""} onChange={set("wage_min")}
-                       placeholder="e.g. 15,000" aria-label="Salary from" />
+                <select className="input" value={form.wage_min || ""} aria-label="Salary from"
+                        onChange={(e) => setForm((f) => ({ ...f, wage_min: e.target.value }))}>
+                  <option value="">From</option>
+                  {SALARY_STEPS.map((v) => (
+                    <option key={v} value={v}>₹{formatSalary(v)}</option>
+                  ))}
+                </select>
                 <span className="shrink-0 text-sm text-slate-400">to</span>
-                <input className="input" value={form.wage_max || ""} onChange={set("wage_max")}
-                       placeholder="e.g. 25,000" aria-label="Salary to" />
+                <select className="input" value={form.wage_max || ""} aria-label="Salary to"
+                        onChange={(e) => setForm((f) => ({ ...f, wage_max: e.target.value }))}>
+                  <option value="">To</option>
+                  {/* Only steps at or above the minimum, so an impossible range
+                      can't be selected in the first place. */}
+                  {SALARY_STEPS.filter((v) => !form.wage_min || v >= Number(form.wage_min))
+                    .map((v) => <option key={v} value={v}>₹{formatSalary(v)}</option>)}
+                </select>
               </div>
+              <p className="mt-1 text-xs text-slate-400">Monthly, in rupees.</p>
             </div>
+
             {/* Combobox, not a plain select: the list covers the common
                 patterns but a recruiter with an unusual one can still type it,
                 which a select would make impossible. */}

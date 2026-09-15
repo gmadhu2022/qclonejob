@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     # --- Database ---
     # SQLite default for instant local run. Swap to Supabase in .env:
     # DATABASE_URL=postgresql+psycopg2://postgres:[PASSWORD]@db.[REF].supabase.co:5432/postgres
-    DATABASE_URL: str = "sqlite:///./hire.db"
+    DATABASE_URL: str = "postgresql+psycopg2://postgres.ysgzpkpggpkmhumpidmy:Hire%40001122334455@aws-0-ap-south-1.pooler.supabase.com:5432/postgres"
 
     # --- Auth ---
     JWT_SECRET: str = "change-me-in-production-use-a-long-random-string"

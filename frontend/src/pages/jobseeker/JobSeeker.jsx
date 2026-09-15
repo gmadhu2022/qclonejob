@@ -7,6 +7,7 @@ import Chat from "../../components/Chat";
 import BannerSlot from "../../components/BannerSlot";
 import { SectorList, useTaxonomy } from "../../components/SectorPicker";
 import ImageUpload from "../../components/ImageUpload";
+import SkillPicker from "../../components/SkillPicker";
 import ResumeView from "./ResumeView";
 import UploadedResumeView from "./UploadedResumeView";
 import ResumeExtract from "./ResumeExtract";
@@ -20,7 +21,7 @@ import { Donut, MatchBar, SwitchableChart } from "../../components/charts";
 import FitRating from "../../components/FitRating";
 import { AIButton, AIResult, AIList, useAI, useAICall } from "../../components/AIPanel";
 import { Combobox, TagInput } from "../../components/fields";
-import { CITIES, SKILLS, LANGUAGES, SALARY } from "../../lib/options";
+import { CITIES, SKILLS, LANGUAGES, SALARY, EXPERIENCE, SALARY_STEPS, formatSalary } from "../../lib/options";
 
 const MENU = [
   { to: "/jobseeker", label: "Dashboard", icon: IconChart },
@@ -594,7 +595,9 @@ function MyProfile() {
 
         <EditCard title={worker ? "Trade skills" : "Key skills"} open={editing === "skills"} onOpen={() => setEditing(editing === "skills" ? null : "skills")}
                   summary={`${(s.key_skills || []).length} added`}>
-          <TagInput label="" values={s.key_skills || []} options={SKILLS}
+          {/* Same picker and same library as job posting, so a seeker's tags
+              line up with what recruiters actually search for. */}
+          <SkillPicker label="" values={s.key_skills || []}
                     onChange={(v) => setS({ ...s, key_skills: v })} aiSuggestPath="/api/ai/resume/skills" />
           <SaveRow onSave={() => save({})} saving={saving} />
         </EditCard>
@@ -893,7 +896,13 @@ function FindJobs() {
   const [tab, setTab] = useState("recommended");
   const [jobs, setJobs] = useState([]);
   const [saved, setSaved] = useState([]);
-  const [q, setQ] = useState(""); const [location, setLocation] = useState("");
+  const [q, setQ] = useState("");
+  const [location, setLocation] = useState("");
+  const [experience, setExperience] = useState("");
+  const [salaryMin, setSalaryMin] = useState("");
+  const [jobType, setJobType] = useState("");
+  const [freshness, setFreshness] = useState("");
+  const [moreOpen, setMoreOpen] = useState(false);
   const [nl, setNl] = useState("");
   const [aiFor, setAiFor] = useState(null);
   const [jd, setJd] = useState(null);       // job whose full description is open
@@ -906,9 +915,21 @@ function FindJobs() {
   const search = async () => {
     setBusy(true);
     const p = new URLSearchParams();
-    if (q) p.set("q", q); if (location) p.set("location", location);
-    setJobs(await api.get(`/api/jobseeker/jobs?${p}`)); setBusy(false);
+    if (q) p.set("q", q);
+    if (location) p.set("location", location);
+    if (experience) p.set("experience", experience);
+    if (salaryMin) p.set("salary_min", salaryMin);
+    if (jobType) p.set("job_type", jobType);
+    if (freshness) p.set("posted_within_days", freshness);
+    try { setJobs(await api.get(`/api/jobseeker/jobs?${p}`)); }
+    catch (err) { toast(err.message, "error"); }
+    finally { setBusy(false); }
   };
+
+  const clearFilters = () => {
+    setExperience(""); setSalaryMin(""); setJobType(""); setFreshness("");
+  };
+  const activeFilters = [experience, salaryMin, jobType, freshness].filter(Boolean).length;
 
   useEffect(() => {
     if (tab === "recommended") loadRecommended();
@@ -983,12 +1004,104 @@ function FindJobs() {
               </div>
             </div>
           )}
-          <div className="mb-5 flex flex-wrap items-end gap-2">
-            <div className="max-w-xs flex-1"><label className="label">Keywords</label>
-              <input className="input" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-            <div className="max-w-xs flex-1"><Combobox label="Location" value={location} options={CITIES} onChange={setLocation} /></div>
-            <button className="btn" onClick={search}><IconSearch size={16} /> Search</button>
+          {/* One bar: keywords · experience · location · Search. Three fields
+              in a single row rather than three stacked inputs, because they
+              are one question ("what, how senior, where") and splitting them
+              made the page look like a form to fill in rather than a search. */}
+          <div className="mb-3 flex flex-wrap items-stretch gap-0 overflow-visible rounded-2xl
+                          border border-slate-200 bg-white p-1.5 shadow-card sm:flex-nowrap">
+            <input className="min-w-[180px] flex-[2] bg-transparent px-4 py-3 text-sm outline-none"
+                   value={q} onChange={(e) => setQ(e.target.value)}
+                   onKeyDown={(e) => e.key === "Enter" && search()}
+                   placeholder="Enter skills, designation or company" />
+
+            <div className="hidden w-px self-center bg-slate-200 sm:block" style={{ height: "60%" }} />
+
+            <select className="min-w-[150px] flex-1 cursor-pointer bg-transparent px-3 py-3 text-sm
+                               text-slate-600 outline-none"
+                    value={experience} onChange={(e) => setExperience(e.target.value)}>
+              <option value="">Select experience</option>
+              {EXPERIENCE.map((x) => <option key={x} value={x}>{x}</option>)}
+            </select>
+
+            <div className="hidden w-px self-center bg-slate-200 sm:block" style={{ height: "60%" }} />
+
+            <input list="js-search-cities"
+                   className="min-w-[150px] flex-1 bg-transparent px-3 py-3 text-sm outline-none"
+                   value={location} onChange={(e) => setLocation(e.target.value)}
+                   onKeyDown={(e) => e.key === "Enter" && search()}
+                   placeholder="Enter location" />
+            <datalist id="js-search-cities">
+              {CITIES.map((c) => <option key={c} value={c} />)}
+            </datalist>
+
+            <button className="btn shrink-0 !rounded-xl !px-7" onClick={search}>
+              <IconSearch size={16} /> Search
+            </button>
           </div>
+
+          {/* Secondary filters, the ones Naukri and LinkedIn put under the bar
+              rather than inside it. Collapsed by default so the bar stays the
+              focus. */}
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => setMoreOpen((o) => !o)}
+                    className="text-sm font-semibold text-navy hover:underline">
+              {moreOpen ? "− Fewer filters" : "⚙ More filters"}
+            </button>
+            {activeFilters > 0 && (
+              <>
+                <span className="badge bg-navy-50 text-navy">{activeFilters} applied</span>
+                <button type="button" onClick={() => { clearFilters(); }}
+                        className="text-xs font-semibold text-slate-400 hover:text-navy">Clear</button>
+              </>
+            )}
+            <div className="flex-1" />
+            <span className="text-xs text-slate-400">{jobs.length} job(s)</span>
+          </div>
+
+          {moreOpen && (
+            <div className="card mb-5">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div>
+                  <label className="label">Salary at least</label>
+                  <select className="input" value={salaryMin}
+                          onChange={(e) => setSalaryMin(e.target.value)}>
+                    <option value="">Any salary</option>
+                    {SALARY_STEPS.map((v) => (
+                      <option key={v} value={v}>₹{formatSalary(v)}+ per month</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Job type</label>
+                  <select className="input" value={jobType}
+                          onChange={(e) => setJobType(e.target.value)}>
+                    <option value="">Any type</option>
+                    {(tax?.job_types || []).map((t) => (
+                      <option key={t.key || t.label} value={t.label}>{t.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Date posted</label>
+                  <select className="input" value={freshness}
+                          onChange={(e) => setFreshness(e.target.value)}>
+                    <option value="">Any time</option>
+                    <option value="1">Last 24 hours</option>
+                    <option value="3">Last 3 days</option>
+                    <option value="7">Last week</option>
+                    <option value="15">Last 15 days</option>
+                    <option value="30">Last month</option>
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <button className="btn w-full" onClick={search}>
+                    <IconSearch size={15} /> Apply filters
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
 

@@ -1,8 +1,10 @@
 from pathlib import Path
 import uuid
 import os
-from datetime import datetime
+import re
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from sqlalchemy import String, func
 from sqlalchemy.orm import Session
 
 from .. import models, schemas, plans
@@ -105,22 +107,68 @@ def get_profile_strength(current: models.User = Depends(get_current_user), db: S
     return profile_strength(_seeker(current, db))
 
 
+def _wage_ceiling(job) -> int:
+    """Highest number this job advertises, as an int. 0 when nothing parses.
+
+    Uses wage_max because that is what a seeker could actually earn, falling
+    back to wage_min for postings that published a single figure.
+    """
+    for raw in (job.wage_max, job.wage_min, job.salary):
+        digits = re.sub(r"[^\d]", "", str(raw or ""))
+        if digits:
+            return int(digits)
+    return 0
+
+
 # ---------------- Job search & apply ----------------
 @router.get("/jobs", response_model=list[schemas.JobOut])
 def search_jobs(q: str | None = None, location: str | None = None,
                 category: str | None = None, experience: str | None = None,
+                job_type: str | None = None, salary_min: int | None = None,
+                posted_within_days: int | None = None, limit: int = 200,
                 db: Session = Depends(get_db)):
+    """Job search.
+
+    salary_min and posted_within_days back the "Salary at least" and "Date
+    posted" filters. Both are applied in SQL rather than in Python so the
+    LIMIT still means something on a large table.
+    """
     query = plans.live_jobs(db.query(models.Job))
     if q:
+        # Search the skills list too: a seeker typing "AutoCAD" means the skill,
+        # and matching only title and description missed jobs that listed it.
         like = f"%{q}%"
-        query = query.filter(models.Job.title.ilike(like) | models.Job.description.ilike(like))
+        query = query.filter(
+            models.Job.title.ilike(like)
+            | models.Job.description.ilike(like)
+            | models.Job.key_skills.cast(String).ilike(like)
+        )
     if location:
         query = query.filter(models.Job.location.ilike(f"%{location}%"))
     if category:
         query = query.filter(models.Job.category.ilike(f"%{category}%"))
     if experience:
         query = query.filter(models.Job.experience.ilike(f"%{experience}%"))
-    return query.order_by(models.Job.created_at.desc()).all()
+    if job_type:
+        query = query.filter(models.Job.job_type.ilike(f"%{job_type}%"))
+    if posted_within_days:
+        cutoff = datetime.utcnow() - timedelta(days=int(posted_within_days))
+        query = query.filter(models.Job.created_at >= cutoff)
+
+    rows = (query.order_by(models.Job.created_at.desc())
+            .limit(min(max(1, limit), 500)).all())
+
+    if salary_min:
+        # Filtered in Python, not SQL, on purpose. wage_min/wage_max are STRING
+        # columns and older rows hold free text like "15,000" or "15000/month",
+        # so a SQL comparison silently misbehaves — SQLite compared them as
+        # text and matched a 15,000 job against a 30,000 filter, and Postgres
+        # would error outright on CAST('15,000' AS INTEGER).
+        # Parsing the digits here is correct for both, and the row set is
+        # already bounded by the LIMIT above.
+        rows = [j for j in rows if _wage_ceiling(j) >= salary_min]
+
+    return rows
 
 
 # ---------------- Recommendations & saved jobs ----------------

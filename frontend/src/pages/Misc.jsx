@@ -11,6 +11,7 @@ import { RegistrationFields, buildRegistrationPayload, validateRegistration } fr
 
 /* Simple centred shell used by the auth-adjacent pages */
 function AuthShell({ title, subtitle, children, wide }) {
+  const navigate = useNavigate();
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
       <header className="border-b border-slate-100 bg-white px-6 py-3">
@@ -18,6 +19,16 @@ function AuthShell({ title, subtitle, children, wide }) {
       </header>
       <div className="flex flex-1 items-center justify-center px-6 py-10">
         <div className={wide ? "w-full max-w-2xl" : "w-full max-w-md"}>
+          {/* Back navigation, in the same top-left position as every other
+              screen. Uses history so it returns wherever you came from —
+              home, the login page, or a deep link — and falls back to home
+              when this page was opened directly and there is nothing to go
+              back to. */}
+          <button type="button" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/"))}
+                  className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500
+                             transition-colors hover:text-navy">
+            ← Back
+          </button>
           <h1 className="text-2xl font-extrabold tracking-tight text-navy">{title}</h1>
           {subtitle && <p className="mt-1.5 text-sm text-slate-500">{subtitle}</p>}
           <div className="mt-6">{children}</div>

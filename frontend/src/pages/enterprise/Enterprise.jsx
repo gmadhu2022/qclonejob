@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { api, getToken, mediaUrl } from "../../lib/api";
 import { DashboardLayout, StatusBadge, useToast } from "../../components/ui";
@@ -10,11 +10,24 @@ import UploadedResumeView from "../jobseeker/UploadedResumeView";
 /* A seeker who ticked "show my uploaded resume to recruiters" should actually
    get that — otherwise the promise on their profile is false. Falls back to the
    generated resume whenever there is no file. */
-const SeekerResume = ({ seeker, meta }) => (
-  seeker?.prefer_uploaded_resume && seeker?.uploaded_resume_url
-    ? <UploadedResumeView seeker={seeker} />
-    : <ResumeView seeker={seeker} meta={meta} />
-);
+const SeekerResume = ({ seeker, meta }) => {
+  const useUpload = seeker?.prefer_uploaded_resume && seeker?.uploaded_resume_url;
+  return (
+    <>
+      {useUpload && <UploadedResumeView seeker={seeker} />}
+      {/* The generated resume is ALWAYS rendered underneath an upload. It costs
+          nothing, it is built from the structured profile, and it means a
+          recruiter is never left with an empty screen when an uploaded file has
+          gone missing from the server. */}
+      {useUpload && (
+        <p className="mt-6 mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-400">
+          Profile resume
+        </p>
+      )}
+      <ResumeView seeker={seeker} meta={meta} />
+    </>
+  );
+};
 import {
   IconBuilding, IconSearch, IconBriefcase, IconClipboard, IconSparkle, IconChat, IconEye, IconDownload,
   IconChart, IconLayers, IconEdit, IconClose, IconRefresh, IconPrint, IconStar, IconCheck,
@@ -1132,6 +1145,8 @@ function ResumeSearch() {
   const [institutes, setInstitutes] = useState([]);
   const [jobSkills, setJobSkills] = useState([]);   // skills across your postings
   const [suggestOpen, setSuggestOpen] = useState(false);
+  const [locOpen, setLocOpen] = useState(false);
+  const locBoxRef = useRef(null);
   const [rows, setRows] = useState([]);
   const [viewing, setViewing] = useState(null);      // full-page resume preview
   const [tplMeta, setTplMeta] = useState([]);
@@ -1159,6 +1174,14 @@ function ResumeSearch() {
     setLocation(""); setInstituteId(""); setEducation("");
     setBranch(""); setYearFrom(""); setYearTo(""); setMinPct("");
   };
+
+  // Close the location panel on an outside click.
+  useEffect(() => {
+    if (!locOpen) return;
+    const onDoc = (e) => { if (locBoxRef.current && !locBoxRef.current.contains(e.target)) setLocOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [locOpen]);
 
   useEffect(() => {
     search();
@@ -1302,24 +1325,50 @@ function ResumeSearch() {
 
         <div className="hidden w-px self-stretch bg-slate-200 sm:block" />
 
-        <div className="relative min-w-[170px] flex-1">
-          <input list="resume-locations" value={location}
-                 onChange={(e) => setLocation(e.target.value)}
-                 onKeyDown={(e) => e.key === "Enter" && search()}
+        <div className="relative min-w-[190px] flex-1" ref={locBoxRef}>
+          <input value={location}
+                 onChange={(e) => { setLocation(e.target.value); setLocOpen(true); }}
+                 onFocus={() => setLocOpen(true)}
+                 onKeyDown={(e) => { if (e.key === "Enter") { setLocOpen(false); search(); } }}
                  className="w-full bg-transparent px-3 py-2.5 text-sm outline-none"
                  placeholder="Location — any city" />
-          {/* A datalist rather than a custom dropdown: it filters as you type,
-              accepts a city that isn't on the list, and can't be clipped by the
-              bar's own overflow. */}
-          <datalist id="resume-locations">
-            {CITIES.map((c) => <option key={c} value={c} />)}
-          </datalist>
+
           {location && (
-            <button type="button" onClick={() => setLocation("")}
+            <button type="button" onClick={() => { setLocation(""); setLocOpen(false); }}
                     title="Clear location"
-                    className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full px-2 text-slate-300 hover:text-navy">
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full px-1.5 text-slate-300 hover:text-navy">
               ×
             </button>
+          )}
+
+          {/* A custom panel, not <datalist>. The browser renders a datalist
+              wherever it likes — on this layout it opened against the far left
+              of the window instead of under the field. This one is absolutely
+              positioned to the input, so it always drops directly beneath it. */}
+          {locOpen && (
+            <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-xl
+                            border border-slate-200 bg-white py-1 shadow-cardhover">
+              <div className="max-h-60 overflow-y-auto">
+                <button type="button" onMouseDown={() => { setLocation(""); setLocOpen(false); }}
+                        className="block w-full px-3 py-1.5 text-left text-[13px] font-semibold text-slate-500 hover:bg-slate-50">
+                  Any city
+                </button>
+                {CITIES.filter((c) => !location || c.toLowerCase().includes(location.toLowerCase()))
+                  .map((c) => (
+                    <button key={c} type="button"
+                            onMouseDown={() => { setLocation(c); setLocOpen(false); }}
+                            className={`block w-full px-3 py-1.5 text-left text-[13px] hover:bg-navy-50 hover:text-navy
+                              ${c === location ? "bg-navy-50 font-semibold text-navy" : "text-slate-600"}`}>
+                      {c}
+                    </button>
+                  ))}
+                {location && !CITIES.some((c) => c.toLowerCase().includes(location.toLowerCase())) && (
+                  <p className="px-3 py-2 text-[12.5px] text-slate-400">
+                    No city matches — searching for &ldquo;{location}&rdquo; anyway.
+                  </p>
+                )}
+              </div>
+            </div>
           )}
         </div>
 

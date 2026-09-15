@@ -224,7 +224,12 @@ function Profile() {
           <FormCard title="Capacity and contact">
             <F label="Present strength" value={draft.present_strength}
                onChange={set("present_strength")} numeric placeholder="e.g. 1200" />
-            <div className="sm:col-span-2">
+            {/* Contact person next to the number it belongs to, matching the
+                registration form. */}
+            <F label="Contact Person" value={draft.authorised_person_name}
+               onChange={set("authorised_person_name")}
+               placeholder="e.g. Priya Sharma, Placement Officer" />
+            <div className="sm:col-span-2 xl:col-span-3">
               <PhoneField label="Institute phone" value={draft.phone} onChange={set("phone")} />
             </div>
             <p className="text-xs text-slate-400 sm:col-span-2 xl:col-span-3">
@@ -247,8 +252,6 @@ function Profile() {
           </FormCard>
 
           <FormCard title="Contact person">
-            <F label="Authorised person" value={draft.authorised_person_name}
-               onChange={set("authorised_person_name")} placeholder="e.g. Priya Sharma" />
             <F label="Designation" value={draft.designation} onChange={set("designation")}
                placeholder="e.g. Placement Officer" />
             <F label="Promoter's name" value={draft.promoter_name} onChange={set("promoter_name")}

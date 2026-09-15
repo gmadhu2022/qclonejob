@@ -142,3 +142,17 @@ export const SHIFTS = [
   "Work from home",
   "Any shift",
 ];
+
+/* Salary steps for the Post-a-job range pickers.
+   Monthly figures, because this platform covers daily-wage and skilled roles
+   as well as salaried ones — a lakh-per-annum scale like the big job boards
+   would be meaningless for a plumber or a caretaker. Fine-grained at the
+   bottom where most roles sit, coarser higher up. */
+export const SALARY_STEPS = [
+  5000, 8000, 10000, 12000, 15000, 18000, 20000, 25000, 30000, 35000, 40000,
+  45000, 50000, 60000, 70000, 80000, 90000, 100000, 125000, 150000,
+  200000, 250000, 300000, 400000, 500000,
+];
+
+/** "25000" -> "25,000" in Indian digit grouping. */
+export const formatSalary = (n) => Number(n).toLocaleString("en-IN");
