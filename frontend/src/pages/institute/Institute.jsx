@@ -17,7 +17,7 @@ const MENU = [
   { to: "/institute", label: "Dashboard", icon: IconChart },
   { to: "/institute/profile", label: "Institute profile", icon: IconBuilding },
   { to: "/institute/upload", label: "Data upload", icon: IconUpload },
-  { to: "/institute/post-job", label: "Post a job", icon: IconBriefcase },
+  /*{ to: "/institute/post-job", label: "Post a job", icon: IconBriefcase },*/
   /* Institutes could already be messaged, but had nowhere to read it — a
      "new message" notification linked to a route that didn't exist. */
   { to: "/institute/messages", label: "Messages", icon: IconChat, badge: true },
@@ -84,7 +84,6 @@ function Dashboard() {
         <Kpi label="Applications" value={d.applications} />
         <Kpi label="Placed" value={d.placed} tone="green" />
         <Kpi label="Placement rate" value={`${d.placement_rate}%`} tone="green" />
-        <Kpi label="Jobs posted" value={d.jobs_posted} />
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
