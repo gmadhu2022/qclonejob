@@ -100,8 +100,29 @@
 .delay-1 { animation-delay: .07s; } .delay-2 { animation-delay: .14s; }
 .delay-3 { animation-delay: .21s; } .delay-4 { animation-delay: .28s; }
 
+/* ---------------------------------------------------------------------
+   Scroller ad preview.
+
+   A scroller ad IS the movement — a static line of truncated text tells the
+   institute nothing about whether their message fits or reads well. The track
+   holds the text twice so the loop has no visible gap at the wrap point.
+   --------------------------------------------------------------------- */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.marquee { overflow: hidden; }
+.marquee-track {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: marquee var(--marquee-duration, 14s) linear infinite;
+}
+.marquee:hover .marquee-track { animation-play-state: paused; }
+
 @media (prefers-reduced-motion: reduce) {
   .aurora-blob, .aurora-blob-2, .animate-in { animation: none !important; }
+  /* Motion off: show the text still and let it wrap rather than scroll. */
+  .marquee-track { animation: none !important; }
 }
 
 .glass { background: rgba(255,255,255,.08); backdrop-filter: blur(12px); }

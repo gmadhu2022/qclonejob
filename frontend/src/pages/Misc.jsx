@@ -7,7 +7,7 @@ import { useDialog, useConfirm } from "../components/Dialog";
 import { IconUser, IconBriefcase, IconBuilding } from "../components/icons";
 import Logo from "../components/Logo";
 import { IconCheck, IconEye, IconLock } from "../components/icons";
-import { RegistrationFields, buildRegistrationPayload, validateRegistration } from "../components/RegistrationForm";
+import { RegistrationFields, buildRegistrationPayload, validateRegistration, EMAIL_PATTERN } from "../components/RegistrationForm";
 
 /* Simple centred shell used by the auth-adjacent pages */
 function AuthShell({ title, subtitle, children, wide }) {
@@ -96,6 +96,7 @@ export function Register() {
     REG_ROLES.some((r) => r.key === urlRole) ? urlRole : "jobseeker");
   const toast = useToast();
   const dialog = useDialog();
+  const navigate = useNavigate();
   const [form, setForm] = useState({});
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -110,16 +111,53 @@ export function Register() {
   const isEnt = role === "enterprise";
   const isInst = role === "institute";
 
-  /* Stage 1 -> 2. Validates the three fields we actually have yet, then bumps
-     otpSendTick, which makes BOTH OtpFields send at once — the user pressed one
-     button, so they should not then have to press two more. */
-  const startVerification = () => {
+  /* Stage 1 -> 2. Validates the fields we actually have yet, checks the email
+     isn't already registered, then bumps otpSendTick to send the code. The
+     availability check happens HERE rather than at submit: verifying an OTP
+     and filling in a whole form only to be told the address is taken is a
+     miserable way to find out. */
+  const startVerification = async () => {
     const name = (form.name || "").trim();
     if (!name) return toast(`${isInst ? "Institute" : "Company"} Name is required.`, "error");
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((form.email || "").trim())) {
-      return toast("Enter a valid Official Mail address.", "error");
+    const email = (form.email || "").trim();
+    if (!EMAIL_PATTERN.test(email)) {
+      return toast("Enter a valid Official Mail address, e.g. name@institute.edu", "error");
     }
     if (!form.phone) return toast("Enter your Contact Number.", "error");
+    if (isInst) {
+      if (!(form.authorised_person_name || "").trim()) {
+        return toast("Enter the Contact Person's name.", "error");
+      }
+      if (!String(form.total_capacity || "").trim()) {
+        return toast("Enter your Total Capacity.", "error");
+      }
+      if (!String(form.current_strength || "").trim()) {
+        return toast("Enter your Current Strength.", "error");
+      }
+      if (Number(form.current_strength) > Number(form.total_capacity)) {
+        return toast("Current Strength can't be more than Total Capacity.", "error");
+      }
+    }
+
+    setBusy(true);
+    try {
+      const check = await api.get(
+        `/api/public/email-available?email=${encodeURIComponent(email)}`, { auth: false });
+      if (!check.available) {
+        setBusy(false);
+        return dialog({
+          tone: "error",
+          title: "That email is already registered",
+          message: check.message,
+          confirmLabel: "Go to login",
+          onConfirm: () => navigate(`/login/${role}`),
+        });
+      }
+    } catch {
+      /* The check is a courtesy, not a gate — if it can't run, carry on and
+         let the registration endpoint be the authority. */
+    }
+    setBusy(false);
     setStage(2);
     setOtpSendTick((t) => t + 1);
   };
@@ -193,36 +231,65 @@ export function Register() {
       const body = buildRegistrationPayload(role, form);
       const res = await api.post(path, body, { auth: false });
       setResult(res);
+      /* An institute chose its own password, so there is nothing to show it and
+         nothing to write down — the dialog would only be handing back a secret
+         it already knows. A generated password (recruiter, job seeker) still
+         has to be displayed, because it exists nowhere else on screen. */
+      const chosePassword = Boolean(body.password);
       dialog({
         tone: "success",
-        title: "Profile created successfully",
+        title: chosePassword ? "Registration Successful" : "Profile created successfully",
         message: res.status,
-        details: [["User ID", res.user_id], ["Password", res.password]],
-        note: res.email_status === "sent"
-          ? `Your login details were emailed to ${res.email}.`
-          : res.email_status === "console"
-            ? "Email sending is switched off, so save these details now — they are also printed in the server console."
-            : `We could not email these details (${res.email_error || "delivery failed"}). Please save them now.`,
-        noteTone: res.email_status === "sent" ? "info" : "warn",
-        confirmLabel: "Save & continue",
+        details: chosePassword
+          ? [["User ID", res.user_id], ["Password", "the password you just chose"]]
+          : [["User ID", res.user_id], ["Password", res.password]],
+        note: chosePassword
+          ? "You can log in straight away with your official email and that password."
+          : res.email_status === "sent"
+            ? `Your login details were emailed to ${res.email}.`
+            : res.email_status === "console"
+              ? "Email sending is switched off, so save these details now — they are also printed in the server console."
+              : `We could not email these details (${res.email_error || "delivery failed"}). Please save them now.`,
+        noteTone: chosePassword || res.email_status === "sent" ? "info" : "warn",
+        confirmLabel: chosePassword ? "Continue to login" : "Save & continue",
       });
     } catch (err) { toast(err.message, "error"); }
     finally { setBusy(false); }
   };
 
   if (result) {
+    /* Requirement 10 — "Registration Successful", and a Login button that is
+       actually usable. An institute that set its own password can sign in
+       immediately; anyone still waiting on approval is told so plainly rather
+       than being sent to a login that will refuse them. */
+    const pending = /pending/i.test(result.status || "");
     return (
-      <AuthShell title="You're registered" subtitle="Your account is ready to use.">
+      <AuthShell title={pending ? "Registration received" : "Registration Successful"}
+                 subtitle={pending
+                   ? "We'll email you as soon as your account is activated."
+                   : "Your account is ready to use."}>
         <div className="card text-center">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-brandgreen-50 text-brandgreen-600">
             <IconCheck size={26} />
           </div>
-          <p className="mt-4 font-semibold text-slate-800">{result.status}</p>
-          <p className="mt-2 text-sm text-slate-500">
-            Login credentials have been sent to <b className="text-slate-700">{result.email}</b>.
-            In development they also print to the backend console.
+          <p className="mt-4 text-lg font-extrabold text-navy">
+            {pending ? result.status : "Registration Successful"}
           </p>
-          <Link to={`/login/${role}`} className="btn mt-6 w-full">Go to login</Link>
+          <p className="mt-2 text-sm text-slate-500">
+            Your User ID is <b className="text-slate-700">{result.email}</b>
+            {result.password
+              ? " — your password was emailed to that address."
+              : ". Sign in with the password you just chose."}
+          </p>
+          <Link to={`/login/${role}`}
+                className={`mt-6 w-full ${pending ? "btn-outline" : "btn"}`}>
+            {pending ? "Go to login" : "Login"}
+          </Link>
+          {pending && (
+            <p className="mt-3 text-xs text-slate-400">
+              Logging in before approval will be refused — that's expected.
+            </p>
+          )}
         </div>
       </AuthShell>
     );

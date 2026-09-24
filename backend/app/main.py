@@ -106,20 +106,25 @@ def _startup_checks() -> None:
         print(f"[startup] Job purge skipped: {e}", flush=True)
 
 
-APP_REVISION = "2026.09.02-r3"   # bump when shipping; surfaced by /healthz
+APP_REVISION = "2026.09.20-institute-r1"   # bump when shipping; surfaced by /healthz
 
 
 @app.get("/healthz")
 def healthz():
     """Health check for Render. Also reports what's actually deployed, so a
     partial upload (new main.py + old config.py) is obvious immediately."""
+    from .email_utils import active_provider
+    provider = active_provider()
     return {
         "status": "ok",
         "revision": APP_REVISION,
         "database": "postgres" if not settings.DATABASE_URL.startswith("sqlite") else "sqlite",
         "cors_origins": _cors_origins(),
         "ai_enabled": bool(getattr(settings, "AI_ENABLED", False) and getattr(settings, "GROQ_API_KEY", "")),
-        "email_enabled": bool(getattr(settings, "EMAIL_ENABLED", False)),
+        # The provider that will ACTUALLY be used, not the one named in config.
+        # "console" here is why an OTP email never arrives.
+        "email_provider": provider or "console",
+        "email_enabled": bool(provider),
     }
 
 

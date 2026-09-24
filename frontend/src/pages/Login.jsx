@@ -130,7 +130,9 @@ export default function Login() {
           </div>
 
           <form onSubmit={submit} className="animate-in delay-2 mt-6 space-y-3.5">
-            <Field label="Email (User ID)" type="email" value={email} onChange={setEmail} required autoComplete="username" />
+            <Field label="Email (User ID)" type="email" value={email} onChange={setEmail} required autoComplete="username"
+                   placeholder="e.g. admin@institute.edu"
+                   hint="Your official email address is your User ID on every portal." />
             <div>
               <Field label="Password" type={showPw ? "text" : "password"} value={password}
                      onChange={setPassword} required autoComplete="current-password" />

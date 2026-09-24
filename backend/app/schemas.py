@@ -39,6 +39,9 @@ class InstituteBase(BaseModel):
     designation: Optional[str] = None
     courses: Optional[List[str]] = []
     present_strength: Optional[int] = None
+    total_capacity: Optional[int] = None
+    current_strength: Optional[int] = None
+    pincode: Optional[str] = None
     about: Optional[str] = None
     website: Optional[str] = None
 
@@ -52,6 +55,11 @@ class InstituteRegister(InstituteBase):
     Without this the logo uploaded during registration was silently dropped.
     """
     logo_url: Optional[str] = None
+    # The institute chooses its own password on the registration form, so no
+    # generated one is emailed and there is no forced change on first login.
+    # Optional so an admin creating the account on someone's behalf can still
+    # leave it out and have one generated.
+    password: Optional[str] = None
 
 
 class InstituteOut(InstituteBase):

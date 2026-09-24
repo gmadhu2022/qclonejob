@@ -70,7 +70,7 @@ def _log(to_email: str, subject: str, kind: str, status: str, error: str | None 
         _log_queue.put_nowait({
             "to_email": to_email, "subject": subject[:250], "kind": kind, "status": status,
             "error": (error or "")[:1000] or None,
-            "provider": settings.SMTP_HOST if settings.EMAIL_ENABLED else "console",
+            "provider": (active_provider() or "console"),
         })
     except queue.Full:                           # pragma: no cover
         logger.warning("Email log queue full; dropping entry for %s", to_email)
@@ -189,13 +189,58 @@ def _send_via_resend(to_email: str, subject: str, body: str) -> dict:
         return {"ok": False, "status": "failed", "error": f"Email provider unreachable: {e}"}
 
 
+def active_provider() -> str | None:
+    """Which provider will actually be used, or None if nothing is configured.
+
+    WHY THIS EXISTS
+    ---------------
+    Two configuration mistakes silently killed every OTP email:
+
+      1. EMAIL_PROVIDER was left at its default ("brevo") while the key that was
+         actually set was RESEND_API_KEY. The old code checked ONLY the named
+         provider, found no Brevo key, fell through to SMTP, found no SMTP user
+         either, and returned "no email provider is configured" — with a
+         perfectly good Resend key sitting right there.
+      2. A key was added but EMAIL_ENABLED was left False, so everything went to
+         the console and looked like a delivery failure to the user.
+
+    Now the named provider is preferred, and if it has no credentials we use
+    whichever provider does. Nothing is guessed silently — email_ready() and
+    /healthz report exactly what was picked.
+    """
+    named = (getattr(settings, "EMAIL_PROVIDER", "smtp") or "smtp").lower()
+    have = {
+        "brevo": bool(getattr(settings, "BREVO_API_KEY", "")),
+        "resend": bool(getattr(settings, "RESEND_API_KEY", "")),
+        "smtp": bool(settings.SMTP_USER and settings.SMTP_PASSWORD),
+    }
+    if named in have and have[named]:
+        return named
+    for name in ("brevo", "resend", "smtp"):     # first one with credentials
+        if have[name]:
+            return name
+    return None
+
+
+def email_ready() -> bool:
+    """True when a real send is possible.
+
+    EMAIL_ENABLED is treated as an explicit OFF switch, not an ON switch: if a
+    provider key is present we send, because someone who pasted an API key
+    meant for email to work. Set EMAIL_ENABLED=false AND clear the keys to stay
+    in console mode.
+    """
+    return bool(active_provider())
+
+
 def send_email(to_email: str, subject: str, body: str, kind: str = "other") -> dict:
     """Send one email.
 
     Returns {"ok": bool, "status": ..., "error": ...} instead of raising, so callers
     can tell the user the truth about delivery. Nothing is swallowed silently.
     """
-    if not settings.EMAIL_ENABLED:
+    provider = active_provider()
+    if not provider:
         print("\n" + "=" * 70)
         print(f"[EMAIL - console mode]  To: {to_email}")
         print(f"Subject: {subject}")
@@ -204,28 +249,23 @@ def send_email(to_email: str, subject: str, body: str, kind: str = "other") -> d
         print("=" * 70 + "\n", flush=True)
         _log(to_email, subject, kind, "console")
         return {"ok": True, "status": "console",
-                "message": "Email is switched off, so it was printed to the server console. "
-                           "Run `python setup_email.py` to send real emails."}
+                "message": "No email provider is configured, so the message was printed to "
+                           "the server console. Set RESEND_API_KEY (EMAIL_PROVIDER=resend), "
+                           "BREVO_API_KEY, or SMTP_USER / SMTP_PASSWORD in backend/.env to "
+                           "send real email."}
 
-    # --- Resend first (HTTPS API, 3,000 emails/month free, no card) ---------
+    # --- HTTPS APIs first ---------------------------------------------------
     # Preferred over SMTP because outbound port 25/465/587 is blocked on many
     # PaaS hosts, which is the usual reason "email silently doesn't work" in
     # production while it works locally.
-    provider = (getattr(settings, "EMAIL_PROVIDER", "smtp") or "smtp").lower()
-    if provider == "brevo" and getattr(settings, "BREVO_API_KEY", ""):
+    if provider == "brevo":
         r = _send_via_brevo(to_email, subject, body)
         _log(to_email, subject, kind, "sent" if r["ok"] else "failed", r.get("error"))
         return r
-    if provider == "resend" and getattr(settings, "RESEND_API_KEY", ""):
+    if provider == "resend":
         r = _send_via_resend(to_email, subject, body)
         _log(to_email, subject, kind, "sent" if r["ok"] else "failed", r.get("error"))
         return r
-
-    if not (settings.SMTP_USER and settings.SMTP_PASSWORD):
-        err = ("No email provider is configured. Set BREVO_API_KEY "
-               "(EMAIL_PROVIDER=brevo), RESEND_API_KEY, or SMTP_USER / SMTP_PASSWORD.")
-        _log(to_email, subject, kind, "failed", err)
-        return {"ok": False, "status": "failed", "error": err}
 
     msg = MIMEMultipart()
     msg["From"] = settings.EMAIL_FROM or settings.SMTP_USER

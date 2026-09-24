@@ -161,15 +161,26 @@ def request_code(db: Session, target: str, channel: str, purpose: str = "registe
         raise OtpError(f"Please wait {wait} seconds before requesting another code.")
 
     code = _generate()
+    # Email codes are given a nominal far-future expiry so the NOT NULL column
+    # is satisfied, and verify_code skips the expiry check for them entirely.
+    # SMS codes keep the short TTL: a text can be delivered late, but a code
+    # that never dies on a number which has changed hands is a real risk.
+    email_forever = channel != "sms" and getattr(settings, "EMAIL_OTP_NEVER_EXPIRES", True)
+    expires_at = (datetime.utcnow() + timedelta(days=3650) if email_forever
+                  else datetime.utcnow() + timedelta(minutes=CODE_TTL_MINUTES))
     db.add(models.OtpCode(
         target=target, channel=channel, purpose=purpose,
         code_hash=hash_password(code),
-        expires_at=datetime.utcnow() + timedelta(minutes=CODE_TTL_MINUTES),
+        expires_at=expires_at,
     ))
     db.commit()
 
-    text = (f"{code} is your {settings.APP_NAME} verification code. "
-            f"It expires in {CODE_TTL_MINUTES} minutes.")
+    if email_forever:
+        text = f"{code} is your {settings.APP_NAME} verification code."
+    else:
+        text = (f"{code} is your {settings.APP_NAME} verification code. "
+                f"It expires in {CODE_TTL_MINUTES} minutes.")
+
     if channel == "sms":
         res = send_sms(target, text)
     else:
@@ -180,8 +191,15 @@ def request_code(db: Session, target: str, channel: str, purpose: str = "registe
 
     if not res["ok"]:
         raise OtpError(res.get("error") or "Could not send the code. Please try again.")
-    return {"sent": True, "target": target, "delivery": res["delivery"],
-            "expires_in_minutes": CODE_TTL_MINUTES}
+
+    out = {"sent": True, "target": target, "delivery": res["delivery"],
+           "expires_in_minutes": None if email_forever else CODE_TTL_MINUTES}
+    # DEV ONLY: with no mail provider configured the code only exists in the
+    # server console, which the person filling in the form cannot see. When
+    # OTP_DEV_ECHO is on we hand it back so the flow is testable locally.
+    if res["delivery"] == "console" and getattr(settings, "OTP_DEV_ECHO", False):
+        out["dev_code"] = code
+    return out
 
 
 def verify_code(db: Session, target: str, channel: str, code: str) -> bool:
@@ -191,16 +209,22 @@ def verify_code(db: Session, target: str, channel: str, code: str) -> bool:
         raise OtpError("Request a code first.")
     if row.verified:
         return True
-    if row.expires_at < datetime.utcnow():
+    # Requirement 7: email codes do not expire. Only SMS is time-limited.
+    email_forever = channel != "sms" and getattr(settings, "EMAIL_OTP_NEVER_EXPIRES", True)
+    if not email_forever and row.expires_at < datetime.utcnow():
         raise OtpError("That code has expired. Please request a new one.")
     if (row.attempts or 0) >= MAX_ATTEMPTS:
-        raise OtpError("Too many incorrect attempts. Request a new code.")
+        raise OtpError("Too many incorrect attempts. Please press Resend to get a new code.")
+
+    if not (code or "").strip():
+        raise OtpError("Enter the 6-digit code from your email.")
 
     row.attempts = (row.attempts or 0) + 1
     if not verify_password((code or "").strip(), row.code_hash):
         db.commit()
         left = MAX_ATTEMPTS - row.attempts
-        raise OtpError(f"Incorrect code. {left} attempt{'s' if left != 1 else ''} left.")
+        raise OtpError(f"Incorrect OTP. Please check the code and try again — "
+                       f"{left} attempt{'s' if left != 1 else ''} left.")
 
     row.verified = True
     db.commit()
@@ -214,5 +238,10 @@ def is_verified(db: Session, target: str, channel: str) -> bool:
     except OtpError:
         return False
     row = _recent(db, target)
-    return bool(row and row.verified
-                and (datetime.utcnow() - row.created_at) < timedelta(hours=2))
+    if not (row and row.verified):
+        return False
+    # Email codes don't expire (requirement 7), so a verification made an hour
+    # into filling in the form is still good. SMS keeps the 2-hour window.
+    if channel != "sms" and getattr(settings, "EMAIL_OTP_NEVER_EXPIRES", True):
+        return True
+    return (datetime.utcnow() - row.created_at) < timedelta(hours=2)

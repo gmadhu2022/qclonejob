@@ -250,6 +250,76 @@ async def upload_media(file: UploadFile = File(...),
     }
 
 
+@router.post("/flyer")
+async def upload_flyer(file: UploadFile = File(...),
+                       current: models.User = Depends(get_current_user)):
+    """Flyer artwork for a Post a Ad flyer (requirement 55).
+
+    The institute uploads whatever their designer sent — a 4 MB phone photo, a
+    tall poster, a wide banner — and the server shrinks it to the mobile app's
+    ad slot so every ad renders identically on every handset.
+
+    COVER-CROP, NOT LETTERBOX
+    ------------------------
+    ImageOps.fit scales to fill the slot and trims the overflow, centred.
+    thumbnail() would preserve the whole image and leave white bars down the
+    sides of a portrait flyer, which looks like a broken ad rather than a
+    deliberate one. Centring the crop keeps a logo or a face in frame far more
+    often than cropping from a corner would.
+
+    JPG is what the requirement names and what designers send, but PNG and WEBP
+    are accepted too — refusing a PNG would only make someone convert it by
+    hand for no benefit, since everything is re-encoded on the way in anyway.
+    """
+    from ..config import settings
+
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    ok_ext = {".jpg", ".jpeg", ".jpe", ".jfif", ".png", ".webp"}
+    if ext not in ok_ext and not (file.content_type or "").startswith("image/"):
+        raise HTTPException(400, "Wrong File Format — upload a JPG image for the flyer.")
+
+    data = await file.read()
+    original = len(data)
+    if not data:
+        raise HTTPException(400, "That file is empty.")
+    if original > MAX_BYTES:
+        raise HTTPException(400, "Flyer image must be 5 MB or smaller.")
+
+    target = (int(getattr(settings, "AD_FLYER_WIDTH", 1080)),
+              int(getattr(settings, "AD_FLYER_HEIGHT", 360)))
+    try:
+        im = Image.open(io.BytesIO(data))
+        im = ImageOps.exif_transpose(im)          # honour phone orientation
+        if im.mode in ("RGBA", "LA", "P"):
+            im = im.convert("RGBA")
+            bg = Image.new("RGBA", im.size, (255, 255, 255, 255))
+            im = Image.alpha_composite(bg, im).convert("RGB")
+        else:
+            im = im.convert("RGB")
+        source_size = im.size
+        im = ImageOps.fit(im, target, Image.LANCZOS, centering=(0.5, 0.5))
+        buf = io.BytesIO()
+        im.save(buf, format="WEBP", quality=86, method=6)
+        data, ext = buf.getvalue(), ".webp"
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(400, "That image looks damaged or unreadable. Please try another file.")
+
+    url = _store(data, ext)
+    saved = len(data)
+    logger.info("Flyer upload: %s %s -> %s %s (%d KB)",
+                file.filename, source_size, url, target, saved // 1024)
+    return {
+        "url": url,
+        "width": target[0], "height": target[1],
+        "original_bytes": original, "stored_bytes": saved,
+        "saved_percent": round(100 * (1 - saved / original)) if original else 0,
+        "message": (f"Flyer resized to {target[0]}×{target[1]} for the mobile ad space "
+                    f"({saved // 1024} KB stored)."),
+    }
+
+
 @router.get("/my-media")
 def my_media(kind: str | None = None, current: models.User = Depends(get_current_user),
              db: Session = Depends(get_db)):

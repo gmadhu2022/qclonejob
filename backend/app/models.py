@@ -113,6 +113,13 @@ class Institute(Base):
     designation = Column(String)
     courses = Column(JSON, default=list)        # ["B.Tech", "Diploma", ...]
     present_strength = Column(Integer)
+    # Registration asks for capacity and strength as two separate numbers.
+    # `present_strength` is kept as the legacy name for the same idea and is
+    # mirrored from current_strength on save, so nothing that already reads it
+    # (bulk-upload capacity checks, admin reports) breaks.
+    total_capacity = Column(Integer)            # seats across every course
+    current_strength = Column(Integer)          # students on the rolls today
+    pincode = Column(String)
     about = Column(Text)
     website = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
@@ -126,6 +133,85 @@ class Institute(Base):
 
     user = relationship("User", back_populates="institute", foreign_keys=[user_id])
     jobseekers = relationship("JobSeeker", back_populates="institute")
+    locations = relationship("InstituteLocation", back_populates="institute",
+                             cascade="all, delete-orphan")
+    course_rows = relationship("InstituteCourse", back_populates="institute",
+                               cascade="all, delete-orphan")
+
+
+class InstituteLocation(Base):
+    """A campus / branch of an institute.
+
+    The institute's own address stays on `institutes` and is exposed as the
+    PRIMARY location (is_primary=True), created automatically the first time
+    locations are read. Additional campuses are rows here, each with its own
+    contact person and pincode, and each carrying its own copy of the course
+    list — seats and strength differ per campus even when the courses match.
+    """
+    __tablename__ = "institute_locations"
+
+    id = Column(Integer, primary_key=True)
+    institute_id = Column(Integer, ForeignKey("institutes.id"), nullable=False, index=True)
+    name = Column(String)                       # e.g. "Kukatpally campus"
+    address1 = Column(String)
+    address2 = Column(String)
+    city = Column(String)
+    district = Column(String)
+    state = Column(String)
+    country = Column(String, default="INDIA")
+    pincode = Column(String, index=True)
+    contact_person = Column(String)
+    contact_email = Column(String)
+    contact_phone = Column(String)
+    is_primary = Column(Boolean, default=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    institute = relationship("Institute", back_populates="locations")
+    course_rows = relationship("InstituteCourse", back_populates="location",
+                               cascade="all, delete-orphan")
+
+
+class InstituteCourse(Base):
+    """One course at one location, with its seat capacity and current strength.
+
+    Stored as rows rather than inside Institute.courses (a JSON list of names)
+    because the dashboard reports course-wise capacity and course-wise strength,
+    and a list of strings cannot carry numbers. Institute.courses is still
+    maintained as the flat name list so existing filters keep working.
+    """
+    __tablename__ = "institute_courses"
+
+    id = Column(Integer, primary_key=True)
+    institute_id = Column(Integer, ForeignKey("institutes.id"), nullable=False, index=True)
+    location_id = Column(Integer, ForeignKey("institute_locations.id"), index=True)
+    name = Column(String, nullable=False)
+    seats = Column(Integer, default=0)              # max seats for this course
+    # NO default. SQLAlchemy applies a column default whenever the value is
+    # None at insert time, so `default=0` quietly turned "not answered yet"
+    # into "zero students" — and requirement 43 needs those to be different.
+    current_strength = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    institute = relationship("Institute", back_populates="course_rows")
+    location = relationship("InstituteLocation", back_populates="course_rows")
+
+
+class InstituteDownloadLog(Base):
+    """Every file an institute downloads from the portal, with date and time.
+
+    Separate from UploadBatch: that records data coming IN, this records the
+    templates and reports going OUT, which the Data upload screen lists as
+    "Download history".
+    """
+    __tablename__ = "institute_downloads"
+
+    id = Column(Integer, primary_key=True)
+    institute_id = Column(Integer, ForeignKey("institutes.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    kind = Column(String, default="template")     # template | students | history
+    filename = Column(String)
+    file_format = Column(String, default="xlsx")  # xlsx | csv
+    downloaded_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
 class Enterprise(Base):
@@ -520,6 +606,10 @@ class Banner(Base):
     status = Column(String, default="active", index=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
+    # Institute ads come in exactly two shapes, chosen by a button on Post a Ad:
+    #   flyer    — a JPG shrunk to the mobile app's ad slot
+    #   scroller — a short line of text that scrolls across that slot
+    ad_format = Column(String, default="flyer", index=True)   # flyer | scroller
     media_type = Column(String, default="image")   # image | gif | video | none
     media_url = Column(String)                     # uploaded file
     # An externally hosted video (YouTube / Vimeo / direct .mp4). Kept separate

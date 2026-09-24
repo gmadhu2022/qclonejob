@@ -16,6 +16,12 @@ from .. import otp_service
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+# One address shape, checked in the browser AND here. Deliberately the same
+# expression as the frontend's so the two can never disagree about what is
+# valid and leave the user stuck between a passing form and a rejecting API.
+import re
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$")
+
 
 ROLE_LABEL = {"admin": "Admin", "manager": "Manager", "enterprise": "Recruiter / Enterprise",
               "institute": "Institute", "jobseeker": "Job Seeker"}
@@ -272,6 +278,15 @@ def otp_send(body: dict, db: Session = Depends(get_db)):
     channel = body.get("channel", "sms")
     if channel not in ("sms", "email"):
         raise HTTPException(400, "channel must be 'sms' or 'email'.")
+
+    # Requirement 5 — validate the address BEFORE a code is generated. Sending
+    # to "priya@institute" would succeed at the API and then simply never
+    # arrive, which looks identical to a broken mail provider.
+    if channel == "email":
+        target = (body.get("target") or "").strip()
+        if not EMAIL_RE.match(target):
+            raise HTTPException(400, "Enter a valid email address, e.g. name@institute.edu")
+
     try:
         return otp_service.request_code(db, body.get("target", ""), channel,
                                         body.get("purpose", "register"))

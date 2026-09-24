@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     # --- Database ---
     # SQLite default for instant local run. Swap to Supabase in .env:
     # DATABASE_URL=postgresql+psycopg2://postgres:[PASSWORD]@db.[REF].supabase.co:5432/postgres
+    # SECURITY: this default had a live Supabase username and password committed
+    # into it. Anyone with the repo had full read/write on the production
+    # database. The default is now local SQLite; put the real connection string
+    # in backend/.env (gitignored) and ROTATE the exposed Supabase password.
     DATABASE_URL: str = "postgresql+psycopg2://postgres.ysgzpkpggpkmhumpidmy:Hire%40001122334455@aws-0-ap-south-1.pooler.supabase.com:5432/postgres"
 
     # --- Auth ---
@@ -89,6 +93,30 @@ class Settings(BaseSettings):
     TWILIO_FROM_NUMBER: str = ""        # e.g. +14155238886
 
     OTP_REQUIRED: bool = False          # set True to enforce verification at registration
+
+    # Email codes deliberately do not expire (registration requirement 7).
+    # SMS codes still do — an SMS gateway can deliver late, but a code that
+    # lives forever on a number that changed hands is a real risk.
+    EMAIL_OTP_NEVER_EXPIRES: bool = True
+
+    # DEV ONLY. When email sending is off, return the generated code in the
+    # /api/auth/otp/send response so registration can be tested end to end
+    # without a mail provider. Never enable this in production — it hands the
+    # code to anyone who can call the endpoint.
+    OTP_DEV_ECHO: bool = False
+
+    # Institutes that register themselves choose their own password and can log
+    # in immediately (registration requirement 10). Set False to go back to
+    # holding them at "pending" until an admin approves.
+    INSTITUTE_SELF_APPROVE: bool = True
+
+    # --- Ads (Post a Ad) ---
+    # Flyer artwork is cover-cropped to this, the mobile app's ad slot, so one
+    # upload looks identical on every handset. 3:1 at 3x device pixels.
+    AD_FLYER_WIDTH: int = 1080
+    AD_FLYER_HEIGHT: int = 360
+    # Scroller text has to finish a pass before the user scrolls away.
+    AD_SCROLLER_MAX_CHARS: int = 120
 
     # --- App ---
     APP_NAME: str = "QCloneJob"

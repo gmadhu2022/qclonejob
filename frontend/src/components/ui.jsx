@@ -221,7 +221,7 @@ const PROFILE_LINK = {
   admin: "/admin",
 };
 
-export const BUILD_VERSION = "2026.09.02-r3";
+export const BUILD_VERSION = "2026.09.20-institute-r1";
 
 export function StatusBadge({ status }) {
   const map = {

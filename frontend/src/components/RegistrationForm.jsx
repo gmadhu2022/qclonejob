@@ -1,9 +1,11 @@
+import { useState } from "react";
 import RichText from "./RichText";
 import ImageUpload from "./ImageUpload";
 import OtpField from "./OtpField";
 import PhoneField from "./PhoneField";
 import { Field as FField, Combobox, TagInput } from "./fields";
 import SkillPicker from "./SkillPicker";
+import { IconCheck, IconEye } from "./icons";
 import { CITIES, STATES, COURSES, SKILLS } from "../lib/options";
 
 /* =====================================================================
@@ -114,15 +116,73 @@ export function RegistrationFields({
               <FField label="Website" value={form.website} onChange={setV("website")}
                       placeholder="e.g. www.yourcompany.com" />
               {isInst && (
-                <FField label="Present strength" value={form.present_strength}
-                        onChange={(v) => setV("present_strength")(String(v).replace(/\D/g, ""))}
-                        placeholder="e.g. 1200 students" />
+                <>
+                  {/* Two separate numbers, not one "strength": capacity is what
+                      the institute could take, strength is who is actually on
+                      the rolls. The dashboard reports both, and bulk uploads
+                      are checked against capacity. */}
+                  <FField label="Total Capacity" required value={form.total_capacity}
+                          onChange={(v) => setV("total_capacity")(String(v).replace(/\D/g, ""))}
+                          placeholder="e.g. 1200"
+                          hint="Maximum students across all courses" />
+                  <FField label="Current Strength" required value={form.current_strength}
+                          onChange={(v) => setV("current_strength")(String(v).replace(/\D/g, ""))}
+                          placeholder="e.g. 840"
+                          hint="Students on the rolls today" />
+                </>
               )}
             </RegSection>
+
+            {/* ---- Verification. Sits directly under the contact details it
+                 confirms, and ABOVE everything that unlocks once it passes.
+                 It used to render last, so after verifying you were looking
+                 at a "Verify your email" card sitting below the password
+                 boxes it was supposed to have unlocked. ---- */}
+            {!admin && stage >= 2 && (
+              <div className="card !bg-slate-50/70">
+                <h4 className="text-sm font-bold text-slate-700">Verify your email address</h4>
+                <p className="mb-3 text-xs text-slate-400">
+                  We've sent a 6-digit code to <b className="text-slate-600">{form.email || "your email"}</b>.
+                  Enter it below to continue. The resend button counts down the seconds until you can
+                  request another.
+                </p>
+
+                {/* Email only. SMS verification is deliberately not used here: an OTP
+                    that depends on an SMS gateway fails silently when the gateway is
+                    down or a number is mistyped, and email is where the account's
+                    login credentials are sent anyway — so it is the address that
+                    actually has to be correct. The phone number is still collected,
+                    just not verified by code. */}
+                <div className="max-w-md">
+                  <OtpField key={`mail-${formKey}`} label="Email OTP" channel="email" hideInput
+                      autoSend={otpSendTick}
+                      value={form.email} onChange={setV("email")}
+                      onVerified={() => { setV("email_verified")(true); onVerified?.("email"); }} />
+                </div>
+
+                {form.email_verified && (
+                  <p className="mt-3 rounded-lg bg-brandgreen-50 px-3 py-2 text-xs font-medium text-brandgreen-600">
+                    Email verified — the rest of the form is below.
+                  </p>
+                )}
+
+                <p className="mt-3 text-xs text-slate-400">
+                  Not arrived? Check your spam folder, or press Resend. If the address is wrong, edit it
+                  above and a new code is sent.
+                </p>
+              </div>
+            )}
 
             {/* Everything below is revealed only after verification. */}
             {stage >= 3 && (
             <>
+            {/* ---- Create your password (requirements 9-10) ----
+                 Only rendered once the email is verified, so nobody sets a
+                 password on an address they can't receive mail at. The
+                 recruiter form still gets a generated password emailed to it;
+                 flip `password` on below to give recruiters the same flow. */}
+            {isInst && <PasswordSection form={form} setForm={setForm} />}
+
             <RegSection title="Address">
               <div className="sm:col-span-2">
                 <FField label="Address line 1" value={form.address1} onChange={setV("address1")}
@@ -138,6 +198,9 @@ export function RegistrationFields({
                       placeholder="e.g. Medchal-Malkajgiri" />
               <Combobox label="State" value={form.state} options={STATES} onChange={setV("state")}
                         placeholder="e.g. Telangana" />
+              <FField label="Pincode" value={form.pincode}
+                      onChange={(v) => setV("pincode")(String(v).replace(/\D/g, "").slice(0, 6))}
+                      placeholder="e.g. 500072" />
               <FField label="Country" value={form.country ?? "INDIA"} onChange={setV("country")}
                       placeholder="e.g. INDIA" />
             </RegSection>
@@ -186,45 +249,10 @@ export function RegistrationFields({
                             : "Tell candidates about your organisation. **bold**, ## heading and - lists work."} />
               </div>
             </RegSection>
+
             </>
             )}
 
-      {/* ---- Stage 2: verification. Sits directly under the contact details
-           so the codes are next to the fields they confirm. ---- */}
-      {!admin && stage >= 2 && (
-        <div className="card !bg-slate-50/70">
-          <h4 className="text-sm font-bold text-slate-700">Verify your email address</h4>
-          <p className="mb-3 text-xs text-slate-400">
-            We've sent a 6-digit code to <b className="text-slate-600">{form.email || "your email"}</b>.
-            Enter it below to continue. The resend button counts down the seconds until you can
-            request another.
-          </p>
-
-          {/* Email only. SMS verification is deliberately not used here: an OTP
-              that depends on an SMS gateway fails silently when the gateway is
-              down or a number is mistyped, and email is where the account's
-              login credentials are sent anyway — so it is the address that
-              actually has to be correct. The phone number is still collected,
-              just not verified by code. */}
-          <div className="max-w-md">
-            <OtpField key={`mail-${formKey}`} label="Email OTP" channel="email" hideInput
-                      autoSend={otpSendTick}
-                      value={form.email} onChange={setV("email")}
-                      onVerified={() => { setV("email_verified")(true); onVerified?.("email"); }} />
-          </div>
-
-          {form.email_verified && (
-            <p className="mt-3 rounded-lg bg-brandgreen-50 px-3 py-2 text-xs font-medium text-brandgreen-600">
-              Email verified — the rest of the form is below.
-            </p>
-          )}
-
-          <p className="mt-3 text-xs text-slate-400">
-            Not arrived? Check your spam folder, or press Resend. If the address is wrong, edit it
-            above and a new code is sent.
-          </p>
-        </div>
-      )}
     </>
   );
 }
@@ -241,11 +269,94 @@ export function RegSection({ title, children }) {
   );
 }
 
+/**
+ * Password + Confirm password, with the match state shown as you type.
+ *
+ * The mismatch message appears only once the confirm box has something in it —
+ * flagging "passwords are not matching" against an empty second field while
+ * someone is still typing the first one is noise, not help.
+ */
+export function PasswordSection({ form, setForm }) {
+  const [show, setShow] = useState(false);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const pw = form.password || "";
+  const confirm = form.confirm_password || "";
+  const tooShort = pw.length > 0 && pw.length < 6;
+  const mismatch = confirm.length > 0 && pw !== confirm;
+  const matched = pw.length >= 6 && pw === confirm;
+
+  return (
+    <div className="card">
+      <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-2">
+        <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">
+          Create your password
+        </h3>
+        <button type="button" onClick={() => setShow((v) => !v)}
+                className="flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-navy">
+          <IconEye size={13} /> {show ? "Hide" : "Show"}
+        </button>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="label">
+            Password <span className="font-semibold text-red-400">*</span>
+          </label>
+          <input className={`input ${tooShort ? "!border-red-400 !bg-red-50/40" : ""}`}
+                 type={show ? "text" : "password"} value={pw}
+                 autoComplete="new-password"
+                 placeholder="At least 6 characters"
+                 onChange={set("password")} />
+        </div>
+        <div>
+          <label className="label">
+            Confirm password <span className="font-semibold text-red-400">*</span>
+          </label>
+          <input className={`input ${mismatch ? "!border-red-400 !bg-red-50/40" : ""}
+                             ${matched ? "!border-brandgreen !bg-brandgreen-50/40" : ""}`}
+                 type={show ? "text" : "password"} value={confirm}
+                 autoComplete="new-password"
+                 placeholder="Type it again"
+                 onChange={set("confirm_password")} />
+        </div>
+      </div>
+
+      {tooShort && (
+        <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
+          Password must be at least 6 characters.
+        </p>
+      )}
+      {mismatch && (
+        <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
+          Passwords are not matching
+        </p>
+      )}
+      {matched && (
+        <p className="mt-3 flex items-center gap-1.5 rounded-lg bg-brandgreen-50 px-3 py-2
+                      text-xs font-bold text-brandgreen-600">
+          <IconCheck size={13} /> Passwords match — press Submit to finish registering.
+        </p>
+      )}
+      <p className="mt-2 text-xs text-slate-400">
+        Your User ID is your official email address. Use this password to log in on both the
+        website and the mobile app.
+      </p>
+    </div>
+  );
+}
+
 /* Empty strings -> null, so the DB stores NULL rather than "". */
 const clean = (v) => {
   const s = typeof v === "string" ? v.trim() : v;
   return s === "" || s === undefined ? null : s;
 };
+
+/* Deliberately the same shape as EMAIL_RE in backend/app/routers/auth.py.
+   A form that accepts what the API rejects leaves the user stuck with a
+   button that does nothing and no explanation. Requires a real TLD, so
+   "priya@institute" is caught here rather than at send time. */
+export const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/;
 
 /**
  * One payload builder for both the public and admin paths, so an admin-created
@@ -259,6 +370,7 @@ export function buildRegistrationPayload(role, form) {
       name: clean(form.name), email, phone: clean(form.phone),
       address1: clean(form.address1), address2: clean(form.address2),
       city: clean(form.city), district: clean(form.district), state: clean(form.state),
+      pincode: clean(form.pincode),
       country: clean(form.country) || "INDIA",
       promoter_name: clean(form.promoter_name),
       authorised_person_name: clean(form.authorised_person_name),
@@ -266,8 +378,16 @@ export function buildRegistrationPayload(role, form) {
       authorised_person_email: clean(form.authorised_person_email),
       designation: clean(form.designation), website: clean(form.website),
       logo_url: clean(form.logo_url), about: clean(form.about),
-      present_strength: form.present_strength ? Number(form.present_strength) : null,
+      total_capacity: form.total_capacity ? Number(form.total_capacity) : null,
+      current_strength: form.current_strength ? Number(form.current_strength) : null,
+      // Legacy alias the bulk-upload capacity check reads. Sent in step with
+      // current_strength so an upload is never measured against a stale number.
+      present_strength: form.current_strength ? Number(form.current_strength) : null,
       courses: form.courseList || [],
+      // confirm_password is a form-only field and is deliberately NOT sent —
+      // the server re-checks length, and shipping the same secret twice just
+      // widens what a log could leak.
+      password: (form.password || "").trim() || null,
     };
   }
   if (role === "enterprise") {
@@ -300,6 +420,22 @@ export function validateRegistration(role, form) {
     return role === "institute" ? "Institute Name is required." : "Company Name is required.";
   }
   if (!email) return "Email is required — login details are sent there.";
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return "That email address doesn't look right.";
+  if (!EMAIL_PATTERN.test(email)) return "That email address doesn't look right.";
+
+  if (role === "institute") {
+    if (!(form.authorised_person_name || "").trim()) return "Contact Person is required.";
+    if (!(form.phone || "").trim()) return "Mobile No is required.";
+    if (!String(form.total_capacity || "").trim()) return "Total Capacity is required.";
+    if (!String(form.current_strength || "").trim()) return "Current Strength is required.";
+    if (Number(form.current_strength) > Number(form.total_capacity)) {
+      return "Current Strength can't be more than Total Capacity.";
+    }
+    // Requirement 9 — the exact wording the institute is told to expect.
+    const pw = form.password || "";
+    const confirm = form.confirm_password || "";
+    if (!pw) return "Please set a password.";
+    if (pw.length < 6) return "Password must be at least 6 characters.";
+    if (pw !== confirm) return "Passwords are not matching";
+  }
   return null;
 }
