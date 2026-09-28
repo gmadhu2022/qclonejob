@@ -295,14 +295,6 @@ function ManageJobs() {
   const [editing, setEditing] = useState(null);    // job being modified
   const [original, setOriginal] = useState(null);  // pristine copy, for dirty-checking
   const [profile, setProfile] = useState(null);    // candidate profile being viewed
-  /* Ids this recruiter has already opened. Fetched once, from its own
-     endpoint, so the search response and JobSeekerOut stay untouched. */
-  const [viewedIds, setViewedIds] = useState(() => new Set());
-  useEffect(() => {
-    api.get("/api/enterprise/resumes/viewed-ids")
-      .then((r) => setViewedIds(new Set(r.ids || [])))
-      .catch(() => {});      // a missing badge is not worth breaking search over
-  }, []);
   const [tplMeta, setTplMeta] = useState([]);
   const [q, setQ] = useState("");
   /* Active by default: a closed job is history, and landing on "All" meant
@@ -1271,6 +1263,17 @@ function ResumeSearch() {
   const locBoxRef = useRef(null);
   const [rows, setRows] = useState([]);
   const [viewing, setViewing] = useState(null);      // full-page resume preview
+  /* Ids this recruiter has already opened, for the "Viewed" badge on the
+     tiles. Its own endpoint, so the search response and JobSeekerOut are
+     untouched. Declared HERE: it was previously declared in ManageJobs by
+     mistake, which left viewedIds undefined in this component — the search
+     page threw a ReferenceError and rendered blank. */
+  const [viewedIds, setViewedIds] = useState(() => new Set());
+  useEffect(() => {
+    api.get("/api/enterprise/resumes/viewed-ids")
+      .then((r) => setViewedIds(new Set(r.ids || [])))
+      .catch(() => {});      // a missing badge must never break search
+  }, []);
   const [tplMeta, setTplMeta] = useState([]);
   const [chatWith, setChatWith] = useState(null);
   const [brief, setBrief] = useState(null);
