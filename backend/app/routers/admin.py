@@ -3,9 +3,11 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
-from ..auth import require_role, hash_password, generate_password
+from ..auth import require_role, hash_password, generate_password, get_current_user
 from ..email_utils import send_credentials_email
-from .. import banner_service
+from .. import banner_service, plans
+from datetime import datetime
+from ..notifications import notify, notify_matching_seekers
 
 router = APIRouter(prefix="/api/admin", tags=["admin"],
                    dependencies=[Depends(require_role(models.ROLE_ADMIN))])
@@ -243,3 +245,94 @@ def all_banner_analytics(days: int = 14, db: Session = Depends(get_db)):
     """Platform-wide banner performance across every advertiser."""
     rows = db.query(models.Banner).all()
     return banner_service.analytics(db, rows, days=days)
+
+
+# ---------------- Job approval queue ----------------
+#
+# Recruiter postings land as "pending" and are invisible to seekers until an
+# admin clears them. Candidate alerts fire HERE, on approval, not at creation:
+# a notification cannot be recalled, so alerting everyone first and reviewing
+# afterwards would send thousands of people to a job that gets rejected.
+@router.get("/jobs/pending")
+def list_pending_jobs(current: models.User = Depends(get_current_user),
+                      db: Session = Depends(get_db)):
+    """Jobs waiting for review, oldest first — a queue, not a feed.
+
+    Oldest first on purpose: newest-first means a busy queue starves the
+    recruiter who has been waiting longest, which is the one complaint a job
+    board cannot answer.
+    """
+    rows = (db.query(models.Job)
+            .filter(models.Job.approval_status == "pending")
+            .order_by(models.Job.created_at.asc()).all())
+    out = []
+    for j in rows:
+        ent = db.query(models.Enterprise).filter_by(id=j.enterprise_id).first()
+        out.append({
+            "id": j.id, "title": j.title, "location": j.location,
+            "category": j.category, "salary": j.salary,
+            "no_of_positions": j.no_of_positions,
+            "shift": getattr(j, "shift", None),
+            "description": j.description,
+            "key_skills": j.key_skills or [],
+            "created_at": j.created_at,
+            "expires_at": j.expires_at,
+            "company": ent.name if ent else None,
+            "company_id": ent.id if ent else None,
+        })
+    return out
+
+
+@router.post("/jobs/{job_id}/approve")
+def approve_job(job_id: int, current: models.User = Depends(get_current_user),
+                db: Session = Depends(get_db)):
+    """Publish a posting and alert every matching seeker."""
+    job = db.query(models.Job).filter_by(id=job_id).first()
+    if not job:
+        raise HTTPException(404, "Job not found.")
+    if job.approval_status == "approved":
+        return {"message": "This job is already live.", "id": job.id}
+
+    job.approval_status = "approved"
+    job.approved_at = datetime.utcnow()
+    job.approved_by_user_id = current.id
+    job.approval_note = None
+    # Restart the clock at approval. A job that sat in the queue for four days
+    # would otherwise go live with four of its fifteen days already burnt,
+    # which the recruiter paid for and did not use.
+    job.expires_at = plans.job_expiry(None)
+    db.flush()
+
+    notify_matching_seekers(db, job)
+    if job.posted_by_user_id:
+        notify(db, job.posted_by_user_id, "system", "Your job is live",
+               f'"{job.title}" has been approved and is now visible to candidates.',
+               "/enterprise/manage-jobs")
+    db.commit()
+    return {"message": f'"{job.title}" is now live.', "id": job.id,
+            "expires_at": job.expires_at}
+
+
+@router.post("/jobs/{job_id}/reject")
+def reject_job(job_id: int, body: dict, current: models.User = Depends(get_current_user),
+               db: Session = Depends(get_db)):
+    """Turn a posting down, with a reason the recruiter can act on."""
+    job = db.query(models.Job).filter_by(id=job_id).first()
+    if not job:
+        raise HTTPException(404, "Job not found.")
+    reason = (body.get("note") or "").strip()
+    if not reason:
+        # A bare rejection produces a support ticket instead of a fixed posting.
+        raise HTTPException(400, "Please give a reason — the recruiter sees it "
+                                 "and needs to know what to change.")
+    job.approval_status = "rejected"
+    job.approval_note = reason
+    job.approved_at = datetime.utcnow()
+    job.approved_by_user_id = current.id
+    db.flush()
+    if job.posted_by_user_id:
+        notify(db, job.posted_by_user_id, "system", "Job not approved",
+               f'"{job.title}" was not approved: {reason}',
+               "/enterprise/manage-jobs")
+    db.commit()
+    return {"message": "Job rejected and the recruiter has been told why.", "id": job.id}

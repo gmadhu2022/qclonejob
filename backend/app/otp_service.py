@@ -33,10 +33,20 @@ def _generate() -> str:
     return f"{secrets.randbelow(1_000_000):06d}"
 
 
-def _recent(db: Session, target: str) -> models.OtpCode | None:
-    return (db.query(models.OtpCode)
-            .filter(models.OtpCode.target == target)
-            .order_by(models.OtpCode.created_at.desc()).first())
+def _recent(db: Session, target: str, purpose: str | None = None) -> models.OtpCode | None:
+    """Latest code for a target, optionally scoped to one purpose.
+
+    SCOPING IS A SECURITY BOUNDARY, NOT TIDINESS.
+    Without it, the newest row for an address wins regardless of what it was
+    issued for — and verify_code() returns True immediately for a row already
+    marked verified. Registration verifies an address and leaves exactly such
+    a row behind, so a password reset would then accept ANY six digits for
+    anyone who knew the email. Reset codes must be matched against reset rows.
+    """
+    q = db.query(models.OtpCode).filter(models.OtpCode.target == target)
+    if purpose:
+        q = q.filter(models.OtpCode.purpose == purpose)
+    return q.order_by(models.OtpCode.created_at.desc()).first()
 
 
 def _send_via_sms8(to_number: str, body: str) -> dict:
@@ -155,7 +165,10 @@ def request_code(db: Session, target: str, channel: str, purpose: str = "registe
         if "@" not in target:
             raise OtpError("Enter a valid email address.")
 
-    prev = _recent(db, target)
+    # Scoped to this purpose: the resend cooldown exists to stop someone
+    # hammering one flow, not to make a registration code ten seconds old
+    # block a password reset the user genuinely needs.
+    prev = _recent(db, target, purpose)
     if prev and (datetime.utcnow() - prev.created_at).total_seconds() < RESEND_COOLDOWN_SECONDS:
         wait = RESEND_COOLDOWN_SECONDS - int((datetime.utcnow() - prev.created_at).total_seconds())
         raise OtpError(f"Please wait {wait} seconds before requesting another code.")
@@ -202,9 +215,10 @@ def request_code(db: Session, target: str, channel: str, purpose: str = "registe
     return out
 
 
-def verify_code(db: Session, target: str, channel: str, code: str) -> bool:
+def verify_code(db: Session, target: str, channel: str, code: str,
+                purpose: str | None = None) -> bool:
     target = normalise_phone(target) if channel == "sms" else (target or "").strip().lower()
-    row = _recent(db, target)
+    row = _recent(db, target, purpose)
     if not row:
         raise OtpError("Request a code first.")
     if row.verified:
@@ -231,13 +245,14 @@ def verify_code(db: Session, target: str, channel: str, code: str) -> bool:
     return True
 
 
-def is_verified(db: Session, target: str, channel: str) -> bool:
+def is_verified(db: Session, target: str, channel: str,
+                purpose: str | None = None) -> bool:
     """Has this target been verified recently? Used at registration time."""
     try:
         target = normalise_phone(target) if channel == "sms" else (target or "").strip().lower()
     except OtpError:
         return False
-    row = _recent(db, target)
+    row = _recent(db, target, purpose)
     if not (row and row.verified):
         return False
     # Email codes don't expire (requirement 7), so a verification made an hour

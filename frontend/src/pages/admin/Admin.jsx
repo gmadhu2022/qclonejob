@@ -12,6 +12,7 @@ import { Registrations, Managers, Subscriptions } from "./AdminExtra";
 const MENU = [
   { to: "/admin", label: "Reports", icon: IconChart },
   { to: "/admin/registrations", label: "Registrations", icon: IconCheck },
+  { to: "/admin/jobs", label: "Job approvals", icon: IconBriefcase },
   { to: "/admin/add", label: "Add accounts", icon: IconBuilding },
   { to: "/admin/managers", label: "Manager users", icon: IconShield },
   { to: "/admin/subscriptions", label: "Subscriptions", icon: IconStar },
@@ -23,6 +24,7 @@ export default function Admin() {
     <DashboardLayout title="Admin" menu={MENU}>
       <Routes>
         <Route index element={<Reports />} />
+        <Route path="jobs" element={<JobApprovals />} />
         <Route path="add" element={<AddAccounts />} />
         <Route path="institutes" element={<Institutes />} />
         <Route path="enterprises" element={<Enterprises />} />
@@ -447,3 +449,139 @@ function JobSeekers() {
   );
 }
 
+
+/* ---------------------------------------------------------------------
+   Job approvals.
+
+   Recruiter postings arrive as "pending" and are invisible to seekers until
+   they clear this queue. Candidate alerts fire on approval, not on posting,
+   so approving is the moment thousands of people get notified — which is why
+   the full description is shown inline here rather than behind a click.
+   Nobody should be able to approve a job they have not actually read.
+   --------------------------------------------------------------------- */
+function JobApprovals() {
+  const toast = useToast();
+  const dialog = useDialog();
+  const [rows, setRows] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const [rejecting, setRejecting] = useState(null);   // job id showing the reason box
+  const [notes, setNotes] = useState({});
+
+  const load = () => api.get("/api/admin/jobs/pending").then(setRows).catch(() => setRows([]));
+  useEffect(() => { load(); }, []);
+
+  const approve = async (job) => {
+    setBusy(job.id);
+    try {
+      const r = await api.post(`/api/admin/jobs/${job.id}/approve`, {});
+      toast(r.message);
+      load();
+    } catch (e) { toast(e.message, "error"); }
+    finally { setBusy(null); }
+  };
+
+  /* The reason is captured inline on the card rather than in a dialog: the
+     shared Dialog has no text input, and adding one to it would change a
+     component every other screen already uses. A textarea here also lets the
+     admin re-read the posting while writing the rejection. */
+  const reject = async (job) => {
+    const note = (notes[job.id] || "").trim();
+    if (!note) return toast("A reason is required — the recruiter sees it.", "error");
+    setBusy(job.id);
+    try {
+      await api.post(`/api/admin/jobs/${job.id}/reject`, { note });
+      toast("Job rejected and the recruiter has been told why.");
+      setNotes((n) => ({ ...n, [job.id]: "" }));
+      setRejecting(null);
+      load();
+    } catch (e) { toast(e.message, "error"); }
+    finally { setBusy(null); }
+  };
+
+  if (!rows) return <p className="text-slate-400">Loading…</p>;
+
+  return (
+    <div className="max-w-4xl">
+      <h1 className="mb-1 text-xl font-semibold">Job approvals</h1>
+      <p className="mb-4 text-sm text-slate-500">
+        Postings waiting for review, oldest first. Nothing here is visible to job seekers,
+        and no candidate alerts have been sent yet — approving a job is what notifies
+        every matching candidate, so read it before you do.
+      </p>
+
+      {rows.length === 0 ? (
+        <div className="card text-center text-sm text-slate-400">
+          Nothing waiting for review.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {rows.map((j) => (
+            <div key={j.id} className="card">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="font-bold text-navy">{j.title}</h3>
+                  <p className="text-sm text-slate-500">
+                    {[j.company, j.location].filter(Boolean).join(" · ") || "—"}
+                  </p>
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    Submitted {new Date(j.created_at).toLocaleString()}
+                  </p>
+                </div>
+                <span className="badge bg-amber-100 text-amber-700">Awaiting review</span>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                {j.salary && <span className="badge bg-slate-100 text-slate-600">{j.salary}</span>}
+                {j.shift && <span className="badge bg-slate-100 text-slate-600">{j.shift}</span>}
+                {j.no_of_positions > 0 && (
+                  <span className="badge bg-slate-100 text-slate-600">
+                    {j.no_of_positions} position{j.no_of_positions === 1 ? "" : "s"}
+                  </span>
+                )}
+                {(j.key_skills || []).map((k) => (
+                  <span key={k} className="badge bg-navy-50 text-navy">{k}</span>
+                ))}
+              </div>
+
+              {j.description && (
+                <div className="mt-3 max-h-48 overflow-y-auto rounded-xl bg-slate-50 p-3
+                                text-sm leading-relaxed text-slate-600 whitespace-pre-wrap">
+                  {j.description}
+                </div>
+              )}
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button className="btn" onClick={() => approve(j)} disabled={busy === j.id}>
+                  {busy === j.id ? "Publishing…" : "Approve & notify candidates"}
+                </button>
+                <button className="btn-outline !text-red-500"
+                        onClick={() => setRejecting(rejecting === j.id ? null : j.id)}
+                        disabled={busy === j.id}>
+                  {rejecting === j.id ? "Cancel" : "Reject"}
+                </button>
+              </div>
+
+              {rejecting === j.id && (
+                <div className="mt-3 rounded-xl border border-red-200 bg-red-50/50 p-3">
+                  <label className="label">Why is this being rejected?</label>
+                  <textarea className="input !h-auto resize-none" rows={3}
+                            value={notes[j.id] || ""}
+                            placeholder="e.g. Salary range missing, and the description names a different role to the title."
+                            onChange={(e) => setNotes((n) => ({ ...n, [j.id]: e.target.value }))} />
+                  <p className="mt-1 text-xs text-slate-500">
+                    This is the whole message the recruiter receives, so be specific enough
+                    that they can fix it and resubmit.
+                  </p>
+                  <button className="btn btn-sm mt-2 !bg-red-600" onClick={() => reject(j)}
+                          disabled={busy === j.id || !(notes[j.id] || "").trim()}>
+                    {busy === j.id ? "Rejecting…" : "Send rejection"}
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -38,16 +38,16 @@ def login(form: OAuth2PasswordRequestForm = Depends(), expected_role: str | None
     """
     user = db.query(models.User).filter(models.User.email == form.username).first()
 
-    # Distinguish "no such account" from "wrong password" in the *message copy*
-    # without confirming to an attacker which emails exist — both return 401 with
-    # the same wording, but a known account gets the more helpful hint.
-    if not user:
-        raise HTTPException(status_code=401,
-                            detail="Incorrect email or password. Please check and try again.")
-    if not verify_password(form.password, user.password_hash):
-        raise HTTPException(status_code=401,
-                            detail="Incorrect password. Please try again, or use "
-                                   "'Forgot password?' to reset it.")
+    # ONE message for both failures, deliberately.
+    #
+    # The previous wording said "Incorrect password" when the account existed
+    # and "Incorrect email or password" when it didn't — which turns the login
+    # form into an account-existence oracle: try an address, read which
+    # sentence comes back, and you know whether it is registered. Identical
+    # copy on both paths closes that.
+    WRONG = "User ID or password are wrong."
+    if not user or not verify_password(form.password, user.password_hash):
+        raise HTTPException(status_code=401, detail=WRONG)
 
     # Pending / rejected self-registrations get a clear explanation instead of
     # a generic "account disabled".
@@ -142,72 +142,14 @@ def change_password(body: schemas.ChangePasswordRequest,
 
 
 # ---------------- Self-service password reset ----------------
+# NOTE: forgot_password and reset_password were each defined TWICE in this
+# file. Python kept the second definition and FastAPI logged a duplicate
+# operation-id warning, so the first copy was unreachable code that still
+# read as live when anyone came to change the reset flow. Removed.
 import secrets
 from datetime import datetime, timedelta
 from ..config import settings
 from .. import otp_service
-
-
-@router.post("/forgot-password", response_model=schemas.Message)
-def forgot_password(body: dict, db: Session = Depends(get_db)):
-    """Email a reset link. Always returns the same message so the endpoint
-    can't be used to discover which emails are registered."""
-    email = (body.get("email") or "").strip()
-    generic = {"message": "If that email is registered, a reset link has been sent to it."}
-    if not email:
-        return generic
-
-    user = db.query(models.User).filter(models.User.email == email).first()
-    if not user:
-        return generic
-
-    token = secrets.token_urlsafe(32)
-    db.add(models.PasswordResetToken(
-        user_id=user.id, token=token,
-        expires_at=datetime.utcnow() + timedelta(hours=2),
-    ))
-    db.commit()
-
-    link = f"{settings.FRONTEND_URL}/reset-password?token={token}"
-
-    if not settings.EMAIL_ENABLED:
-        # No SMTP configured, so no email will arrive — surface the link loudly
-        # in the server console instead of letting it look like nothing happened.
-        print("\n" + "!" * 74)
-        print("  PASSWORD RESET LINK  (email is OFF — set EMAIL_ENABLED=True to send it)")
-        print("!" * 74)
-        print(f"  For : {email}")
-        print(f"  Open: {link}")
-        print("!" * 74 + "\n", flush=True)
-    try:
-        send_email(
-            email, f"Reset your {settings.APP_NAME} password",
-            f"We received a request to reset your password.\n\n"
-            f"Open this link to choose a new one (valid for 2 hours):\n{link}\n\n"
-            f"If you didn't request this, you can ignore this email.",
-        )
-    except Exception:
-        pass
-    return generic
-
-
-@router.post("/reset-password", response_model=schemas.Message)
-def reset_password(body: dict, db: Session = Depends(get_db)):
-    token = (body.get("token") or "").strip()
-    new_password = body.get("new_password") or ""
-    if len(new_password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
-
-    rec = db.query(models.PasswordResetToken).filter_by(token=token, used=False).first()
-    if not rec or rec.expires_at < datetime.utcnow():
-        raise HTTPException(status_code=400, detail="This reset link is invalid or has expired.")
-
-    user = db.query(models.User).get(rec.user_id)
-    user.password_hash = hash_password(new_password)
-    user.must_change_password = False
-    rec.used = True
-    db.commit()
-    return {"message": "Password updated. You can now log in with your new password."}
 
 
 # ---------------- Forgot / reset password ----------------
@@ -302,3 +244,82 @@ def otp_verify(body: dict, db: Session = Depends(get_db)):
         return {"verified": True, "message": "Verified."}
     except otp_service.OtpError as e:
         raise HTTPException(400, str(e))
+
+
+# ---------------- CAPTCHA (public registration forms) ----------------
+@router.get("/captcha")
+def captcha_new():
+    """A fresh challenge for a registration form. No auth, no state."""
+    from .. import captcha
+    return captcha.issue()
+
+
+# ---------------- Password reset by OTP ----------------
+#
+# Replaces the emailed reset LINK for the recruiter flow. A link needs a
+# working inbox on the same device; an OTP can be read on a phone and typed on
+# a laptop, which is how most people actually recover an account.
+#
+# Three steps, each its own endpoint, because the form reveals itself one
+# block at a time and each block needs its own yes/no answer:
+#   1. check-email   does this account exist
+#   2. otp/send      (reuses the shared OTP endpoint, purpose="reset")
+#   3. reset-with-otp  code + new password, returns a token so the user lands
+#                      straight on their dashboard instead of logging in again
+@router.post("/reset/check-email")
+def reset_check_email(body: dict, db: Session = Depends(get_db)):
+    """Is this a real User ID?
+
+    DELIBERATE DISCLOSURE: unlike the login form, this confirms whether an
+    address is registered. The requirement asks for "please enter the correct
+    email id" on a wrong address, which cannot be said without revealing it.
+    The exposure is limited — an attacker learns an address exists but gets no
+    code, since that still goes to the inbox — and the alternative is sending
+    people to an OTP screen for an account that was never there.
+    """
+    email = (body.get("email") or "").strip().lower()
+    if not EMAIL_RE.match(email):
+        raise HTTPException(400, "Please enter the correct email id")
+    user = db.query(models.User).filter(models.User.email == email).first()
+    if not user:
+        raise HTTPException(400, "Please enter the correct email id")
+    if not user.is_active:
+        raise HTTPException(400, "This account isn't active yet. Please contact support.")
+    return {"ok": True, "email": email, "message": "Account found. Send yourself an OTP to continue."}
+
+
+@router.post("/reset-with-otp")
+def reset_with_otp(body: dict, db: Session = Depends(get_db)):
+    """Verify the code and set the new password, then log the user straight in."""
+    email = (body.get("email") or "").strip().lower()
+    code = (body.get("code") or "").strip()
+    new_password = body.get("new_password") or ""
+    confirm = body.get("confirm_password")
+
+    user = db.query(models.User).filter(models.User.email == email).first()
+    if not user:
+        raise HTTPException(400, "Please enter the correct email id")
+
+    # Confirm is checked in the browser too, but a mismatch that reaches here
+    # must not be silently resolved in favour of whichever field came first.
+    if confirm is not None and new_password != confirm:
+        raise HTTPException(400, "Passwords are not matching")
+    if len(new_password) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters.")
+
+    try:
+        otp_service.verify_code(db, email, "email", code, purpose="reset")
+    except otp_service.OtpError as e:
+        raise HTTPException(400, str(e))
+
+    user.password_hash = hash_password(new_password)
+    user.must_change_password = False
+    db.commit()
+
+    token = create_access_token(user)          # takes the User row, not a claims dict
+    return {
+        "message": "Password updated.",
+        "access_token": token, "token_type": "bearer",
+        "role": user.role, "email": user.email,
+        "must_change_password": False,
+    }

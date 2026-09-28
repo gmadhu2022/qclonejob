@@ -11,6 +11,7 @@ from ..job_taxonomy import taxonomy_payload, skills_for_sector, ALL_SKILLS, SKIL
 from .. import banner_service, otp_service
 
 from .auth import EMAIL_RE          # one email shape across the whole API
+from .. import captcha
 
 router = APIRouter(prefix="/api/public", tags=["public"])
 
@@ -19,29 +20,57 @@ router = APIRouter(prefix="/api/public", tags=["public"])
 def register_enterprise(body: schemas.EnterpriseRegister, db: Session = Depends(get_db)):
     """Employer self-registration. When OTP_REQUIRED is on, the mobile number and
     email must have been verified first via /api/auth/otp/verify."""
-    if settings.OTP_REQUIRED:
-        if body.phone and not otp_service.is_verified(db, body.phone, "sms"):
-            raise HTTPException(400, "Please verify your mobile number first.")
-        if not otp_service.is_verified(db, body.email, "email"):
-            raise HTTPException(400, "Please verify your email address first.")
-    if db.query(models.User).filter(models.User.email == body.email).first():
-        raise HTTPException(400, "A user with this email already exists.")
+    # Bot check first: cheapest rejection, and it runs before anything touches
+    # the database or sends mail.
+    ok, why = captcha.verify(body.captcha_token or "", body.captcha_answer or "")
+    if not ok:
+        raise HTTPException(400, why)
+
+    email = (body.email or "").strip().lower()
+    if not EMAIL_RE.match(email):
+        raise HTTPException(400, "Enter a valid email address, e.g. hr@yourcompany.com")
+
+    # Mandatory fields from the registration form. The browser checks these too,
+    # but a payload that arrives without a contact person creates an account
+    # nobody can be reached on.
+    for value, label in ((body.name, "Organisation Name"),
+                         (body.authorised_person_name, "Contact Person"),
+                         (body.phone, "Mobile Number"),
+                         (body.address1, "Address"),
+                         (body.pincode, "Pincode")):
+        if not (value or "").strip():
+            raise HTTPException(400, f"{label} is required.")
+
+    if db.query(models.User).filter(models.User.email == email).first():
+        raise HTTPException(400, "An account already exists with this email. "
+                                 "Use another address, or log in with this one.")
+    # The form sets an email_verified flag, but a flag from the browser proves
+    # nothing — the check is the OTP record on the server. (OTP_REQUIRED stays
+    # as the switch for the MOBILE code; the email one is always required now
+    # that the registration form carries a Verify OTP control.)
+    if not otp_service.is_verified(db, email, "email", purpose="register"):
+        raise HTTPException(400, "Please verify your email address with the OTP first.")
+
     password = generate_password()
-    user = models.User(email=body.email, password_hash=hash_password(password),
+    self_approve = bool(getattr(settings, "ENTERPRISE_SELF_APPROVE", True))
+    user = models.User(email=email, password_hash=hash_password(password),
                        role=models.ROLE_ENTERPRISE, must_change_password=True,
-                       is_active=False)          # activated on approval
+                       is_active=self_approve)
     db.add(user)
     db.flush()
-    ent = models.Enterprise(user_id=user.id, approval_status="pending",
-                            registration_source="self", **body.model_dump())
+    data = body.model_dump(exclude={"captcha_token", "captcha_answer"})
+    data["email"] = email
+    ent = models.Enterprise(user_id=user.id,
+                            approval_status="approved" if self_approve else "pending",
+                            registration_source="self", **data)
     db.add(ent)
     db.commit()
-    res = send_credentials_email(body.email, body.name, body.email, password)
+    res = send_credentials_email(email, body.name, email, password)
     for admin in db.query(models.User).filter(models.User.role == models.ROLE_ADMIN).all():
         notify(db, admin.id, "system", "New employer awaiting approval",
                f"{body.name} registered and needs review.", "/admin/approvals", commit=False)
     db.commit()
-    return schemas.CredentialResult(email=body.email, user_id=body.email, password=password,
+    return schemas.CredentialResult(email=email, user_id=email, password=password,
                                     status="Registered — your account is pending admin approval",
                                     email_sent=res["ok"], email_status=res["status"],
                                     email_error=res.get("error"))
@@ -75,7 +104,7 @@ def register_jobseeker(body: schemas.JobSeekerSelfRegister, db: Session = Depend
         notify(db, admin.id, "system", "New job seeker awaiting approval",
                f"{name} registered voluntarily and needs review.", "/admin/approvals", commit=False)
     db.commit()
-    return schemas.CredentialResult(email=body.email, user_id=body.email, password=password,
+    return schemas.CredentialResult(email=email, user_id=email, password=password,
                                     status="Registered — your account is pending admin approval",
                                     email_sent=res["ok"], email_status=res["status"],
                                     email_error=res.get("error"))
@@ -123,7 +152,7 @@ def register_institute(body: schemas.InstituteRegister, db: Session = Depends(ge
 
     # The email must be the one that was actually verified — otherwise the OTP
     # step can be passed with one address and the account opened on another.
-    if not otp_service.is_verified(db, email, "email"):
+    if not otp_service.is_verified(db, email, "email", purpose="register"):
         raise HTTPException(400, "Please verify your email address with the OTP first.")
 
     chosen = (body.password or "").strip()

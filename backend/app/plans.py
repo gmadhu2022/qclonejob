@@ -21,7 +21,8 @@ from . import models
 # Hard ceiling on how long a job posting stays live, regardless of plan.
 # Stale postings are the fastest way for a job board to lose seeker trust:
 # people apply, nobody answers, they stop applying.
-JOB_MAX_VALIDITY_DAYS = 20
+# A posting auto-expires 15 days after it goes live.
+JOB_MAX_VALIDITY_DAYS = 15
 
 
 def job_expiry(requested=None) -> datetime:
@@ -58,6 +59,13 @@ def live_jobs(query):
     from . import models
     return query.filter(
         models.Job.status == "active",
+        # Awaiting-review and rejected postings never reach a seeker. Enforced
+        # in this one helper rather than at each listing: a search that forgot
+        # the check would surface unreviewed jobs and look perfectly normal
+        # until someone applied to one that should never have been published.
+        # NULL is treated as approved — those rows predate the column.
+        or_(models.Job.approval_status.is_(None),
+            models.Job.approval_status == "approved"),
         or_(models.Job.expires_at.is_(None), models.Job.expires_at > datetime.utcnow()),
     )
 

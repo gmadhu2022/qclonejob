@@ -110,6 +110,15 @@ class Settings(BaseSettings):
     # holding them at "pending" until an admin approves.
     INSTITUTE_SELF_APPROVE: bool = True
 
+    # Recruiters, like institutes, are live the moment they register.
+    ENTERPRISE_SELF_APPROVE: bool = True
+
+    # Job postings go live immediately and alert matching candidates straight
+    # away. Set True to put them back behind the admin queue (the approval
+    # endpoints and the admin screen stay in place either way, so turning this
+    # on is the only change needed).
+    JOB_APPROVAL_REQUIRED: bool = False
+
     # --- Ads (Post a Ad) ---
     # Flyer artwork is cover-cropped to this, the mobile app's ad slot, so one
     # upload looks identical on every handset. 3:1 at 3x device pixels.

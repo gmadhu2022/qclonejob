@@ -17,6 +17,24 @@ import { CITIES, QUALIFICATIONS, EXPERIENCE, SHIFTS, SALARY_STEPS, formatSalary 
    institute screen looked nothing like the recruiter one. Both now render
    this component.
    ===================================================================== */
+/* Module scope, not inside PostJobForm. A component defined inside another is
+   a new type on every render, so React throws the old subtree away instead of
+   updating it. Harmless for this read-only row, but the same pattern in a
+   panel containing an input destroys the field on every keystroke — so it
+   does not belong inside a render body at all. */
+function Row({ label, value }) {
+  return (
+    <div className="flex gap-3 border-b border-slate-100 py-1.5 last:border-0">
+      <span className="w-36 shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        {label}
+      </span>
+      <span className="min-w-0 flex-1 text-sm text-slate-700">
+        {value || <span className="text-slate-300">— not set</span>}
+      </span>
+    </div>
+  );
+}
+
 export default function PostJobForm({
   /* The only difference between the recruiter and institute versions was the
      endpoint. Both take schemas.JobBase server-side, so one form serves both
@@ -55,6 +73,7 @@ export default function PostJobForm({
 
   const [jdText, setJdText] = useState("");
   const [jdOpen, setJdOpen] = useState(false);
+  const [preview, setPreview] = useState(false);   // last look before posting
 
   const parseJD = async () => {
     const r = await call("/api/ai/job/parse", { text: jdText });
@@ -132,6 +151,21 @@ export default function PostJobForm({
     toast("Draft applied — edit anything before posting.");
   };
   const submit = async () => {
+    /* The five starred fields, checked before anything is posted.
+       They were unvalidated on BOTH sides: the schema only required a title,
+       so a job could go live with no location, no skills and no description —
+       and with alerts now firing on submit, that advert reaches every matching
+       candidate before anyone notices. The server enforces the same five. */
+    const missing = [
+      [!(form.title || "").trim(), "Job Title"],
+      [!(form.location || "").trim(), "Location"],
+      [!(form.key_skills || []).length, "Skills Required"],
+      [!(form.shift || "").trim(), "Job Shift"],
+      [!(form.description || "").trim(), "Job Description"],
+    ].filter(([bad]) => bad).map(([, name]) => name);
+    if (missing.length) {
+      return toast(`Please fill in: ${missing.join(", ")}.`, "error");
+    }
     try {
       const job = await api.post(endpoint, { ...form, key_skills: form.key_skills || [] });
 
@@ -175,6 +209,47 @@ export default function PostJobForm({
   };
   return (
     <div className="w-full">
+      {preview && (
+        <div className="card mb-5 !border-navy-200 !bg-navy-50/30">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b
+                          border-navy-100 pb-2">
+            <h3 className="text-sm font-bold uppercase tracking-wide text-navy">
+              Preview — what candidates will see
+            </h3>
+            <button type="button" className="btn-outline btn-sm"
+                    onClick={() => setPreview(false)}>Close preview</button>
+          </div>
+          <h4 className="text-lg font-extrabold text-navy">
+            {form.title || "Untitled job"}
+          </h4>
+          <div className="mt-3">
+            <Row label="Location" value={form.location} />
+            <Row label="Skills required" value={(form.key_skills || []).join(", ")} />
+            <Row label="Job shift" value={form.shift} />
+            <Row label="Salary" value={form.salary
+              || [form.wage_min, form.wage_max].filter(Boolean).join(" – ")} />
+            <Row label="No of positions" value={form.no_of_positions} />
+            <Row label="Experience" value={form.experience} />
+            <Row label="Qualification" value={form.category} />
+          </div>
+          <div className="mt-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Job description
+            </p>
+            <div className="mt-1 whitespace-pre-wrap rounded-xl bg-white p-3 text-sm
+                            leading-relaxed text-slate-700">
+              {form.description || "No description written yet."}
+            </div>
+          </div>
+          {/* Named here rather than after posting: once the alerts are out, the
+              advert is in thousands of inboxes and cannot be corrected there. */}
+          <p className="mt-3 text-xs text-slate-500">
+            Anything showing “not set” will simply be missing from the advert. Close this
+            to keep editing, or Post this job when it reads the way you want.
+          </p>
+        </div>
+      )}
+
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-bold text-navy">{heading}</h2>
         {aiOn && (
@@ -240,7 +315,7 @@ export default function PostJobForm({
 
             <div><label className="label">Job code</label>
               <input className="input" value={form.job_code || ""} onChange={set("job_code")} placeholder="e.g. ELEC/001" /></div>
-            <Combobox label="Location" value={form.location} options={CITIES} onChange={setV("location")} />
+            <Combobox label="Location" required value={form.location} options={CITIES} onChange={setV("location")} />
             <Combobox label="Qualification/s" value={form.category} options={QUALIFICATIONS} onChange={setV("category")} aiField="required qualification" />
             <div><label className="label">No. of positions</label>
               <input className="input" value={form.no_of_positions || ""} onChange={set("no_of_positions")} /></div>
@@ -280,7 +355,7 @@ export default function PostJobForm({
             {/* Combobox, not a plain select: the list covers the common
                 patterns but a recruiter with an unusual one can still type it,
                 which a select would make impossible. */}
-            <Combobox label="Shift" value={form.shift} options={SHIFTS}
+            <Combobox label="Shift" required value={form.shift} options={SHIFTS}
                       onChange={(v) => setForm((f) => ({ ...f, shift: v }))}
                       placeholder="Select or type a shift" />
 
@@ -353,6 +428,12 @@ export default function PostJobForm({
             </label>
 
             <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4 sm:col-span-2 2xl:col-span-3">
+              {/* Preview before Submit. A job advert is read by thousands of
+                  people and cannot be edited in anyone's inbox once the alerts
+                  have gone out, so a last look at exactly what they'll see is
+                  worth one click. Additive — the form itself is unchanged. */}
+              <button type="button" className="btn-outline !py-3"
+                      onClick={() => setPreview(true)}>Preview</button>
               <button className="btn flex-1 !py-3" onClick={submit}>Post this job</button>
               <button className="btn-outline" onClick={() => { setForm({ contact_visible: true, key_skills: [] }); toast("Form cleared."); }}>
                 Clear

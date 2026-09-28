@@ -53,6 +53,81 @@ export default function BannerSlot({ audience = "jobseekers", slot, compact = fa
 
   const hasVisual = banner.media_url && banner.media_type !== "audio";
 
+  /* ---------------- Institute ad formats ----------------
+     A flyer and a scroller are different products, not styling variants, so
+     they get their own renderers rather than being squeezed through the
+     generic card below.
+
+     FLYER   The artwork is cover-cropped server-side to the ad slot's 3:1
+             shape. The generic card put it in a ~200px thumbnail beside a
+             title and a button, which threw away the sizing entirely and
+             showed a sliver of a designed image. Here the image IS the ad.
+
+     SCROLLER A single line that moves. The generic card rendered it as static
+             body text, so the one thing that defines the format never
+             happened. Marquee CSS lives in index.css and honours
+             prefers-reduced-motion by standing still. */
+  const format = banner.ad_format || "flyer";
+
+  if (format === "flyer" && hasVisual) {
+    return (
+      <section aria-label="Sponsored"
+        className={`no-print group relative isolate overflow-hidden rounded-2xl shadow-card
+                    ring-1 ring-black/5 ${compact ? "mb-4" : "mb-5"} ${className}`}>
+        <button onClick={click} className="block w-full text-left"
+                aria-label={banner.title || "Sponsored"}>
+          <div className="overflow-hidden" style={{ aspectRatio: "3 / 1" }}>
+            <img src={mediaUrl(banner.media_url)} alt={banner.title || ""} loading="lazy"
+                 className="h-full w-full object-cover transition-transform duration-500
+                            group-hover:scale-[1.02]" />
+          </div>
+          <span className="absolute left-3 top-3 rounded-full bg-black/45 px-2 py-0.5
+                           text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur-sm">
+            Sponsored
+          </span>
+          {banner.text_content && (
+            <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent
+                             px-4 pb-3 pt-8 text-sm font-semibold text-white">
+              <span className="line-clamp-1 block">{banner.text_content}</span>
+            </span>
+          )}
+        </button>
+        <button onClick={() => setDismissed(true)} aria-label="Dismiss ad"
+                className="absolute right-2 top-2 rounded-full bg-black/35 px-2 py-0.5 text-xs
+                           text-white/90 backdrop-blur-sm hover:bg-black/55">×</button>
+      </section>
+    );
+  }
+
+  if (format === "scroller") {
+    const text = banner.text_content || banner.title || "";
+    return (
+      <section aria-label="Sponsored"
+        className={`no-print relative isolate overflow-hidden rounded-xl bg-gradient-to-br ${t.grad}
+                    text-white shadow-card ring-1 ${t.ring} ${compact ? "mb-4" : "mb-5"} ${className}`}>
+        <div className="flex items-center gap-3 py-2.5 pl-3 pr-2">
+          <span className="shrink-0 rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold
+                           uppercase tracking-wider text-white/90">
+            Ad
+          </span>
+          {/* Duration scales with length so a long message doesn't race past
+              and a short one doesn't crawl. Hover pauses, so a reader who
+              wants the phone number can actually get it. */}
+          <button onClick={click}
+                  className="marquee min-w-0 flex-1 cursor-pointer text-left text-sm font-semibold"
+                  style={{ "--marquee-duration": `${Math.max(8, text.length / 7)}s` }}>
+            <span className="marquee-track">
+              <span className="px-6">{text}</span>
+              <span className="px-6" aria-hidden>{text}</span>
+            </span>
+          </button>
+          <button onClick={() => setDismissed(true)} aria-label="Dismiss ad"
+                  className="shrink-0 rounded-full px-1.5 text-white/60 hover:text-white">×</button>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section
       aria-label="Sponsored"

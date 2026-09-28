@@ -80,7 +80,9 @@ class EnterpriseBase(BaseModel):
     district: Optional[str] = None
     state: Optional[str] = None
     country: Optional[str] = "INDIA"
+    pincode: Optional[str] = None
     phone: Optional[str] = None
+    landline: Optional[str] = None
     promoter_name: Optional[str] = None
     authorised_person_name: Optional[str] = None
     designation: Optional[str] = None
@@ -107,6 +109,12 @@ class EnterpriseRegister(EnterpriseBase):
     logo. Registration is the one place a logo arrives with the payload.
     """
     logo_url: Optional[str] = None
+    # Bot check. Carried on the registration payload rather than validated by a
+    # separate call, so the answer is checked in the same request that creates
+    # the account — a two-step check can simply be skipped by posting straight
+    # to /register/enterprise.
+    captcha_token: Optional[str] = None
+    captcha_answer: Optional[str] = None
 
 
 # ---------- Job Seeker ----------
@@ -219,6 +227,10 @@ class JobBase(BaseModel):
 
 
 class JobOut(JobBase):
+    # Exposed so the recruiter's own listing can show "Awaiting approval"
+    # instead of a job that silently isn't visible to anyone.
+    approval_status: Optional[str] = None
+    approval_note: Optional[str] = None
     id: int
     status: str
     created_at: Any

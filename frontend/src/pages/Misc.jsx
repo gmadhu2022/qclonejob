@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
@@ -102,10 +102,18 @@ export function Register() {
   const [busy, setBusy] = useState(false);
   const [more, setMore] = useState(false);        // optional company details
   const [formKey, setFormKey] = useState(0);      // bumped on Clear to reset children
-  /* Staged registration for recruiter and institute:
+  /* Staged registration for the INSTITUTE only:
        1  contact details  ->  Register
-       2  the two OTP boxes
-       3  the rest of the form  ->  Submit                                */
+       2  the email OTP box
+       3  the rest of the form + password  ->  Submit
+
+     The recruiter form is deliberately NOT staged. Its requirements list is
+     fields -> captcha -> Register, with no OTP step, and gating it behind one
+     was actively harmful: the captcha and the Submit button both lived at
+     stage 3, so on any deployment where email isn't configured the code never
+     arrived, the recruiter never left stage 2, and registration was simply
+     impossible. A bot check that can only be reached through a working mail
+     server is not a bot check. */
   const [stage, setStage] = useState(1);
   const [otpSendTick, setOtpSendTick] = useState(0);
   const isEnt = role === "enterprise";
@@ -118,7 +126,7 @@ export function Register() {
      miserable way to find out. */
   const startVerification = async () => {
     const name = (form.name || "").trim();
-    if (!name) return toast(`${isInst ? "Institute" : "Company"} Name is required.`, "error");
+    if (!name) return toast(`${isInst ? "Institute" : "Organisation"} Name is required.`, "error");
     const email = (form.email || "").trim();
     if (!EMAIL_PATTERN.test(email)) {
       return toast("Enter a valid Official Mail address, e.g. name@institute.edu", "error");
@@ -327,11 +335,11 @@ export function Register() {
         </div>
 
         <RegistrationFields role={role} form={form} setForm={setForm} formKey={formKey}
-                            stage={isEnt || isInst ? stage : 3}
+                            stage={isInst ? stage : 3}
                             otpSendTick={otpSendTick}
                             onVerified={onOtpVerified} />
 
-        {isEnt || isInst ? (
+        {isInst ? (
           <>
             <div className="grid gap-3 sm:grid-cols-2">
               {stage === 1 ? (
@@ -394,48 +402,196 @@ export function StaticPage({ title, children }) {
 }
 
 
-export function ForgotPassword() {
-  const toast = useToast();
-  const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
-  const [busy, setBusy] = useState(false);
+/* Declared at module scope, NOT inside ForgotPassword.
+   ----------------------------------------------------
+   Defining a component inside another component creates a NEW component type
+   on every render. React compares types, sees a different one, and unmounts
+   the old subtree instead of updating it — so the input inside was destroyed
+   and recreated on each keystroke, losing focus after a single character.
+   `stage` is passed in rather than closed over, which is what let this move
+   out of the render body. */
+function Step({ stage, n, label, children }) {
+  return (
+    <div className={stage >= n ? "" : "pointer-events-none select-none opacity-40"}>
+      <div className="mb-2 flex items-center gap-2">
+        <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold
+          ${stage > n ? "bg-brandgreen-50 text-brandgreen-600"
+                      : stage === n ? "bg-navy text-white" : "bg-slate-100 text-slate-400"}`}>
+          {stage > n ? "\u2713" : n}
+        </span>
+        <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
 
-  const submit = async (e) => {
-    e.preventDefault();
-    setBusy(true);
+export function ForgotPassword() {
+  /* Reset by OTP, revealed one block at a time.
+     ------------------------------------------
+     The old screen emailed a reset LINK, which needs a working inbox on the
+     same device you're sitting at. A code can be read on a phone and typed on
+     a laptop, which is how most people actually recover an account.
+
+     Each stage unlocks the next, and none of them appear early: showing the
+     new-password boxes before the code is verified invites people to fill them
+     in and then lose the typing when the code turns out to be wrong. */
+  const toast = useToast();
+  const navigate = useNavigate();
+  const { setSession } = useAuth();
+
+  const STAGE = { EMAIL: 1, OTP: 2, PASSWORD: 3 };
+  const [stage, setStage] = useState(STAGE.EMAIL);
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [pw, setPw] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [devCode, setDevCode] = useState(null);
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (!cooldown) return;
+    const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
+
+  /* Stage 1 -> the Send OTP button. The address is checked against real
+     accounts first, so nobody waits for a code that was never sent. */
+  const checkEmail = async () => {
+    setError(null); setBusy(true);
     try {
-      const r = await api.post("/api/auth/forgot-password", { email }, { auth: false });
-      setSent(true); toast(r.message);
-    } catch (err) { toast(err.message, "error"); }
+      await api.post("/api/auth/reset/check-email", { email }, { auth: false });
+      setStage(STAGE.OTP);
+    } catch (err) { setError(err.message); }
     finally { setBusy(false); }
   };
 
-  if (sent) {
-    return (
-      <AuthShell title="Check your email" subtitle="If that address is registered, a reset link is on its way.">
-        <div className="card text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-navy-50 text-navy"><IconLock size={24} /></div>
-          <p className="mt-4 text-sm text-slate-500">
-            The link is valid for one hour. In development the email prints to the backend console.
-          </p>
-          <Link to="/login" className="btn mt-6 w-full">Back to login</Link>
-        </div>
-      </AuthShell>
-    );
-  }
+  const sendOtp = async () => {
+    setError(null); setBusy(true);
+    try {
+      const r = await api.post("/api/auth/otp/send",
+        { target: email, channel: "email", purpose: "reset" }, { auth: false });
+      setDevCode(r.dev_code || null);
+      setCooldown(30);
+      toast(r.delivery === "console"
+        ? "Code generated — check the server console (email sending isn't configured yet)."
+        : `OTP sent to ${email}.`);
+    } catch (err) { setError(err.message); toast(err.message, "error"); }
+    finally { setBusy(false); }
+  };
+
+  /* The code isn't verified on its own: a standalone check would burn the
+     code, and then the password submit would have nothing left to prove. It's
+     verified once, together with the new password, on the final submit. */
+  const finish = async () => {
+    if (pw !== confirm) { setError("Passwords are not matching"); return; }
+    if (pw.length < 6) { setError("Password must be at least 6 characters."); return; }
+    setError(null); setBusy(true);
+    try {
+      const r = await api.post("/api/auth/reset-with-otp",
+        { email, code, new_password: pw, confirm_password: confirm }, { auth: false });
+      /* Requirement 4 — straight to the dashboard. Making someone who just
+         proved ownership of the account log in again is pure friction. */
+      setSession(r);
+      toast("Password updated.");
+      navigate(`/${r.role}`, { replace: true });
+    } catch (err) { setError(err.message); }
+    finally { setBusy(false); }
+  };
+
   return (
-    <AuthShell title="Forgot your password?" subtitle="Enter your email and we'll send you a reset link.">
-      <form onSubmit={submit} className="card space-y-4">
-        <div>
-          <label className="label">Email</label>
-          <input className="input" type="email" value={email} required placeholder="you@example.com"
-                 onChange={(e) => setEmail(e.target.value)} />
-        </div>
-        <button className="btn w-full" disabled={busy}>{busy ? "Sending…" : "Send reset link"}</button>
+    <AuthShell title="Forgot your password?"
+               subtitle="Confirm your User ID, verify a code, then set a new password.">
+      <div className="card space-y-5">
+        <Step stage={stage} n={STAGE.EMAIL} label="Your User ID">
+          <div className="flex gap-2">
+            <input className={`input ${error && stage === STAGE.EMAIL ? "!border-red-400 !bg-red-50/40" : ""}`}
+                   type="email" value={email} placeholder="you@company.com"
+                   autoComplete="username" disabled={stage > STAGE.EMAIL}
+                   onChange={(e) => { setEmail(e.target.value); setError(null); }}
+                   onKeyDown={(e) => e.key === "Enter" && stage === STAGE.EMAIL && checkEmail()} />
+            {stage === STAGE.EMAIL ? (
+              <button className="btn shrink-0" onClick={checkEmail} disabled={busy || !email.trim()}>
+                {busy ? "Checking…" : "Continue"}
+              </button>
+            ) : (
+              <button className="btn-outline shrink-0"
+                      onClick={() => { setStage(STAGE.EMAIL); setCode(""); setDevCode(null); }}>
+                Change
+              </button>
+            )}
+          </div>
+          <p className="mt-1 text-xs text-slate-400">Your User ID is your registered email address.</p>
+        </Step>
+
+        {stage >= STAGE.OTP && (
+          <Step stage={stage} n={STAGE.OTP} label="Verify with OTP">
+            {!devCode && cooldown === 0 && !code ? null : null}
+            <div className="flex gap-2">
+              <input className="input tracking-[0.4em]" maxLength={6} placeholder="000000"
+                     inputMode="numeric" value={code}
+                     onChange={(e) => { setCode(e.target.value.replace(/[^0-9]/g, "")); setError(null); }} />
+              <button className="btn-outline shrink-0 whitespace-nowrap" onClick={sendOtp}
+                      disabled={busy || cooldown > 0}>
+                {cooldown > 0 ? `${cooldown}s` : "Send OTP"}
+              </button>
+            </div>
+            {code.length === 6 && stage === STAGE.OTP && (
+              <button className="btn mt-2 w-full" onClick={() => setStage(STAGE.PASSWORD)}>
+                Continue
+              </button>
+            )}
+            {devCode && (
+              <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                Development mode — your code is <b className="font-mono tracking-widest">{devCode}</b>.
+              </p>
+            )}
+            <p className="mt-1 text-xs text-slate-400">
+              Press Send OTP, then enter the 6-digit code we email you. It doesn't expire.
+            </p>
+          </Step>
+        )}
+
+        {stage >= STAGE.PASSWORD && (
+          <Step stage={stage} n={STAGE.PASSWORD} label="New password">
+            <div className="space-y-3">
+              <div>
+                <label className="label">New password</label>
+                <input className="input" type={show ? "text" : "password"} value={pw}
+                       autoComplete="new-password" placeholder="At least 6 characters"
+                       onChange={(e) => { setPw(e.target.value); setError(null); }} />
+              </div>
+              <div>
+                <label className="label">Confirm new password</label>
+                <input className={`input ${confirm && pw !== confirm ? "!border-red-400 !bg-red-50/40" : ""}
+                                   ${confirm && pw === confirm && pw.length >= 6 ? "!border-brandgreen !bg-brandgreen-50/40" : ""}`}
+                       type={show ? "text" : "password"} value={confirm}
+                       autoComplete="new-password" placeholder="Type it again"
+                       onChange={(e) => { setConfirm(e.target.value); setError(null); }} />
+              </div>
+              <label className="flex items-center gap-2 text-xs text-slate-500">
+                <input type="checkbox" checked={show} onChange={(e) => setShow(e.target.checked)} />
+                Show passwords
+              </label>
+              <button className="btn w-full" onClick={finish}
+                      disabled={busy || !pw || !confirm}>
+                {busy ? "Updating…" : "Update password & continue"}
+              </button>
+            </div>
+          </Step>
+        )}
+
+        {error && (
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">{error}</p>
+        )}
+
         <p className="text-center text-sm text-slate-500">
           Remembered it? <Link to="/login" className="font-semibold text-navy hover:underline">Log in</Link>
         </p>
-      </form>
+      </div>
     </AuthShell>
   );
 }

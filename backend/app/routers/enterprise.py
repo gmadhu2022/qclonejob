@@ -5,6 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .. import models, schemas, plans
+from ..config import settings
 from ..database import get_db
 from ..auth import require_role, get_current_user
 from .. import notify_service
@@ -136,6 +137,35 @@ def list_institutes_for_filter(db: Session = Depends(get_db)):
     return [{"id": r.id, "name": r.name, "students": r.students} for r in rows]
 
 
+# NOTE: declared before /resumes/{jobseeker_id} on purpose — FastAPI
+# matches routes in order, and a literal segment placed after the
+# parameterised one is never reached.
+@router.get("/resumes/viewed-ids")
+def viewed_resume_ids(current: models.User = Depends(get_current_user),
+                      db: Session = Depends(get_db)):
+    """Which candidates has this recruiter already opened?
+
+    A separate endpoint rather than a field on JobSeekerOut, on purpose: that
+    schema is shared with the seeker's own profile view and the public job
+    pages, and "have I viewed this" is meaningless there. One extra call keeps
+    the search response and every other consumer of JobSeekerOut unchanged.
+
+    Returns ids plus the last-viewed timestamp so the UI can say "viewed
+    3 days ago" rather than just marking it seen forever.
+    """
+    # ProfileView is keyed by the VIEWING USER, not the enterprise — one
+    # company can have several recruiter logins, and the row records who
+    # actually opened the resume (the seeker's "who viewed me" shows that).
+    _enterprise(current, db)          # role/ownership guard
+    rows = (db.query(models.ProfileView)
+            .filter(models.ProfileView.viewer_user_id == current.id).all())
+    return {
+        "ids": [r.jobseeker_id for r in rows],
+        "viewed": {str(r.jobseeker_id): (r.viewed_at.isoformat() if r.viewed_at else None)
+                   for r in rows},
+    }
+
+
 @router.get("/resumes/{jobseeker_id}", response_model=schemas.JobSeekerOut)
 def view_resume(jobseeker_id: int, action: str = "Viewed",
                 current: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -248,15 +278,46 @@ def post_job(body: schemas.JobBase, current: models.User = Depends(get_current_u
     # Enforced here, not in the UI: a frontend-only cap is one curl away from
     # being bypassed. Raises 402 with a message the UI shows verbatim.
     plans.check_job_quota(db, current)
+
+    # The five mandatory fields, enforced here and not only in the form: a
+    # browser-side check is one curl away from being bypassed, and these five
+    # are what the candidate-matching uses to decide who gets alerted. A job
+    # with no skills and no location matches badly and cannot be recalled.
+    for value, label in ((body.title, "Job Title"),
+                         (body.location, "Location"),
+                         (body.key_skills, "Skills Required"),
+                         (getattr(body, "shift", None), "Job Shift"),
+                         (body.description, "Job Description")):
+        empty = not value if isinstance(value, list) else not (value or "").strip()
+        if empty:
+            raise HTTPException(400, f"{label} is required.")
+
     data = body.model_dump()
     # Capped server-side at 20 days, so a longer date in the payload is clamped
     # rather than trusted.
     expires_at = plans.job_expiry(data.pop("expires_at", None))
+    # Postings go live immediately. JOB_APPROVAL_REQUIRED puts them back behind
+    # the admin queue without any other change — the approval endpoints and the
+    # admin screen are still there, they just have nothing to do while it's off.
+    needs_review = bool(getattr(settings, "JOB_APPROVAL_REQUIRED", False))
     job = models.Job(enterprise_id=ent.id, posted_by_user_id=current.id,
-                     expires_at=expires_at, **data)
+                     expires_at=expires_at,
+                     approval_status="pending" if needs_review else "approved",
+                     approved_at=None if needs_review else datetime.utcnow(),
+                     **data)
     db.add(job)
     db.flush()
-    notify_matching_seekers(db, job)   # job alerts
+
+    if needs_review:
+        # Alerts wait for approval: a notification cannot be recalled, so
+        # telling thousands of seekers about a job that then gets rejected
+        # sends them all to something that does not exist.
+        for admin in db.query(models.User).filter(models.User.role == models.ROLE_ADMIN).all():
+            notify(db, admin.id, "system", "Job awaiting approval",
+                   f"{ent.name} posted \"{job.title}\" and it needs review.",
+                   "/admin/jobs")
+    else:
+        notify_matching_seekers(db, job)      # job alerts, straight away
     db.commit()
     db.refresh(job)
     return job

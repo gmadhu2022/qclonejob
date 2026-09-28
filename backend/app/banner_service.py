@@ -93,6 +93,10 @@ def record(db: Session, banner: models.Banner, slot: str, kind: str = "impressio
 def serialise(b: models.Banner) -> dict:
     return {
         "id": b.id, "title": b.title, "company_name": b.company_name,
+        # WITHOUT THIS the viewer side cannot tell a flyer from a scroller:
+        # institutes were authoring two distinct ad formats and every one of
+        # them arrived at the renderer looking identical.
+        "ad_format": b.ad_format or "flyer",
         "text_content": b.text_content, "media_type": b.media_type,
         "media_url": b.media_url or b.image_url, "poster_url": b.poster_url,
         "cta_label": b.cta_label, "cta_link": b.cta_link, "theme": b.theme,
@@ -138,6 +142,7 @@ def analytics(db: Session, banners: list[models.Banner], days: int = 14) -> dict
         li, lc = b.impressions or 0, b.clicks or 0
         items.append({
             "id": b.id, "title": b.title, "company_name": b.company_name,
+            "ad_format": b.ad_format or "flyer",
             "status": b.status, "audience": b.audience, "media_type": b.media_type,
             "priority": b.priority or 0,
             "impressions": li, "clicks": lc, "ctr": ctr(li, lc),

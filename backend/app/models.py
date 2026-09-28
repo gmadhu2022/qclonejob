@@ -228,7 +228,9 @@ class Enterprise(Base):
     district = Column(String)
     state = Column(String)
     country = Column(String, default="INDIA")
-    phone = Column(String)
+    pincode = Column(String, index=True)
+    phone = Column(String)              # mobile — mandatory at registration
+    landline = Column(String)           # optional; many firms answer this one
     email = Column(String, index=True)
     promoter_name = Column(String)
     authorised_person_name = Column(String)
@@ -341,6 +343,14 @@ class Job(Base):
     contact_visible = Column(Boolean, default=True)  # recruiter can hide contact details
 
     status = Column(String, default="active", index=True)        # active | closed
+    # Recruiter postings are reviewed before they go live. Until an admin
+    # approves, the job is invisible in search AND no candidate alerts are
+    # sent — a rejected posting that has already notified ten thousand people
+    # cannot be un-notified.
+    approval_status = Column(String, default="approved", index=True)  # pending|approved|rejected
+    approval_note = Column(Text)              # why it was rejected
+    approved_at = Column(DateTime)
+    approved_by_user_id = Column(Integer, ForeignKey("users.id"))
     # A posting runs for at most JOB_MAX_VALIDITY_DAYS and then stops appearing
     # in search. Stored rather than computed so an admin can shorten a specific
     # posting without touching the global cap.

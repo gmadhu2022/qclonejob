@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { api } from "../lib/api";
 import RichText from "./RichText";
 import ImageUpload from "./ImageUpload";
 import OtpField from "./OtpField";
 import PhoneField from "./PhoneField";
 import { Field as FField, Combobox, TagInput } from "./fields";
 import SkillPicker from "./SkillPicker";
-import { IconCheck, IconEye } from "./icons";
+import { IconCheck, IconEye, IconRefresh } from "./icons";
 import { CITIES, STATES, COURSES, SKILLS } from "../lib/options";
 
 /* =====================================================================
@@ -80,11 +81,11 @@ export function RegistrationFields({
                   an explicitly shrinkable left column keeps the name wide. */}
               <div className="grid items-start gap-4 sm:col-span-2 sm:grid-cols-[minmax(0,1fr)_300px]">
                 <div className="min-w-0">
-                  <FField label={isInst ? "Institute Name" : "Company Name"} required
+                  <FField label={isInst ? "Institute Name" : "Organisation Name"} required
                           value={form.name} onChange={setV("name")}
                           placeholder={isInst ? "e.g. Coco Soft Institute" : "e.g. Campus Connect Limited"} />
                   <div className="mt-4">
-                    <FField label={isInst ? "Official Mail" : "Official Mail"} required type="email"
+                    <FField label="Official Mail" required type="email"
                             value={form.email} onChange={setV("email")}
                             placeholder="e.g. hr@yourcompany.com" />
                   </div>
@@ -103,7 +104,7 @@ export function RegistrationFields({
                 {/* Contact person sits with the contact NUMBER, because they
                     describe the same thing: who to call and on what number.
                     It was previously three sections apart. */}
-                <FField label="Contact Person" value={form.authorised_person_name}
+                <FField label="Contact Person" required value={form.authorised_person_name}
                         onChange={setV("authorised_person_name")}
                         placeholder={isInst ? "e.g. Priya Sharma, Placement Officer" : "e.g. Priya Sharma, HR Manager"} />
               </div>
@@ -112,6 +113,18 @@ export function RegistrationFields({
                 <PhoneField label="Contact Number" required value={form.phone} onChange={setV("phone")}
                             hint="Pick your country, then type the number — digits only." />
               </div>
+
+              {!isInst && (
+                <div className="sm:col-span-2">
+                  {/* Optional by design: plenty of firms answer a landline and
+                      nothing else, but requiring one would block every company
+                      that has only mobiles. */}
+                  <FField label="Land line (if any)" value={form.landline}
+                          onChange={setV("landline")}
+                          placeholder="e.g. 040-2345 6789"
+                          hint="Optional — with STD code." />
+                </div>
+              )}
 
               <FField label="Website" value={form.website} onChange={setV("website")}
                       placeholder="e.g. www.yourcompany.com" />
@@ -138,7 +151,7 @@ export function RegistrationFields({
                  It used to render last, so after verifying you were looking
                  at a "Verify your email" card sitting below the password
                  boxes it was supposed to have unlocked. ---- */}
-            {!admin && stage >= 2 && (
+            {!admin && isInst && stage >= 2 && (
               <div className="card !bg-slate-50/70">
                 <h4 className="text-sm font-bold text-slate-700">Verify your email address</h4>
                 <p className="mb-3 text-xs text-slate-400">
@@ -185,7 +198,8 @@ export function RegistrationFields({
 
             <RegSection title="Address">
               <div className="sm:col-span-2">
-                <FField label="Address line 1" value={form.address1} onChange={setV("address1")}
+                <FField label="Address line 1" required={!isInst} value={form.address1}
+                        onChange={setV("address1")}
                         placeholder="e.g. Plot 42, Kukatpally Industrial Area" />
               </div>
               <div className="sm:col-span-2">
@@ -198,7 +212,7 @@ export function RegistrationFields({
                       placeholder="e.g. Medchal-Malkajgiri" />
               <Combobox label="State" value={form.state} options={STATES} onChange={setV("state")}
                         placeholder="e.g. Telangana" />
-              <FField label="Pincode" value={form.pincode}
+              <FField label="Pincode" required={!isInst} value={form.pincode}
                       onChange={(v) => setV("pincode")(String(v).replace(/\D/g, "").slice(0, 6))}
                       placeholder="e.g. 500072" />
               <FField label="Country" value={form.country ?? "INDIA"} onChange={setV("country")}
@@ -252,6 +266,26 @@ export function RegistrationFields({
 
             </>
             )}
+
+            {/* Recruiter bot check. Outside the stage-3 block on purpose: the
+                recruiter form is a single page, and this used to be reachable
+                only after an email OTP that never arrives when mail isn't
+                configured. */}
+            {!isInst && !admin && (
+              <div className="card">
+                <h3 className="mb-4 border-b border-slate-100 pb-2 text-sm font-bold uppercase
+                               tracking-wide text-slate-500">
+                  Verify your email
+                </h3>
+                <OtpField label="Official Mail" channel="email" hideInput
+                          value={form.email}
+                          onChange={(v) => setForm((f) => ({ ...f, email: v }))}
+                          onVerified={(ok) => setForm((f) => ({ ...f, email_verified: ok }))}
+                          hint="We'll email a 6-digit code to the address above. It doesn't expire." />
+              </div>
+            )}
+
+            {!isInst && !admin && <CaptchaField form={form} setForm={setForm} />}
 
     </>
   );
@@ -402,6 +436,13 @@ export function buildRegistrationPayload(role, form) {
       gst_no: clean(form.gst_no), pan_no: clean(form.pan_no),
       about: clean(form.about), website: clean(form.website),
       logo_url: clean(form.logo_url),
+      pincode: clean(form.pincode), landline: clean(form.landline),
+      // The bot check travels with the registration itself, so it is validated
+      // in the same request that creates the account.
+      captcha_token: form.captcha_token || null,
+      captcha_answer: clean(form.captcha_answer),
+      // email_verified is form-only state; the server re-checks verification
+      // itself rather than trusting a flag the browser sent.
     };
   }
   return {
@@ -417,10 +458,19 @@ export function validateRegistration(role, form) {
   if (role === "jobseeker") {
     if (!(form.first_name || "").trim()) return "First name is required.";
   } else if (!(form.name || "").trim()) {
-    return role === "institute" ? "Institute Name is required." : "Company Name is required.";
+    return role === "institute" ? "Institute Name is required." : "Organisation Name is required.";
   }
   if (!email) return "Email is required — login details are sent there.";
   if (!EMAIL_PATTERN.test(email)) return "That email address doesn't look right.";
+
+  if (role === "enterprise") {
+    if (!(form.authorised_person_name || "").trim()) return "Contact Person is required.";
+    if (!(form.phone || "").trim()) return "Mobile Number is required.";
+    if (!(form.address1 || "").trim()) return "Address is required.";
+    if (!/^\d{6}$/.test(form.pincode || "")) return "Enter a valid 6-digit Pincode.";
+    if (!form.email_verified) return "Please verify your email with the OTP before registering.";
+    if (!(form.captcha_answer || "").trim()) return "Please answer the security check.";
+  }
 
   if (role === "institute") {
     if (!(form.authorised_person_name || "").trim()) return "Contact Person is required.";
@@ -438,4 +488,60 @@ export function validateRegistration(role, form) {
     if (pw !== confirm) return "Passwords are not matching";
   }
   return null;
+}
+
+/**
+ * The security check on the public registration forms.
+ *
+ * Self-hosted rather than reCAPTCHA: no site key to provision, no third-party
+ * script on the page, no outbound call from the backend. The sum is trivial
+ * for a person and still forces a real round trip, which is all this needs to
+ * be — bulk signups are really stopped by email verification and the admin
+ * approval queue, not by this.
+ */
+export function CaptchaField({ form, setForm }) {
+  const [challenge, setChallenge] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const c = await api.get("/api/auth/captcha", { auth: false });
+      setChallenge(c);
+      setForm((f) => ({ ...f, captcha_token: c.token, captcha_answer: "" }));
+    } catch {
+      setChallenge({ question: "Couldn't load the security check.", token: "" });
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  return (
+    <div className="card">
+      <h3 className="mb-4 border-b border-slate-100 pb-2 text-sm font-bold uppercase tracking-wide text-slate-500">
+        Security check
+      </h3>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex h-11 min-w-[170px] items-center justify-center rounded-xl border
+                        border-slate-200 bg-slate-50 px-4 font-mono text-base font-bold
+                        tracking-wide text-navy select-none">
+          {loading ? "…" : challenge?.question || "…"}
+        </div>
+        <div className="w-32">
+          <label className="label">Your answer</label>
+          <input className="input" inputMode="numeric" value={form.captcha_answer || ""}
+                 placeholder="?"
+                 onChange={(e) => setForm((f) => ({
+                   ...f, captcha_answer: e.target.value.replace(/[^0-9-]/g, "") }))} />
+        </div>
+        <button type="button" onClick={load} disabled={loading}
+                className="btn-outline btn-sm mb-0.5 flex items-center gap-1.5">
+          <IconRefresh size={13} /> New question
+        </button>
+      </div>
+      <p className="mt-2 text-xs text-slate-400">
+        This confirms you're a person. If the question is unclear, press New question for another.
+      </p>
+    </div>
+  );
 }

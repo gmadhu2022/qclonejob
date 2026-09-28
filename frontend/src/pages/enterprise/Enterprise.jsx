@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, Link } from "react-router-dom";
 import { api, getToken, mediaUrl } from "../../lib/api";
 import { DashboardLayout, StatusBadge, useToast } from "../../components/ui";
 import { useDialog, useConfirm } from "../../components/Dialog";
@@ -48,16 +48,18 @@ import { AIButton, AIResult, AIList, useAI, useAICall } from "../../components/A
 import { Combobox, TagInput } from "../../components/fields";
 import { QUALIFICATIONS, CITIES, EXPERIENCE, SHIFTS } from "../../lib/options";
 
+/* The four blocks the requirement names, plus the Dashboard they sit on.
+   Manage jobs, Applications, Post an Ad, Messages and billing-as-"Plan" are
+   OFF the menu but still routed: jobs already posted have to stay reachable,
+   an application notification deep-links to /enterprise/applications, and
+   dropping those routes would turn every one of those links into a 404. They
+   are reachable from the Dashboard cards below. */
 const MENU = [
   { to: "/enterprise", label: "Dashboard", icon: IconChart },
-  { to: "/enterprise/profile", label: "Company profile", icon: IconBuilding },
-  { to: "/enterprise/resumes", label: "Resume search", icon: IconSearch },
-  { to: "/enterprise/post-job", label: "Post a job", icon: IconBriefcase },
-  { to: "/enterprise/manage-jobs", label: "Manage jobs", icon: IconLayers },
-  { to: "/enterprise/applications", label: "Applications", icon: IconClipboard },
-  { to: "/enterprise/ads", label: "Post an Ad", icon: IconSparkle },
-  { to: "/enterprise/messages", label: "Messages", icon: IconChat, badge: true },
-  { to: "/enterprise/billing", label: "Plan & billing", icon: IconStar },
+  { to: "/enterprise/profile", label: "Profile", icon: IconBuilding },
+  { to: "/enterprise/resumes", label: "Search candidates", icon: IconSearch },
+  { to: "/enterprise/post-job", label: "Post a Job", icon: IconBriefcase },
+  { to: "/enterprise/billing", label: "Subscribe", icon: IconStar },
 ];
 
 const STATUSES = ["Applied", "Under Review", "Shortlisted", "Rejected", "Selected"];
@@ -131,6 +133,43 @@ function Overview() {
     <div className="space-y-6">
       <BannerSlot audience="recruiters" compact />
 
+      {/* The four blocks the requirement names, on the Dashboard itself and
+          not only in the sidebar. The secondary row keeps Manage jobs,
+          Applications, Post an Ad and Messages reachable: they came off the
+          menu, but jobs already posted and application notifications still
+          have to lead somewhere. */}
+      <div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <Block to="/enterprise/profile" icon={IconBuilding} title="Profile"
+                 body="Your logo, website and the description candidates see." />
+          <Block to="/enterprise/resumes" icon={IconSearch} title="Search candidates"
+                 body="Find people by skill and location across every registered profile." />
+          <Block to="/enterprise/post-job" icon={IconBriefcase} title="Post a Job"
+                 body="Publish a role and start collecting applications." />
+          <Block to="/enterprise/billing" icon={IconStar} title="Subscribe"
+                 body="Your plan, quotas and invoices." />
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {[["/enterprise/manage-jobs", "Manage jobs", d.jobs_total],
+            ["/enterprise/applications", "Applications", d.applications],
+            ["/enterprise/ads", "Post an Ad", null],
+            ["/enterprise/messages", "Messages", null]].map(([to, label, count]) => (
+            <Link key={to} to={to}
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white
+                             px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors
+                             hover:border-navy-200 hover:bg-navy-50 hover:text-navy">
+              {label}
+              {count != null && count > 0 && (
+                <span className="rounded-full bg-slate-100 px-1.5 text-[10px] font-bold text-slate-500">
+                  {count}
+                </span>
+              )}
+            </Link>
+          ))}
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <Stat label="Jobs posted" value={d.jobs_total} tone="navy" icon={IconBriefcase} />
         <Stat label="Active jobs" value={d.jobs_active} tone="green" icon={IconCheck} />
@@ -193,6 +232,24 @@ const STAT_TONES = {
   amber:  { ring: "bg-amber-50 text-amber-600",            text: "text-amber-600" },
 };
 
+/* A Dashboard block: one destination, named, with a line saying what it's for.
+   Four bare links would have been shorter, but this is the first screen a new
+   recruiter sees and "Subscribe" on its own doesn't tell anyone what it does. */
+function Block({ to, icon: Icon, title, body }) {
+  return (
+    <Link to={to}
+          className="group flex flex-col rounded-xl border border-slate-200 bg-white p-4
+                     transition-all hover:-translate-y-0.5 hover:border-navy-200 hover:shadow-md">
+      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-navy-50 text-navy
+                       transition-colors group-hover:bg-navy group-hover:text-white">
+        {Icon && <Icon size={17} />}
+      </span>
+      <span className="mt-3 font-bold text-slate-700 group-hover:text-navy">{title}</span>
+      <span className="mt-1 text-xs leading-relaxed text-slate-400">{body}</span>
+    </Link>
+  );
+}
+
 function Stat({ label, value, tone = "navy", icon: Icon, hint }) {
   const t = STAT_TONES[tone] || STAT_TONES.navy;
   return (
@@ -238,6 +295,14 @@ function ManageJobs() {
   const [editing, setEditing] = useState(null);    // job being modified
   const [original, setOriginal] = useState(null);  // pristine copy, for dirty-checking
   const [profile, setProfile] = useState(null);    // candidate profile being viewed
+  /* Ids this recruiter has already opened. Fetched once, from its own
+     endpoint, so the search response and JobSeekerOut stay untouched. */
+  const [viewedIds, setViewedIds] = useState(() => new Set());
+  useEffect(() => {
+    api.get("/api/enterprise/resumes/viewed-ids")
+      .then((r) => setViewedIds(new Set(r.ids || [])))
+      .catch(() => {});      // a missing badge is not worth breaking search over
+  }, []);
   const [tplMeta, setTplMeta] = useState([]);
   const [q, setQ] = useState("");
   /* Active by default: a closed job is history, and landing on "All" meant
@@ -597,9 +662,16 @@ function ManageJobs() {
     );
   }
 
-  const filtered = jobs
+  const matching = jobs
     .filter((j) => j.status === tab)
     .filter((j) => !q || `${j.title} ${j.location} ${(j.key_skills || []).join(" ")}`.toLowerCase().includes(q.toLowerCase()));
+  /* Each tab shows at most ten. Read as a DISPLAY cap, not a posting cap:
+     capping how many jobs a recruiter may have live would contradict the paid
+     plans (25 and 100 jobs), so nothing is blocked — the rest are reachable by
+     searching, and the count below says how many are hidden. */
+  const TAB_LIMIT = 10;
+  const filtered = matching.slice(0, TAB_LIMIT);
+  const hiddenCount = Math.max(0, matching.length - TAB_LIMIT);
   const counts = { active: jobs.filter((j) => j.status === "active").length,
                    closed: jobs.filter((j) => j.status === "closed").length };
 
@@ -696,6 +768,24 @@ function ManageJobs() {
                       <td>
                         <button className="font-semibold text-navy hover:underline"
                                 onClick={() => openEdit(j.id)}>{j.title}</button>
+                      {/* Without this a pending job looks identical to a live
+                          one in the recruiter's own list, so "why is nobody
+                          applying" has no answer on screen. */}
+                      {j.approval_status === "pending" && (
+                        <span className="badge ml-2 bg-amber-100 text-amber-700">
+                          Awaiting approval
+                        </span>
+                      )}
+                      {j.approval_status === "rejected" && (
+                        <>
+                          <span className="badge ml-2 bg-red-100 text-red-700">Not approved</span>
+                          {j.approval_note && (
+                            <p className="mt-1 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs text-red-600">
+                              {j.approval_note}
+                            </p>
+                          )}
+                        </>
+                      )}
                         <div className="text-[11px] text-slate-400">{j.job_code || "no code"}</div>
                       </td>
                       <td className="text-slate-500">{j.location || "—"}</td>
@@ -712,7 +802,13 @@ function ManageJobs() {
                       </td>
                     </tr>
                   ))}
-                  {filtered.length === 0 && (
+                  {hiddenCount > 0 && (
+              <p className="pt-1 text-center text-xs text-slate-400">
+                Showing the {TAB_LIMIT} most recent of {matching.length}. Search above to
+                find any of the other {hiddenCount}.
+              </p>
+            )}
+            {filtered.length === 0 && (
                     <tr><td colSpan={5} className="py-10 text-center text-slate-400">No jobs match.</td></tr>
                   )}
                 </tbody>
@@ -789,6 +885,12 @@ function ManageJobs() {
                 </div>
               </div>
             ))}
+            {hiddenCount > 0 && (
+              <p className="pt-1 text-center text-xs text-slate-400">
+                Showing the {TAB_LIMIT} most recent of {matching.length}. Search above to
+                find any of the other {hiddenCount}.
+              </p>
+            )}
             {filtered.length === 0 && (
               <div className="card col-span-full text-center text-slate-400">
                 {q ? "No jobs match your search."
@@ -963,6 +1065,17 @@ function Profile() {
   const view = edit ? draft : p;
   const location = [view.city, view.state, view.country].filter(Boolean).join(", ");
 
+  /* Requirement 6 — "even a single letter update" has to arm Save.
+     Comparing the draft against the loaded profile field by field means one
+     typed character in About, a new website, or a freshly uploaded logo all
+     enable the button, and closing the edit with nothing changed doesn't fire
+     a pointless PUT. JSON.stringify is enough here: these are flat scalar
+     fields, no dates, no key-order surprises. */
+  const dirtyFields = edit && draft
+    ? Object.keys(draft).filter((k) => JSON.stringify(draft[k] ?? "") !== JSON.stringify(p?.[k] ?? ""))
+    : [];
+  const isDirty = dirtyFields.length > 0;
+
   return (
     <div className="max-w-5xl space-y-5">
       {/* ---------------- banner ---------------- */}
@@ -995,7 +1108,9 @@ function Profile() {
           {edit ? (
             <div className="flex shrink-0 gap-2">
               <button className="rounded-lg bg-white px-4 py-2 text-sm font-bold text-navy hover:bg-white/90 disabled:opacity-60"
-                      onClick={save} disabled={saving}>{saving ? "Saving…" : "Save profile"}</button>
+                      onClick={save} disabled={saving || !isDirty}
+                      title={isDirty ? "Save your changes" : "Nothing has changed yet"}>
+                {saving ? "Saving…" : isDirty ? "Save changes" : "Saved"}</button>
               <button className="rounded-lg border border-white/25 px-4 py-2 text-sm font-semibold hover:bg-white/10"
                       onClick={cancelEdit} disabled={saving}>Cancel</button>
             </div>
@@ -1069,8 +1184,15 @@ function Profile() {
           <div className="sticky bottom-0 flex items-center gap-3 border-t border-slate-200 bg-white/95 py-3 backdrop-blur">
             <span className="text-sm text-slate-500">Changes aren't saved until you press Save.</span>
             <div className="flex-1" />
+            {isDirty && (
+              <span className="mr-auto flex items-center gap-1.5 text-xs font-semibold text-amber-600">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                {dirtyFields.length} unsaved change{dirtyFields.length === 1 ? "" : "s"}
+              </span>
+            )}
             <button className="btn-outline" onClick={cancelEdit} disabled={saving}>Cancel</button>
-            <button className="btn !px-8" onClick={save} disabled={saving}>
+            <button className="btn !px-8" onClick={save} disabled={saving || !isDirty}
+                    title={isDirty ? "Save your changes" : "Nothing has changed yet"}>
               {saving ? "Saving…" : "Save profile"}
             </button>
           </div>
@@ -1235,6 +1357,9 @@ function ResumeSearch() {
       const full = await api.get(`/api/enterprise/resumes/${id}?action=${action}`);
       setBrief(null);            // resume view shows ONLY the resume
       setViewing(full);
+      // Mark it locally too, so the badge appears the moment they go back
+      // instead of only after the next search.
+      setViewedIds((prev) => new Set(prev).add(id));
       if (!tplMeta.length) {
         // template metadata drives which layout to render
         const t = await api.get("/api/jobseeker/templates").catch(() => null);
@@ -1303,7 +1428,7 @@ function ResumeSearch() {
                  onFocus={() => setSuggestOpen(true)}
                  onBlur={() => setTimeout(() => setSuggestOpen(false), 150)}
                  onKeyDown={(e) => e.key === "Enter" && search()}
-                 placeholder="Type a skill — results update as you type. Separate several with commas." />
+                 placeholder="Add skills" />
 
           {suggestOpen && suggestions.length > 0 && (
             <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-xl
@@ -1331,7 +1456,7 @@ function ResumeSearch() {
                  onFocus={() => setLocOpen(true)}
                  onKeyDown={(e) => { if (e.key === "Enter") { setLocOpen(false); search(); } }}
                  className="w-full bg-transparent px-3 py-2.5 text-sm outline-none"
-                 placeholder="Location — any city" />
+                 placeholder="Location" />
 
           {location && (
             <button type="button" onClick={() => { setLocation(""); setLocOpen(false); }}
@@ -1525,9 +1650,26 @@ function ResumeSearch() {
                 <p className="truncate font-bold text-slate-800">
                   {`${s.first_name || ""} ${s.last_name || ""}`.trim() || s.email}
                 </p>
-                <p className="truncate text-xs text-slate-500">{s.headline || s.location || "—"}</p>
+                {/* Location is a required tile detail, so it gets its own
+                    line. It used to share one line with the headline via
+                    `headline || location`, which meant every candidate who
+                    had written a headline showed no location at all. */}
+                <p className="truncate text-xs text-slate-500">{s.headline || "—"}</p>
+                <p className="truncate text-[11px] text-slate-400">
+                  {[s.city, s.state].filter(Boolean).join(", ") || s.location || "Location not given"}
+                </p>
               </div>
             </div>
+            {/* Requirement: some identification for already-viewed profiles.
+                A quiet badge, not a dimmed card — a recruiter often revisits a
+                shortlisted candidate on purpose, and greying those out would
+                read as "dismissed". */}
+            {viewedIds.has(s.id) && (
+              <span className="mt-2 inline-flex w-fit items-center gap-1 rounded-full
+                               bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-600">
+                <IconEye size={11} /> Viewed
+              </span>
+            )}
             <div className="mt-3 flex flex-wrap gap-1.5">
               {(s.key_skills || []).slice(0, 5).map((k) => (
                 <span key={k} className="badge bg-slate-100 text-slate-600">{k}</span>
@@ -1861,7 +2003,35 @@ function PostBanner() {
   const [uploading, setUploading] = useState(false);
   const [copy, setCopy] = useState(null);
   const [view, setView] = useState("create");
+  const [myJobs, setMyJobs] = useState([]);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+
+  /* Advertise one of your own live jobs.
+     The requirement is a flyer for a job posting carrying a hyperlink to
+     apply. Typing the title, the message and then the job's URL by hand is
+     three chances to advertise job #41 with a link to job #14 — so the job
+     is picked from a list and the link is built from its id. */
+  useEffect(() => {
+    api.get("/api/enterprise/jobs")
+      .then((rows) => setMyJobs((rows || []).filter((j) => j.status === "active")))
+      .catch(() => {});
+  }, []);
+
+  const useJob = (jobId) => {
+    const j = myJobs.find((x) => String(x.id) === String(jobId));
+    if (!j) return;
+    setForm((f) => ({
+      ...f,
+      title: j.title,
+      text_content: [j.location, j.salary, (j.key_skills || []).slice(0, 3).join(", ")]
+        .filter(Boolean).join(" · "),
+      cta_label: "Apply now",
+      // Absolute, because the banner is rendered inside the mobile app too,
+      // where a bare "/jobs/41" resolves against nothing.
+      cta_link: `${window.location.origin}/jobs/${j.id}`,
+      job_id: j.id,
+    }));
+  };
 
   const load = () => api.get("/api/enterprise/banners").then(setMine).catch(() => {});
   useEffect(() => { load(); }, []);
@@ -2025,6 +2195,23 @@ function PostBanner() {
           )}
         </div>
         <div className="mt-3 grid gap-4 sm:grid-cols-2">
+          {myJobs.length > 0 && (
+            <div className="sm:col-span-2 2xl:col-span-3">
+              <label className="label">Advertise one of your live jobs (optional)</label>
+              <select className="input" value={form.job_id || ""}
+                      onChange={(e) => useJob(e.target.value)}>
+                <option value="">Choose a job — fills the title, message and apply link</option>
+                {myJobs.map((j) => (
+                  <option key={j.id} value={j.id}>
+                    {j.title}{j.location ? ` — ${j.location}` : ""}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-slate-400">
+                Everything below stays editable; the apply link points at that job.
+              </p>
+            </div>
+          )}
           <div className="sm:col-span-2 2xl:col-span-3"><label className="label">Banner title</label>
             <input className="input" value={form.title || ""} onChange={set("title")} placeholder="e.g. Walk-in drive this Sunday" /></div>
           <div className="sm:col-span-2 2xl:col-span-3"><label className="label">Message</label>
