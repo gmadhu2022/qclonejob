@@ -9,16 +9,49 @@ import { IconCheck, IconEye, IconSparkle, IconUserPlus } from "../components/ico
 
 const ROLE_HOME = { admin: "/admin", enterprise: "/enterprise", institute: "/institute", jobseeker: "/jobseeker" };
 
-const DEFAULT_COPY = {
-  badge: "One account, every opportunity",
-  title: "Welcome back",
-  sub: "Sign in once — we'll take you to your workspace.",
-  points: [
-    "Apply to jobs with a resume built for you",
-    "Track every application from applied to hired",
-    "See which recruiters viewed your profile",
-    "Employers and institutes: post roles and place students",
-  ],
+/* Three portals, and only three. Admin is deliberately NOT here: an admin
+   signs in through whichever of these they like and the server lets them
+   through, so there is no fourth button advertising that an admin portal
+   exists to anyone who happens to look at the login page. */
+const ROLES = [
+  { key: "jobseeker",  label: "Job Seeker" },
+  { key: "enterprise", label: "Recruiter" },
+  { key: "institute",  label: "Institute" },
+];
+
+/* The panel speaks to whoever is actually signing in. One generic blurb for
+   three different audiences says nothing useful to any of them. */
+const COPY = {
+  jobseeker: {
+    title: "Your next job starts here",
+    sub: "Sign in to apply, track every application and see who viewed you.",
+    points: [
+      "Apply with a resume built for you",
+      "Track every application from applied to hired",
+      "See which recruiters viewed your profile",
+      "Get matched to jobs that fit your skills",
+    ],
+  },
+  enterprise: {
+    title: "Hire faster, hire better",
+    sub: "Sign in to post roles and search candidates.",
+    points: [
+      "Post a job and reach matching candidates instantly",
+      "Search resumes by skill, location and education",
+      "Manage every applicant in one inbox",
+      "Advertise openings across the platform",
+    ],
+  },
+  institute: {
+    title: "Place your students",
+    sub: "Sign in to manage courses, students and placements.",
+    points: [
+      "Upload your students in one spreadsheet",
+      "Track course-wise seats, strength and placements",
+      "Advertise admissions to job seekers",
+      "Keep every campus and course in one place",
+    ],
+  },
 };
 
 export default function Login() {
@@ -28,23 +61,31 @@ export default function Login() {
   const navigate = useNavigate();
 
 
+  /* Remembered, because almost nobody changes which portal they belong to.
+     An institute that has to re-pick "Institute" on every visit will
+     eventually mis-click and be told their credentials are wrong. */
+  const [role, setRole] = useState(() => localStorage.getItem("hire_login_role") || "jobseeker");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
-  // One page for everyone, so one set of copy.
-  const copy = DEFAULT_COPY;
+  const copy = COPY[role] || COPY.jobseeker;
+
+  const pickRole = (key) => {
+    setRole(key);
+    localStorage.setItem("hire_login_role", key);
+  };
 
 
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true);
     try {
-      /* No expected_role. One sign-in box for everyone: the server
-         authenticates the credentials and tells us which portal they belong
-         to, and we route there. Asking people to pick their own account type
-         before signing in only creates a way to get it wrong. */
-      const data = await login(email.trim(), password);
+      /* The chosen portal is sent as expected_role. The server refuses
+         credentials belonging to a different portal — and lets ADMIN through
+         whichever one is selected, so an admin never has to hunt for a
+         special sign-in page. */
+      const data = await login(email.trim(), password, role);
       navigate(data.must_change_password ? "/change-password" : (ROLE_HOME[data.role] || "/"), { replace: true });
     } catch (err) {
       const m = err.message || "";
@@ -53,6 +94,31 @@ export default function Login() {
         // build could still return it — say something useful rather than
         // pointing at a role picker that isn't there any more.
         dialog({ tone: "error", title: "Sign-in failed", message: m, confirmLabel: "Close" });
+      } else if (/You selected the .* login, but these credentials belong to/i.test(m)) {
+        /* The single most common sign-in mistake once there are three portals.
+           It is NOT a credentials problem, so it must not look like one —
+           otherwise people "fix" it by resetting a perfectly good password.
+           The dialog offers the switch as an action rather than asking them
+           to find the right button themselves. */
+        /* Read the ACTUAL account type out of the message rather than
+           searching it for any known label. A plain `find` matches whichever
+           label appears first in the sentence — and the first one is the
+           portal they already chose, so "selected Job Seeker, actually
+           Institute" would have offered to switch them to Job Seeker, the
+           very thing that just failed. */
+        const actual = m.match(/belong to an? (.+?) account/i)?.[1]?.trim();
+        const target = ROLES.find((r) => r.label.toLowerCase() === (actual || "").toLowerCase());
+        dialog({
+          tone: "error",
+          title: "Wrong login selected",
+          message: m,
+          note: "Your email and password are fine — only the account type above is wrong.",
+          noteTone: "info",
+          ...(target
+            ? { confirmLabel: `Switch to ${target.label}`,
+                onConfirm: () => pickRole(target.key) }
+            : { confirmLabel: "Close" }),
+        });
       } else if (/awaiting admin approval/i.test(m)) {
         dialog({ tone: "info", title: "Account pending approval", message: m,
                  confirmLabel: "Got it" });
@@ -129,7 +195,29 @@ export default function Login() {
             </p>
           </div>
 
-          <form onSubmit={submit} className="animate-in delay-2 mt-6 space-y-3.5">
+          {/* Portal picker. Segmented rather than a dropdown so all three are
+              visible at once — a closed <select> hides the fact that you are
+              about to sign in as the wrong one. */}
+          <div className="animate-in delay-1 mt-6">
+            <span className="label">I'm signing in as</span>
+            <div role="radiogroup" aria-label="Account type"
+                 className="grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+              {ROLES.map((r) => {
+                const active = role === r.key;
+                return (
+                  <button key={r.key} type="button" role="radio" aria-checked={active}
+                          onClick={() => pickRole(r.key)}
+                          className={`rounded-lg px-2 py-2 text-[12.5px] font-semibold transition-all
+                            ${active ? "bg-white text-navy shadow-card"
+                                     : "text-slate-500 hover:text-navy"}`}>
+                    {r.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <form onSubmit={submit} className="animate-in delay-2 mt-4 space-y-3.5">
             <Field label="Email (User ID)" type="email" value={email} onChange={setEmail} required autoComplete="username"
                    placeholder="e.g. admin@institute.edu"
                    hint="Your official email address is your User ID on every portal." />

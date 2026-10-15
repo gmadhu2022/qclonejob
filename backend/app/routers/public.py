@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from .. import models, schemas, plans
@@ -273,9 +274,74 @@ def public_stats(db: Session = Depends(get_db)):
 
 
 @router.get("/jobs")
-def public_jobs(limit: int = 6, db: Session = Depends(get_db)):
-    """A few latest jobs to showcase on the home page (no login required)."""
-    rows = plans.live_jobs(db.query(models.Job)).order_by(
-        models.Job.created_at.desc()).limit(limit).all()
-    return [{"id": j.id, "title": j.title, "location": j.location, "category": j.category,
-             "experience": j.experience, "key_skills": j.key_skills} for j in rows]
+def public_jobs(limit: int = 12, q: str | None = None, location: str | None = None,
+                db: Session = Depends(get_db)):
+    """Live jobs for the logged-out home page.
+
+    Hand-built rather than JobOut because this is the only unauthenticated job
+    feed: recruiter_name / phone / email must never appear here, and returning
+    the schema would leak them the first time someone added a field to it.
+    Everything below is already public on the job's own page.
+
+    Applicant counts come from ONE grouped query, not a count per job. Twelve
+    cards would otherwise be twelve extra round trips on the busiest
+    unauthenticated page on the site.
+    """
+    from sqlalchemy import func
+
+    query = plans.live_jobs(db.query(models.Job))
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        query = query.filter(or_(models.Job.title.ilike(like),
+                                 models.Job.category.ilike(like),
+                                 models.Job.description.ilike(like)))
+    if location and location.strip():
+        query = query.filter(models.Job.location.ilike(f"%{location.strip()}%"))
+
+    rows = (query.order_by(models.Job.created_at.desc())
+            .limit(min(max(1, limit), 50)).all())
+    if not rows:
+        return []
+
+    ids = [j.id for j in rows]
+    counts = dict(db.query(models.Application.job_id, func.count(models.Application.id))
+                  .filter(models.Application.job_id.in_(ids))
+                  .group_by(models.Application.job_id).all())
+
+    def pay(j):
+        """One salary string from whichever of the three shapes was filled in."""
+        if j.salary:
+            return j.salary
+        lo, hi = (j.wage_min or "").strip(), (j.wage_max or "").strip()
+        basis = f" / {j.wage_basis}" if j.wage_basis else ""
+        if lo and hi:
+            return f"{lo} - {hi}{basis}"
+        if lo or hi:
+            return f"{lo or hi}{basis}"
+        return None
+
+    out = []
+    for j in rows:
+        applicants = counts.get(j.id, 0)
+        out.append({
+            "id": j.id, "title": j.title, "location": j.location,
+            "category": j.category, "experience": j.experience,
+            "key_skills": j.key_skills, "salary": pay(j),
+            "job_type": j.job_type, "shift": j.shift,
+            "education_level": j.education_level,
+            "no_of_positions": j.no_of_positions,
+            "is_urgent": bool(j.is_urgent),
+            "accommodation": bool(j.accommodation),
+            "food_provided": bool(j.food_provided),
+            "description": (j.description or "")[:300],
+            "created_at": j.created_at,
+            "applicants": applicants,
+            # "Be an early applicant", as the competing portals show it. Decided
+            # here rather than in the browser because the cut-off is a product
+            # decision and the mobile app must get the same answer.
+            "early_applicant": applicants < 10,
+            "company_name": j.company_name,
+            "company_logo_url": j.company_logo_url,
+            "company_location": j.company_location,
+        })
+    return out

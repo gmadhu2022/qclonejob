@@ -23,7 +23,11 @@ import re
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$")
 
 
-ROLE_LABEL = {"admin": "Admin", "manager": "Manager", "enterprise": "Recruiter / Enterprise",
+# These strings are shown to the user AND are the labels on the login page's
+# three portal buttons. They must match exactly: telling someone to "switch to
+# Recruiter / Enterprise" when the button reads "Recruiter" is a small thing
+# that makes a product feel unfinished.
+ROLE_LABEL = {"admin": "Admin", "manager": "Manager", "enterprise": "Recruiter",
               "institute": "Institute", "jobseeker": "Job Seeker"}
 
 
@@ -68,11 +72,15 @@ def login(form: OAuth2PasswordRequestForm = Depends(), expected_role: str | None
                             detail="This account is disabled. Please contact support@qclonejob.com.")
     # Portal lock — admins may use any portal, everyone else is held to theirs.
     if expected_role and user.role != expected_role and user.role != models.ROLE_ADMIN:
+        chose = ROLE_LABEL.get(expected_role, expected_role)
+        actual = ROLE_LABEL.get(user.role, user.role)
+        # Name BOTH roles and the exact next action. "Wrong portal" on its own
+        # leaves someone guessing which of the other two they belong to, and
+        # they usually conclude their password is wrong and reset it.
         raise HTTPException(
             status_code=403,
-            detail=(f"These are {ROLE_LABEL.get(user.role, user.role)} credentials. "
-                    f"Please use the {ROLE_LABEL.get(expected_role, expected_role)} "
-                    f"login page, or switch the role above."),
+            detail=(f"You selected the {chose} login, but these credentials belong to "
+                    f"a {actual} account. Switch to {actual} above and sign in again."),
         )
 
     token = create_access_token(user)

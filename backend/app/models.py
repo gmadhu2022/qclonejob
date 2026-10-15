@@ -372,7 +372,45 @@ class Job(Base):
     vacancies_filled = Column(Integer, default=0)
 
     enterprise = relationship("Enterprise", back_populates="jobs")
+    institute = relationship("Institute", foreign_keys=[institute_id])
     applications = relationship("Application", back_populates="job")
+
+    # --- Employer branding, read straight off the posting ------------------
+    #
+    # Every job listing on every competing portal leads with the company's
+    # name and logo — it is the first thing a seeker uses to decide whether a
+    # card is worth reading. Those lived only on the Enterprise/Institute row,
+    # so the job feed had no way to show them and the cards were text-only.
+    #
+    # Properties rather than stored columns: a company that changes its name
+    # or uploads a new logo must not leave every job it ever posted showing
+    # the old one. Pydantic's from_attributes reads properties, so adding them
+    # here surfaces the fields on JobOut everywhere it is already used — the
+    # seeker feed, recommendations, saved jobs and the public pages — with no
+    # endpoint changes and nothing to miss.
+    @property
+    def company_name(self) -> str | None:
+        if self.enterprise is not None:
+            return self.enterprise.name
+        if self.institute is not None:
+            return self.institute.name
+        return None
+
+    @property
+    def company_logo_url(self) -> str | None:
+        if self.enterprise is not None:
+            return self.enterprise.logo_url
+        if self.institute is not None:
+            return self.institute.logo_url
+        return None
+
+    @property
+    def company_location(self) -> str | None:
+        """Where the employer is based, for when the job itself omits it."""
+        src = self.enterprise or self.institute
+        if src is None:
+            return None
+        return ", ".join([x for x in (src.city, src.state) if x]) or None
 
 
 class Application(Base):

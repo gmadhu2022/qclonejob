@@ -13,8 +13,8 @@ import { RegistrationFields, buildRegistrationPayload, validateRegistration, EMA
 function AuthShell({ title, subtitle, children, wide }) {
   const navigate = useNavigate();
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50">
-      <header className="border-b border-slate-100 bg-white px-6 py-3">
+    <div className="flex min-h-screen flex-col bg-neutral-50">
+      <header className="sticky top-0 z-50 border-b border-neutral-200 bg-white px-6 py-4">
         <div className="mx-auto max-w-6xl"><Link to="/"><Logo className="h-9" /></Link></div>
       </header>
       <div className="flex flex-1 items-center justify-center px-6 py-10">

@@ -1,5 +1,7 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { api } from "../lib/api";
+import JobCard from "../components/JobCard";
 import Logo from "../components/Logo";
 import logoFull from "../assets/logo.png";
 import { IconUser, IconBriefcase, IconBuilding, IconSearch, IconUpload, IconChat, IconEye } from "../components/icons";
@@ -74,6 +76,12 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Live jobs — the thing a visitor actually came for.
+          Every competing portal puts real listings on the logged-out page:
+          a visitor can judge whether the site has jobs for them before being
+          asked to register, and each card links straight into the flow. */}
+      <LiveJobs />
+
       {/* Feature strip */}
       <section className="mx-auto max-w-6xl px-6 py-14">
         <h2 className="text-center text-2xl font-bold text-navy">Everything you need, in one platform</h2>
@@ -113,6 +121,84 @@ export default function Home() {
         </div>
       </footer>
     </div>
+  );
+}
+
+function LiveJobs() {
+  const [jobs, setJobs] = useState(null);
+  const [q, setQ] = useState("");
+  const [loc, setLoc] = useState("");
+  const [busy, setBusy] = useState(false);
+  const navigate = useNavigate();
+
+  const load = (params = {}) => {
+    setBusy(true);
+    const qs = new URLSearchParams({ limit: 9, ...params }).toString();
+    api.get(`/api/public/jobs?${qs}`, { auth: false })
+      .then(setJobs)
+      .catch(() => setJobs([]))
+      .finally(() => setBusy(false));
+  };
+  useEffect(() => { load(); }, []);
+
+  const search = () => load({ ...(q && { q }), ...(loc && { location: loc }) });
+
+  /* Applying needs an account, so every card routes to the seeker login with
+     the job remembered. Dropping someone on a bare login screen after they
+     clicked a specific job is how you lose them. */
+  const open = (job) => navigate(`/login/jobseeker?next=/jobseeker/jobs&job=${job.id}`);
+
+  if (jobs !== null && jobs.length === 0 && !busy) return null;   // nothing to show yet
+
+  return (
+    <section className="mx-auto max-w-6xl px-6 py-14">
+      <div className="mb-6 text-center">
+        <h2 className="text-2xl font-bold text-navy">Jobs hiring now</h2>
+        <p className="mt-1.5 text-sm text-slate-500">
+          Live openings from employers and institutes across India.
+        </p>
+      </div>
+
+      <div className="mx-auto mb-8 flex max-w-3xl flex-col gap-2 rounded-2xl border
+                      border-slate-200 bg-white p-2 shadow-card sm:flex-row">
+        <input className="flex-1 rounded-lg px-4 py-3 text-sm outline-none placeholder:text-slate-400"
+               placeholder="Enter skills, designation or company"
+               value={q} onChange={(e) => setQ(e.target.value)}
+               onKeyDown={(e) => e.key === "Enter" && search()} />
+        <div className="hidden w-px bg-slate-200 sm:block" />
+        <input className="flex-1 rounded-lg px-4 py-3 text-sm outline-none placeholder:text-slate-400"
+               placeholder="Location"
+               value={loc} onChange={(e) => setLoc(e.target.value)}
+               onKeyDown={(e) => e.key === "Enter" && search()} />
+        <button className="btn !px-8" onClick={search} disabled={busy}>
+          {busy ? "Searching…" : "Search"}
+        </button>
+      </div>
+
+      {jobs === null ? (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-44 animate-pulse rounded-xl bg-slate-100" />
+          ))}
+        </div>
+      ) : jobs.length === 0 ? (
+        <p className="py-8 text-center text-sm text-slate-400">
+          No jobs matched that search. Try a different skill or location.
+        </p>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {jobs.map((j) => (
+            <JobCard key={j.id} job={j} compact onOpen={open} />
+          ))}
+        </div>
+      )}
+
+      <div className="mt-8 text-center">
+        <Link to="/login/jobseeker" className="btn-outline">
+          Create a free account to apply
+        </Link>
+      </div>
+    </section>
   );
 }
 

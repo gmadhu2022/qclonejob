@@ -205,6 +205,22 @@ def request_code(db: Session, target: str, channel: str, purpose: str = "registe
     if not res["ok"]:
         raise OtpError(res.get("error") or "Could not send the code. Please try again.")
 
+    # A code that only reached the server console did NOT reach the user.
+    #
+    # Reporting {"sent": true} for it is how "forgot password is broken" looks
+    # from the outside: the screen says "OTP sent", the inbox stays empty, and
+    # nothing anywhere says why. Console delivery is a DEV convenience, so it
+    # counts as success only when OTP_DEV_ECHO is on (which also hands the code
+    # back so the flow is testable). Otherwise this is a real failure and says
+    # so, naming the fix.
+    if res["delivery"] == "console" and not getattr(settings, "OTP_DEV_ECHO", False):
+        raise OtpError(
+            "Email isn't configured on this server, so no code could be sent. "
+            "Set RESEND_API_KEY (with EMAIL_PROVIDER=resend) or BREVO_API_KEY in "
+            "backend/.env and restart — check /healthz, which shows the provider "
+            "actually in use."
+        )
+
     out = {"sent": True, "target": target, "delivery": res["delivery"],
            "expires_in_minutes": None if email_forever else CODE_TTL_MINUTES}
     # DEV ONLY: with no mail provider configured the code only exists in the

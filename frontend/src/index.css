@@ -1,11 +1,27 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+/* Inter, with 300 added. The approved design leans on LIGHTER weights for
+   headings — the premium feel there comes from air and restraint, not from
+   bolder type. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  body { @apply bg-slate-50 text-slate-800 antialiased; }
+  /* neutral-50 page, neutral text. Swapped off slate: slate is blue-tinted and
+     fought the indigo accent, leaving everything faintly purple. Neutral is
+     what the design uses and lets the accent be the only colour on screen. */
+  body {
+    @apply bg-neutral-50 text-neutral-800 antialiased;
+    font-feature-settings: 'cv11', 'ss01';   /* Inter's single-storey a, nicer l */
+    letter-spacing: -0.011em;                /* the design's slight negative tracking */
+  }
   * { @apply transition-colors duration-150; }
+
+  /* Headings sit lighter and tighter than the browser default, matching the
+     design where an h1 is large and calm rather than heavy. */
+  h1 { @apply text-3xl font-semibold tracking-tight text-neutral-900; }
+  h2 { @apply text-xl font-semibold tracking-tight text-neutral-900; }
+  h3 { @apply text-base font-semibold tracking-tight text-neutral-900; }
 }
 
 @layer components {
@@ -20,43 +36,45 @@
            shadow-sm hover:bg-brandgreen-600 active:scale-[0.98] disabled:opacity-50 transition-all duration-150;
   }
   .btn-outline {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-neutral-300 bg-white px-4 py-2.5 text-sm
            font-semibold text-slate-700 hover:border-navy hover:text-navy hover:bg-navy-50 active:scale-[0.98]
            transition-all duration-150;
   }
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-600
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-neutral-600
            hover:bg-slate-100 hover:text-navy transition-colors;
   }
   .btn-sm { @apply px-3 py-1.5 text-xs; }
 
   /* Inputs */
   .input {
-    @apply w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder-slate-400
+    @apply w-full rounded-lg border border-neutral-300 bg-white px-3.5 py-2.5 text-sm text-neutral-900 placeholder-neutral-400
            focus:border-navy focus:ring-2 focus:ring-navy/15 focus:outline-none transition-shadow;
   }
   .input-error { @apply border-red-400 focus:border-red-500 focus:ring-red-500/15; }
-  .label { @apply mb-1.5 block text-sm font-medium text-slate-700; }
+  .label { @apply mb-1.5 block text-sm font-medium text-neutral-600; }
 
   /* Cards */
   .card {
-    @apply rounded-xl border border-slate-200 bg-white p-6 shadow-card;
+    @apply rounded-xl border border-neutral-200 bg-white p-6 shadow-card;
   }
   .card-hover {
-    @apply rounded-xl border border-slate-200 bg-white p-6 shadow-card hover:shadow-cardhover hover:-translate-y-0.5
+    @apply rounded-xl border border-neutral-200 bg-white p-6 shadow-card hover:border-neutral-300 hover:shadow-cardhover hover:-translate-y-0.5
            hover:border-navy-200 transition-all duration-200;
   }
 
   /* Tables */
   .table { @apply w-full border-collapse text-sm; }
-  .table th { @apply border-b border-slate-200 bg-slate-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500; }
-  .table td { @apply border-b border-slate-100 px-4 py-3 text-slate-700; }
-  .table tr:hover td { @apply bg-slate-50/70; }
+  .table th { @apply border-b border-neutral-200 bg-neutral-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500; }
+  .table td { @apply border-b border-neutral-100 px-4 py-3 text-neutral-700; }
+  .table tr:hover td { @apply bg-neutral-50/70; }
 
-  .badge { @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold; }
+  .badge { @apply inline-flex items-center rounded-lg px-2.5 py-0.5 text-xs font-medium;
+    /* rounded-lg, not a pill, and medium not semibold — the design's tags are
+       quiet rectangles that sit behind the content rather than shouting. */ }
 
   .navlink {
-    @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600
+    @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-neutral-600
            hover:bg-navy-50 hover:text-navy transition-colors;
   }
   /* Active tab: a light navy tint with a left accent bar, rather than a solid
@@ -146,7 +164,7 @@
   align-items: center;
 }
 .docx-host .docx-wrapper > section.docx {
-  box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
+  box-shadow: 0 1px 3px rgba(23, 23, 23, .08);
   border: 1px solid #e2e8f0;
   border-radius: .5rem;
   margin: 0;

@@ -19,6 +19,7 @@ import {
 } from "../../components/icons";
 import { Donut, MatchBar, SwitchableChart } from "../../components/charts";
 import FitRating from "../../components/FitRating";
+import JobCard, { CompanyLogo } from "../../components/JobCard";
 import { AIButton, AIResult, AIList, useAI, useAICall } from "../../components/AIPanel";
 import { Combobox, TagInput } from "../../components/fields";
 import { CITIES, SKILLS, LANGUAGES, SALARY, EXPERIENCE, SALARY_STEPS, formatSalary } from "../../lib/options";
@@ -119,10 +120,20 @@ function Overview() {
         </div>
         <div className="space-y-3">
           {rec.map((j) => (
-            <div key={j.id} className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 p-3 transition-colors hover:border-navy-200">
-              <div className="min-w-0">
-                <p className="truncate font-semibold text-slate-800">{j.title}</p>
-                <p className="text-xs text-slate-500">{j.location} · {j.category}</p>
+            /* Same company mark as the full cards, at a smaller size. A
+               recommendation with no employer on it is just a job title, and
+               the seeker has to open it to learn who is hiring. */
+            <div key={j.id} className="flex items-center justify-between gap-3 rounded-lg border
+                                       border-slate-200 p-3 transition-colors hover:border-navy-200">
+              <div className="flex min-w-0 items-center gap-3">
+                <CompanyLogo name={j.company_name} url={j.company_logo_url} size={36} />
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-slate-800">{j.title}</p>
+                  <p className="truncate text-xs text-slate-500">
+                    {[j.company_name, j.location || j.company_location].filter(Boolean).join(" · ")
+                      || j.category}
+                  </p>
+                </div>
               </div>
               <FitRating score={j.match_score} />
             </div>
@@ -1201,49 +1212,39 @@ function FindJobs() {
       <div className={tab === "browse" ? "grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]" : ""}>
       <div className="space-y-3">
         {list.map((j) => (
-          <div key={j.id} className="card-hover">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-3">
-                  {/* The title opens the full JD. A button, not a click handler
-                      on the card, so the Apply/Save buttons inside the card
-                      don't have to stopPropagation to stay usable. */}
-                  <button type="button" onClick={() => setJd(j)}
-                          className="text-left font-bold text-slate-800 hover:text-navy hover:underline">
-                    {j.title}
-                  </button>
-                  {j.match_score != null && <FitRating score={j.match_score} />}
-                  {j.status && j.status !== "active" && <span className="badge bg-red-100 text-red-700">Closed</span>}
-                </div>
-                <p className="mt-0.5 text-sm text-slate-500">
-                  {[j.location, j.category, j.experience, j.salary].filter(Boolean).join(" · ")}
-                </p>
-                {j.matched_skills?.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {j.matched_skills.map((k) => <span key={k} className="badge bg-brandgreen-50 capitalize text-brandgreen-600">✓ {k}</span>)}
-                  </div>
-                )}
-                <button type="button" onClick={() => setJd(j)}
-                        className="mt-2 text-xs font-semibold text-navy hover:underline">
-                  View full job description →
-                </button>
+          <JobCard
+            key={j.id}
+            job={j}
+            onOpen={setJd}
+            onSave={save}
+            onApply={apply}
+            saveLabel={tab === "saved" ? "Remove from saved" : j.saved ? "Saved" : "Save this job"}
+            right={aiOn ? (
+              <>
+                <AIButton path={`/api/ai/jobs/${j.id}/explain`}
+                          onResult={(r) => setAiFor({ id: j.id, kind: "explain", data: r })}>
+                  Why this fits
+                </AIButton>
+                <AIButton path={`/api/ai/jobs/${j.id}/interview-prep`}
+                          onResult={(r) => setAiFor({ id: j.id, kind: "prep", data: r })}>
+                  Interview prep
+                </AIButton>
+              </>
+            ) : null}
+          >
+            {/* Match signals stay inside the card, above the footer: they are
+                the reason THIS seeker should care about THIS job, so they
+                belong next to the skills rather than in the action row. */}
+            {(j.match_score != null || j.matched_skills?.length > 0) && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {j.match_score != null && <FitRating score={j.match_score} />}
+                {(j.matched_skills || []).map((k) => (
+                  <span key={k} className="badge bg-brandgreen-50 capitalize text-brandgreen-600">
+                    ✓ {k}
+                  </span>
+                ))}
               </div>
-              <div className="flex shrink-0 flex-wrap gap-2">
-                {aiOn && (
-                  <>
-                    <AIButton path={`/api/ai/jobs/${j.id}/explain`} onResult={(r) => setAiFor({ id: j.id, kind: "explain", data: r })}>Why this fits</AIButton>
-                    <AIButton path={`/api/ai/jobs/${j.id}/interview-prep`} onResult={(r) => setAiFor({ id: j.id, kind: "prep", data: r })}>Interview prep</AIButton>
-                  </>
-                )}
-                <button className="btn-outline btn-sm" onClick={() => save(j.id)}>
-                  <IconBookmark size={14} /> {tab === "saved" ? "Remove" : j.saved ? "Saved" : "Save"}
-                </button>
-                <button className={`btn-sm ${j.applied ? "btn-outline !opacity-60" : "btn-green"}`}
-                        disabled={j.applied || j.status === "closed"} onClick={() => apply(j.id)}>
-                  {j.applied ? "Applied" : "Apply"}
-                </button>
-              </div>
-            </div>
+            )}
 
             {aiFor?.id === j.id && aiFor.kind === "explain" && (
               <AIResult title="Why this job fits you" onClose={() => setAiFor(null)}>
@@ -1268,7 +1269,7 @@ function FindJobs() {
                 <AIList label="Ask them" items={aiFor.data.ask_them} />
               </AIResult>
             )}
-          </div>
+          </JobCard>
         ))}
         {!busy && list.length === 0 && (
           <Empty text={tab === "saved" ? "You haven't saved any jobs yet."

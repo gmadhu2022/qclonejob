@@ -235,6 +235,11 @@ class JobOut(JobBase):
     status: str
     created_at: Any
     expires_at: Optional[Any] = None
+    # Read from Job's properties, so every endpoint already returning JobOut
+    # gains the employer's name and logo without a signature change.
+    company_name: Optional[str] = None
+    company_logo_url: Optional[str] = None
+    company_location: Optional[str] = None
 
     class Config:
         from_attributes = True
