@@ -64,7 +64,15 @@ export default function Login() {
   /* Remembered, because almost nobody changes which portal they belong to.
      An institute that has to re-pick "Institute" on every visit will
      eventually mis-click and be told their credentials are wrong. */
-  const [role, setRole] = useState(() => localStorage.getItem("hire_login_role") || "jobseeker");
+  /* ?as= wins over the remembered choice: the header menu's "Login → Institute"
+     is an explicit instruction for THIS visit, and silently overriding it with
+     last time's selection would mean the link they clicked did nothing. */
+  const [role, setRole] = useState(() => {
+    const asked = new URLSearchParams(window.location.search).get("as");
+    const valid = ["jobseeker", "enterprise", "institute"];
+    if (asked && valid.includes(asked)) return asked;
+    return localStorage.getItem("hire_login_role") || "jobseeker";
+  });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);

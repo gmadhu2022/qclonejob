@@ -1,5 +1,7 @@
 import { Routes, Route } from "react-router-dom";
 import Home from "./pages/Home";
+import About from "./pages/About";
+import { Promotions, RecruitmentServices, JobSearchService } from "./pages/Services";
 import Login from "./pages/Login";
 import { ChangePassword, Register, StaticPage, ForgotPassword, ResetPassword } from "./pages/Misc";
 import { ProtectedRoute } from "./components/ui";
@@ -21,15 +23,10 @@ export default function App() {
       <Route path="/change-password" element={<ChangePassword />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/about" element={
-        <StaticPage title="About us">
-          <p>
-            QCloneJob is where <b>qualification meets job</b> — connecting job seekers, employers
-            and institutes across every level of work, from daily-wage and entry-level work through
-            skilled trades to graduate and post-graduate professions.
-          </p>
-        </StaticPage>
-      } />
+      <Route path="/about" element={<About />} />
+      <Route path="/services/promotions"  element={<Promotions />} />
+      <Route path="/services/recruitment" element={<RecruitmentServices />} />
+      <Route path="/services/job-search"  element={<JobSearchService />} />
       <Route path="/contact" element={
         <StaticPage title="Contact us">
           <p>Email: support@qclonejob.com · Phone: +91-00000-00000</p>

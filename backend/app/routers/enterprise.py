@@ -234,6 +234,17 @@ def my_jobs(current: models.User = Depends(get_current_user), db: Session = Depe
             "key_skills": j.key_skills or [], "description": j.description,
             "no_of_positions": j.no_of_positions or 1, "status": j.status,
             "is_urgent": j.is_urgent, "created_at": j.created_at,
+            # Without these three the recruiter's own list is misleading:
+            #   approval_status  a job awaiting review looks identical to a
+            #                    live one, so "why is nobody applying?" has no
+            #                    answer on screen. The UI badge reads this.
+            #   approval_note    the admin's rejection reason — the one thing
+            #                    that tells them what to change and resubmit.
+            #   expires_at       postings die after 15 days; a recruiter who
+            #                    cannot see the date cannot plan a repost.
+            "approval_status": j.approval_status,
+            "approval_note": j.approval_note,
+            "expires_at": j.expires_at,
             "applicants": len(apps),
             "new_applicants": by_status.get("Applied", 0),
             "shortlisted": by_status.get("Shortlisted", 0),

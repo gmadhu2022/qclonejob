@@ -113,11 +113,16 @@ class Settings(BaseSettings):
     # Recruiters, like institutes, are live the moment they register.
     ENTERPRISE_SELF_APPROVE: bool = True
 
-    # Job postings go live immediately and alert matching candidates straight
-    # away. Set True to put them back behind the admin queue (the approval
-    # endpoints and the admin screen stay in place either way, so turning this
-    # on is the only change needed).
-    JOB_APPROVAL_REQUIRED: bool = False
+    # Job postings are reviewed by an admin before they go live.
+    #
+    # Candidate alerts fire on APPROVAL, not on submission, because a
+    # notification cannot be recalled: alerting every matching seeker and then
+    # rejecting the posting sends thousands of people to a job that does not
+    # exist. The expiry clock also restarts at approval, so time spent waiting
+    # in the queue is not billed to the recruiter.
+    #
+    # Set False to publish immediately instead; nothing else needs changing.
+    JOB_APPROVAL_REQUIRED: bool = True
 
     # --- Ads (Post a Ad) ---
     # Flyer artwork is cover-cropped to this, the mobile app's ad slot, so one
