@@ -6,6 +6,7 @@ import { useToast } from "../components/ui";
 import { useDialog, useConfirm } from "../components/Dialog";
 import { IconUser, IconBriefcase, IconBuilding } from "../components/icons";
 import Logo from "../components/Logo";
+import SiteHeader from "../components/SiteHeader";
 import { IconCheck, IconEye, IconLock } from "../components/icons";
 import { RegistrationFields, buildRegistrationPayload, validateRegistration, EMAIL_PATTERN } from "../components/RegistrationForm";
 
@@ -13,10 +14,8 @@ import { RegistrationFields, buildRegistrationPayload, validateRegistration, EMA
 function AuthShell({ title, subtitle, children, wide }) {
   const navigate = useNavigate();
   return (
-    <div className="flex min-h-screen flex-col bg-neutral-50">
-      <header className="sticky top-0 z-50 border-b border-neutral-200 bg-white px-6 py-4">
-        <div className="mx-auto max-w-6xl"><Link to="/"><Logo className="h-9" /></Link></div>
-      </header>
+    <div className="flex min-h-screen flex-col bg-slate-50">
+      <SiteHeader />
       <div className="flex flex-1 items-center justify-center px-6 py-10">
         <div className={wide ? "w-full max-w-2xl" : "w-full max-w-md"}>
           {/* Back navigation, in the same top-left position as every other
@@ -29,7 +28,7 @@ function AuthShell({ title, subtitle, children, wide }) {
                              transition-colors hover:text-navy">
             ← Back
           </button>
-          <h1 className="text-2xl font-extrabold tracking-tight text-navy">{title}</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">{title}</h1>
           {subtitle && <p className="mt-1.5 text-sm text-slate-500">{subtitle}</p>}
           <div className="mt-6">{children}</div>
         </div>

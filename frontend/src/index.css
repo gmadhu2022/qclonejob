@@ -1,27 +1,11 @@
-/* Inter, with 300 added. The approved design leans on LIGHTER weights for
-   headings — the premium feel there comes from air and restraint, not from
-   bolder type. */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  /* neutral-50 page, neutral text. Swapped off slate: slate is blue-tinted and
-     fought the indigo accent, leaving everything faintly purple. Neutral is
-     what the design uses and lets the accent be the only colour on screen. */
-  body {
-    @apply bg-neutral-50 text-neutral-800 antialiased;
-    font-feature-settings: 'cv11', 'ss01';   /* Inter's single-storey a, nicer l */
-    letter-spacing: -0.011em;                /* the design's slight negative tracking */
-  }
+  body { @apply bg-slate-50 text-slate-800 antialiased; }
   * { @apply transition-colors duration-150; }
-
-  /* Headings sit lighter and tighter than the browser default, matching the
-     design where an h1 is large and calm rather than heavy. */
-  h1 { @apply text-3xl font-semibold tracking-tight text-neutral-900; }
-  h2 { @apply text-xl font-semibold tracking-tight text-neutral-900; }
-  h3 { @apply text-base font-semibold tracking-tight text-neutral-900; }
 }
 
 @layer components {
@@ -36,45 +20,43 @@
            shadow-sm hover:bg-brandgreen-600 active:scale-[0.98] disabled:opacity-50 transition-all duration-150;
   }
   .btn-outline {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-neutral-300 bg-white px-4 py-2.5 text-sm
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm
            font-semibold text-slate-700 hover:border-navy hover:text-navy hover:bg-navy-50 active:scale-[0.98]
            transition-all duration-150;
   }
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-neutral-600
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-600
            hover:bg-slate-100 hover:text-navy transition-colors;
   }
   .btn-sm { @apply px-3 py-1.5 text-xs; }
 
   /* Inputs */
   .input {
-    @apply w-full rounded-lg border border-neutral-300 bg-white px-3.5 py-2.5 text-sm text-neutral-900 placeholder-neutral-400
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder-slate-400
            focus:border-navy focus:ring-2 focus:ring-navy/15 focus:outline-none transition-shadow;
   }
   .input-error { @apply border-red-400 focus:border-red-500 focus:ring-red-500/15; }
-  .label { @apply mb-1.5 block text-sm font-medium text-neutral-600; }
+  .label { @apply mb-1.5 block text-sm font-medium text-slate-700; }
 
   /* Cards */
   .card {
-    @apply rounded-xl border border-neutral-200 bg-white p-6 shadow-card;
+    @apply rounded-xl border border-slate-200 bg-white p-6 shadow-card;
   }
   .card-hover {
-    @apply rounded-xl border border-neutral-200 bg-white p-6 shadow-card hover:border-neutral-300 hover:shadow-cardhover hover:-translate-y-0.5
+    @apply rounded-xl border border-slate-200 bg-white p-6 shadow-card hover:shadow-cardhover hover:-translate-y-0.5
            hover:border-navy-200 transition-all duration-200;
   }
 
   /* Tables */
   .table { @apply w-full border-collapse text-sm; }
-  .table th { @apply border-b border-neutral-200 bg-neutral-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500; }
-  .table td { @apply border-b border-neutral-100 px-4 py-3 text-neutral-700; }
-  .table tr:hover td { @apply bg-neutral-50/70; }
+  .table th { @apply border-b border-slate-200 bg-slate-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500; }
+  .table td { @apply border-b border-slate-100 px-4 py-3 text-slate-700; }
+  .table tr:hover td { @apply bg-slate-50/70; }
 
-  .badge { @apply inline-flex items-center rounded-lg px-2.5 py-0.5 text-xs font-medium;
-    /* rounded-lg, not a pill, and medium not semibold — the design's tags are
-       quiet rectangles that sit behind the content rather than shouting. */ }
+  .badge { @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold; }
 
   .navlink {
-    @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-neutral-600
+    @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600
            hover:bg-navy-50 hover:text-navy transition-colors;
   }
   /* Active tab: a light navy tint with a left accent bar, rather than a solid
@@ -164,7 +146,7 @@
   align-items: center;
 }
 .docx-host .docx-wrapper > section.docx {
-  box-shadow: 0 1px 3px rgba(23, 23, 23, .08);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
   border: 1px solid #e2e8f0;
   border-radius: .5rem;
   margin: 0;
@@ -181,4 +163,50 @@
 }
 @media (max-width: 1100px) {
   .docx-host { zoom: 0.68; }
+}
+
+/* ---------------------------------------------------------------------
+   Page-level polish used across the public pages.
+   Additive only — nothing here changes an existing rule.
+   --------------------------------------------------------------------- */
+
+/* Staggered reveal for a list of cards. Applied to the CONTAINER, so the
+   children fade up one after another without hand-numbering each delay —
+   which is how the delays drift out of order the first time a card is
+   added in the middle. Capped at 8: past that the last card arrives late
+   enough to feel broken rather than deliberate. */
+.stagger > * { animation: floatUp .45s cubic-bezier(.2,.7,.3,1) both; }
+.stagger > *:nth-child(1) { animation-delay: .04s; }
+.stagger > *:nth-child(2) { animation-delay: .08s; }
+.stagger > *:nth-child(3) { animation-delay: .12s; }
+.stagger > *:nth-child(4) { animation-delay: .16s; }
+.stagger > *:nth-child(5) { animation-delay: .20s; }
+.stagger > *:nth-child(6) { animation-delay: .24s; }
+.stagger > *:nth-child(7) { animation-delay: .28s; }
+.stagger > *:nth-child(n+8) { animation-delay: .32s; }
+
+/* A hairline that brightens on hover. Cheap depth on a flat card without
+   adding a border colour that would shift the layout by a pixel. */
+.lift { transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+.lift:hover { transform: translateY(-2px); }
+
+/* Underline that grows from the left on hover, for text links that are not
+   buttons. Uses background-size so it animates on the compositor rather
+   than reflowing the text. */
+.link-underline {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  background-size: 0% 1.5px;
+  transition: background-size .22s ease;
+}
+.link-underline:hover { background-size: 100% 1.5px; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* Motion off: show everything immediately rather than animating it in.
+     Without this the content stays at opacity 0 when animations are
+     disabled, which hides the page entirely. */
+  .stagger > * { animation: none !important; }
+  .lift:hover { transform: none; }
+  .link-underline { transition: none; }
 }

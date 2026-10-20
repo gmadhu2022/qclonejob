@@ -1,5 +1,5 @@
 import { Link, NavLink } from "react-router-dom";
-import Logo from "../components/Logo";
+import SiteHeader from "../components/SiteHeader";
 import { IconCheck, IconSparkle, IconBriefcase, IconSearch } from "../components/icons";
 
 /**
@@ -30,44 +30,33 @@ const TABS = [
 function ServiceShell({ eyebrow, title, lede, children, cta }) {
   return (
     <div className="min-h-screen bg-white">
-      <header className="sticky top-0 z-30 border-b border-slate-100 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
-          <Link to="/"><Logo className="h-10" /></Link>
-          <nav className="flex items-center gap-1 sm:gap-2">
-            <Link to="/about" className="btn-ghost">About us</Link>
-            <Link to="/contact" className="btn-ghost">Contact us</Link>
-            <Link to="/login" className="btn-ghost">Login</Link>
-            <Link to="/register" className="btn">Register</Link>
-          </nav>
-        </div>
-
-        {/* Sub-nav. Someone reading about Promotions is often deciding between
-            all three; sending them back up to the header menu to compare is
-            friction with no purpose. */}
-        <div className="border-t border-slate-100 bg-slate-50/60">
+      <SiteHeader sub={
+        /* The three services as a second row. Someone comparing them should
+           not have to reopen the Services menu for each one. */
+        <div className="border-t border-slate-200 bg-slate-50">
           <div className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-6 py-2">
             {TABS.map((t) => (
               <NavLink key={t.to} to={t.to}
                        className={({ isActive }) =>
                          `whitespace-nowrap rounded-lg px-3 py-1.5 text-[13px] font-semibold transition-colors
                           ${isActive ? "bg-white text-navy shadow-card"
-                                     : "text-slate-500 hover:text-navy"}`}>
+                                     : "text-slate-600 hover:text-navy"}`}>
                 {t.label}
               </NavLink>
             ))}
           </div>
         </div>
-      </header>
+      } />
 
       <section className="relative overflow-hidden border-b border-slate-100">
         <div className="absolute inset-0 bg-gradient-to-b from-navy-50/70 to-white" />
         <div className="relative mx-auto max-w-4xl px-6 py-16 text-center">
           <span className="badge bg-brandgreen-50 text-brandgreen-600">{eyebrow}</span>
-          <h1 className="mt-5 text-[34px] font-extrabold leading-[1.1] tracking-tight text-navy sm:text-[44px]">
+          <h1 className="mt-5 text-[34px] font-extrabold leading-[1.1] tracking-tight text-slate-900 sm:text-[44px]">
             {title}
           </h1>
           {lede.map((p, i) => (
-            <p key={i} className="mx-auto mt-5 max-w-2xl text-[16px] leading-[1.75] text-slate-600">
+            <p key={i} className="mx-auto mt-5 max-w-2xl text-[16px] leading-[1.75] text-slate-700">
               {p}
             </p>
           ))}
@@ -77,9 +66,9 @@ function ServiceShell({ eyebrow, title, lede, children, cta }) {
       {children}
 
       <section className="mx-auto max-w-3xl px-6 py-16 text-center">
-        <h2 className="text-[26px] font-extrabold tracking-tight text-navy">{cta.title}</h2>
+        <h2 className="text-[26px] font-extrabold tracking-tight text-slate-900">{cta.title}</h2>
         {cta.body.map((p, i) => (
-          <p key={i} className="mx-auto mt-3 max-w-xl text-[15px] leading-relaxed text-slate-600">{p}</p>
+          <p key={i} className="mx-auto mt-3 max-w-xl text-[15px] leading-relaxed text-slate-700">{p}</p>
         ))}
         <div className="mt-7 flex flex-wrap justify-center gap-3">
           <Link to="/register" className="btn !px-8">{cta.primary}</Link>
@@ -107,9 +96,9 @@ function Band({ eyebrow, title, intro, tinted, children, narrow }) {
     <section className={tinted ? "border-y border-slate-100 bg-slate-50/60 py-16" : "py-16"}>
       <div className={`mx-auto px-6 ${narrow ? "max-w-3xl" : "max-w-5xl"}`}>
         <Eyebrow>{eyebrow}</Eyebrow>
-        <h2 className="mt-2 text-[28px] font-extrabold tracking-tight text-navy">{title}</h2>
+        <h2 className="mt-2 text-[28px] font-extrabold tracking-tight text-slate-900">{title}</h2>
         {intro && (
-          <p className="mt-4 max-w-2xl text-[16px] leading-[1.75] text-slate-600">{intro}</p>
+          <p className="mt-4 max-w-2xl text-[16px] leading-[1.75] text-slate-700">{intro}</p>
         )}
         <div className="mt-8">{children}</div>
       </div>
@@ -121,7 +110,7 @@ function Band({ eyebrow, title, intro, tinted, children, narrow }) {
    number 6" when they call. The number is the anchor, so it leads. */
 function NumberedGrid({ items }) {
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid gap-4 md:grid-cols-2 stagger">
       {items.map(([title, body], i) => (
         <div key={title}
              className="rounded-xl border border-slate-200 bg-white p-5 transition-all
@@ -132,8 +121,8 @@ function NumberedGrid({ items }) {
               {i + 1}
             </span>
             <div className="min-w-0">
-              <h3 className="font-bold text-slate-800">{title}</h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-slate-500">{body}</p>
+              <h3 className="font-bold text-slate-900">{title}</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{body}</p>
             </div>
           </div>
         </div>
@@ -146,7 +135,7 @@ function TickList({ items, columns = 2 }) {
   return (
     <ul className={`grid gap-x-8 gap-y-3 ${columns === 2 ? "sm:grid-cols-2" : ""}`}>
       {items.map((t) => (
-        <li key={t} className="flex items-start gap-3 text-[15px] leading-relaxed text-slate-600">
+        <li key={t} className="flex items-start gap-3 text-[15px] leading-relaxed text-slate-700">
           <span className="mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-full
                            bg-brandgreen text-white">
             <IconCheck size={10} />
@@ -169,8 +158,8 @@ function Steps({ items }) {
                            rounded-full border-2 border-white bg-navy text-[12px] font-bold text-white">
             {i + 1}
           </span>
-          <h3 className="font-bold text-slate-800">{title}</h3>
-          <p className="mt-1 text-[15px] leading-relaxed text-slate-600">{body}</p>
+          <h3 className="font-bold text-slate-900">{title}</h3>
+          <p className="mt-1 text-[15px] leading-relaxed text-slate-700">{body}</p>
         </li>
       ))}
     </ol>
@@ -183,8 +172,8 @@ function Tier({ icon: Icon, name, body }) {
       <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brandgreen-50 text-brandgreen-600">
         <Icon size={18} />
       </span>
-      <h3 className="mt-4 text-lg font-extrabold tracking-tight text-navy">{name}</h3>
-      <p className="mt-2 text-[15px] leading-relaxed text-slate-600">{body}</p>
+      <h3 className="mt-4 text-lg font-extrabold tracking-tight text-slate-900">{name}</h3>
+      <p className="mt-2 text-[15px] leading-relaxed text-slate-700">{body}</p>
     </div>
   );
 }
@@ -251,7 +240,7 @@ export function Promotions() {
 
       <Band tinted eyebrow="Packages" title="Advertising Packages"
             intro="We offer flexible promotional opportunities to suit different marketing needs.">
-        <div className="grid gap-5 md:grid-cols-3">
+        <div className="grid gap-5 md:grid-cols-3 stagger">
           <Tier icon={IconSearch} name="Basic Promotion"
                 body="Entry-level promotional options for businesses looking to establish their presence on our platform." />
           <Tier icon={IconBriefcase} name="Standard Promotion"
@@ -261,7 +250,7 @@ export function Promotions() {
         </div>
         {/* Kept as prose, not a footnote in grey 11px: it is the answer to the
             first question every advertiser asks, and burying it reads evasive. */}
-        <p className="mt-6 max-w-2xl text-[15px] leading-relaxed text-slate-600">
+        <p className="mt-6 max-w-2xl text-[15px] leading-relaxed text-slate-700">
           Specific features, campaign duration, pricing, and availability will be provided based
           on the selected package.
         </p>
@@ -345,7 +334,7 @@ export function RecruitmentServices() {
       </Band>
 
       <Band narrow eyebrow="Any size" title="Recruitment Solutions for Every Business">
-        <div className="space-y-4 text-[16px] leading-[1.75] text-slate-600">
+        <div className="space-y-4 text-[16px] leading-[1.75] text-slate-700">
           <p>
             We understand that every organization has unique hiring requirements. Our recruitment
             services are designed to accommodate different business sizes, recruitment volumes,

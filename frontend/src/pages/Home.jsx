@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, mediaUrl } from "../lib/api";
 import Logo from "../components/Logo";
+import SiteHeader from "../components/SiteHeader";
 import logoFull from "../assets/logo.png";
 import { IconUser, IconBriefcase, IconBuilding, IconSearch, IconUpload, IconChat, IconEye } from "../components/icons";
 
@@ -33,35 +34,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-white">
       {/* Header with login dropdown (no logins in the middle) */}
-      <header className="sticky top-0 z-30 border-b border-slate-100 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
-          <Logo className="h-10" />
-          <nav className="flex items-center gap-0.5 sm:gap-1">
-            <Link to="/about" className="btn-ghost">About us</Link>
-
-            {/* SERVICES and LOGIN are menus because each has three
-                destinations. Flattening them would put seven links across the
-                header and force the whole bar to wrap on a laptop. */}
-            <NavMenu label="Services" items={[
-              { to: "/services/promotions",  label: "Promotions" },
-              { to: "/services/recruitment", label: "Recruitment Services" },
-              { to: "/services/job-search",  label: "Job Search" },
-            ]} />
-
-            <NavMenu label="Login" items={[
-              /* Each one opens the single login page with that portal
-                 preselected, so the choice made here is the choice that
-                 arrives — rather than asking the same question twice. */
-              { to: "/login?as=institute",  label: "Institute" },
-              { to: "/login?as=enterprise", label: "Recruiter" },
-              { to: "/login?as=jobseeker",  label: "Job Seeker" },
-            ]} />
-
-            <Link to="/contact" className="btn-ghost">Contact us</Link>
-            <Link to="/register" className="btn ml-1">Register</Link>
-          </nav>
-        </div>
-      </header>
+      <SiteHeader />
 
       {/* Hero */}
       <section className="relative overflow-hidden">
@@ -69,7 +42,7 @@ export default function Home() {
         <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-6 py-16 lg:grid-cols-2">
           <div>
             <span className="badge bg-brandgreen-50 text-brandgreen-600">Advanced job searching platform</span>
-            <h1 className="mt-4 text-4xl font-extrabold leading-tight text-navy sm:text-5xl">
+            <h1 className="mt-4 text-4xl font-extrabold leading-tight text-slate-900 sm:text-5xl">
               A to Z Jobs.<br />One Platform.<br /><span className="text-brandgreen-600">Unlimited Opportunities.</span>
             </h1>
             <p className="mt-4 max-w-md text-lg text-slate-600">
@@ -103,7 +76,7 @@ export default function Home() {
 
       {/* Feature strip */}
       <section className="mx-auto max-w-6xl px-6 py-14">
-        <h2 className="text-center text-2xl font-bold text-navy">Everything you need, in one platform</h2>
+        <h2 className="text-center text-2xl font-bold text-slate-900">Everything you need, in one platform</h2>
         <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           <Feature icon={IconUpload} title="Bulk onboarding"
             desc="Institutes upload a spreadsheet and resumes are built and credentialed automatically." />
@@ -143,54 +116,6 @@ export default function Home() {
   );
 }
 
-/* A header dropdown. Opens on hover for a mouse AND on click, because hover
-   alone is unusable on a touch screen — the tap registers as a hover, the menu
-   opens and the first tap is swallowed. Closes on Escape and on outside click. */
-function NavMenu({ label, items }) {
-  const [open, setOpen] = useState(false);
-  const box = useRef(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const away = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
-    const esc = (e) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", away);
-    document.addEventListener("keydown", esc);
-    return () => {
-      document.removeEventListener("mousedown", away);
-      document.removeEventListener("keydown", esc);
-    };
-  }, [open]);
-
-  return (
-    <div ref={box} className="relative"
-         onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
-      <button type="button" className="btn-ghost" aria-haspopup="menu" aria-expanded={open}
-              onClick={() => setOpen((v) => !v)}>
-        {label}
-        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden
-             className={`ml-0.5 transition-transform ${open ? "rotate-180" : ""}`}>
-          <path d="M1 3l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6"
-                strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
-      {open && (
-        <div role="menu"
-             className="absolute right-0 top-full z-40 mt-1 min-w-[200px] overflow-hidden rounded-xl
-                        border border-slate-200 bg-white py-1 shadow-cardhover">
-          {items.map((it) => (
-            <Link key={it.to} to={it.to} role="menuitem" onClick={() => setOpen(false)}
-                  className="block px-4 py-2.5 text-sm font-medium text-slate-600
-                             transition-colors hover:bg-navy-50 hover:text-navy">
-              {it.label}
-            </Link>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* The two partner strips.
 
    Names and logos come from the database, never from a hardcoded list: a strip
@@ -204,7 +129,7 @@ function PartnerStrip({ title, rows, emptyNote }) {
   if (!rows?.length) {
     return emptyNote ? (
       <div className="mx-auto max-w-6xl px-6 py-6">
-        <h2 className="text-lg font-bold text-navy">{title}</h2>
+        <h2 className="text-lg font-bold text-slate-900">{title}</h2>
         <p className="mt-1 text-sm text-slate-400">{emptyNote}</p>
       </div>
     ) : null;
@@ -219,7 +144,7 @@ function PartnerStrip({ title, rows, emptyNote }) {
   return (
     <section className="border-y border-slate-100 bg-slate-50/60 py-8">
       <div className="mx-auto max-w-6xl px-6">
-        <h2 className="text-lg font-bold text-navy">{title}</h2>
+        <h2 className="text-lg font-bold text-slate-900">{title}</h2>
       </div>
       <div className="marquee mt-4" style={{ "--marquee-duration": `${seconds}s` }}>
         <div className="marquee-track">
@@ -269,7 +194,7 @@ function Audience({ icon: Icon, title, points, cta, login }) {
     <div className="card-hover flex flex-col">
       <div className="flex items-center gap-3">
         <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-brandgreen-50 text-brandgreen-600"><Icon size={22} /></div>
-        <h3 className="text-lg font-bold text-navy">{title}</h3>
+        <h3 className="text-lg font-bold text-slate-900">{title}</h3>
       </div>
       <ul className="mt-4 flex-1 space-y-2 text-sm text-slate-600">
         {points.map((p) => (
