@@ -43,8 +43,12 @@
     @apply rounded-xl border border-slate-200 bg-white p-6 shadow-card;
   }
   .card-hover {
-    @apply rounded-xl border border-slate-200 bg-white p-6 shadow-card hover:shadow-cardhover hover:-translate-y-0.5
-           hover:border-navy-200 transition-all duration-200;
+    /* Now scales as well as lifts — the 2px nudge alone was too subtle to
+       register as a response. hover:scale-[1.015] matches the .zoom utility
+       so a card styled either way behaves identically. */
+    @apply rounded-xl border border-slate-200 bg-white p-6 shadow-card hover:shadow-cardhover
+           hover:-translate-y-0.5 hover:scale-[1.015] hover:border-navy-200
+           transition-all duration-200;
   }
 
   /* Tables */
@@ -209,4 +213,41 @@
   .stagger > * { animation: none !important; }
   .lift:hover { transform: none; }
   .link-underline { transition: none; }
+}
+
+/* ---------------------------------------------------------------------
+   Card interaction.
+
+   `zoom` scales the whole card slightly on hover and settles it back on
+   leave. Scale rather than width/height so it runs on the compositor and
+   never reflows the grid — animating size would nudge every neighbouring
+   card on each hover, which reads as the page twitching.
+
+   1.5% is deliberate. Anything past ~3% on a dense grid makes the hovered
+   card overlap its neighbours and the text visibly resample, which looks
+   cheap; 1.5% reads as "this one is live" without the page moving.
+   --------------------------------------------------------------------- */
+.zoom {
+  transition: transform .22s cubic-bezier(.2,.7,.3,1),
+              box-shadow .22s ease,
+              border-color .22s ease;
+  will-change: transform;
+}
+.zoom:hover {
+  transform: scale(1.015) translateY(-2px);
+  box-shadow: 0 18px 30px -12px rgba(16,37,107,.18);
+  z-index: 1;                 /* lift above neighbours so the shadow is not clipped */
+  position: relative;
+}
+.zoom:active { transform: scale(.995); }   /* press feedback on touch */
+
+/* Media inside a card: the frame holds still and only the image grows, which
+   is the effect every retail and job site uses for a logo or photo tile. */
+.zoom-media { overflow: hidden; }
+.zoom-media img { transition: transform .35s cubic-bezier(.2,.7,.3,1); }
+.zoom-media:hover img { transform: scale(1.06); }
+
+@media (prefers-reduced-motion: reduce) {
+  .zoom, .zoom:hover, .zoom:active { transform: none; transition: none; }
+  .zoom-media img, .zoom-media:hover img { transform: none; transition: none; }
 }

@@ -25,8 +25,7 @@ export default function About() {
       <section className="relative overflow-hidden border-b border-slate-100">
         <div className="absolute inset-0 bg-gradient-to-b from-navy-50/70 to-white" />
         <div className="relative mx-auto max-w-4xl px-6 py-20 text-center">
-          <span className="badge bg-brandgreen-50 text-brandgreen-600">About us</span>
-          <h1 className="mt-5 text-4xl font-extrabold leading-[1.08] tracking-tight text-slate-900 sm:text-[52px]">
+          <h1 className="text-4xl font-extrabold leading-[1.08] tracking-tight text-slate-900 sm:text-[52px]">
             Connecting Talent<br className="hidden sm:block" /> with Opportunities
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-[17px] leading-relaxed text-slate-700">
@@ -116,8 +115,7 @@ export default function About() {
                "We are dedicated to providing a user-friendly experience that meets the needs of both candidates and employers."],
             ].map(([Icon, title, body]) => (
               <div key={title}
-                   className="rounded-xl border border-slate-200 bg-white p-5 transition-all
-                              hover:-translate-y-0.5 hover:border-navy-200 hover:shadow-cardhover">
+                   className="rounded-xl border border-slate-200 bg-white p-5 zoom hover:border-navy-200">
                 <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-navy-50 text-navy">
                   <Icon size={17} />
                 </span>
@@ -179,7 +177,7 @@ function Section({ eyebrow, title, children }) {
 
 function Pillar({ icon: Icon, title, children }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-7 shadow-card">
+    <div className="rounded-2xl border border-slate-200 bg-white p-7 shadow-card zoom hover:border-navy-200">
       <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brandgreen-50 text-brandgreen-600">
         <Icon size={20} />
       </span>
@@ -191,7 +189,7 @@ function Pillar({ icon: Icon, title, children }) {
 
 function OfferCard({ icon: Icon, title, items }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-7 shadow-card">
+    <div className="rounded-2xl border border-slate-200 bg-white p-7 shadow-card zoom hover:border-navy-200">
       <div className="flex items-center gap-3">
         <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-navy-50 text-navy">
           <Icon size={18} />

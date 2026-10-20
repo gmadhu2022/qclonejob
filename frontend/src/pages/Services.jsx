@@ -27,7 +27,7 @@ const TABS = [
 
 /* ---------------- shared shell ---------------- */
 
-function ServiceShell({ eyebrow, title, lede, children, cta }) {
+function ServiceShell({ title, lede, children, cta }) {
   return (
     <div className="min-h-screen bg-white">
       <SiteHeader sub={
@@ -51,8 +51,7 @@ function ServiceShell({ eyebrow, title, lede, children, cta }) {
       <section className="relative overflow-hidden border-b border-slate-100">
         <div className="absolute inset-0 bg-gradient-to-b from-navy-50/70 to-white" />
         <div className="relative mx-auto max-w-4xl px-6 py-16 text-center">
-          <span className="badge bg-brandgreen-50 text-brandgreen-600">{eyebrow}</span>
-          <h1 className="mt-5 text-[34px] font-extrabold leading-[1.1] tracking-tight text-slate-900 sm:text-[44px]">
+          <h1 className="text-[34px] font-extrabold leading-[1.1] tracking-tight text-slate-900 sm:text-[44px]">
             {title}
           </h1>
           {lede.map((p, i) => (
@@ -113,8 +112,7 @@ function NumberedGrid({ items }) {
     <div className="grid gap-4 md:grid-cols-2 stagger">
       {items.map(([title, body], i) => (
         <div key={title}
-             className="rounded-xl border border-slate-200 bg-white p-5 transition-all
-                        hover:-translate-y-0.5 hover:border-navy-200 hover:shadow-cardhover">
+             className="rounded-xl border border-slate-200 bg-white p-5 zoom hover:border-navy-200">
           <div className="flex items-start gap-3">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg
                              bg-navy text-[12px] font-bold text-white">
@@ -168,7 +166,7 @@ function Steps({ items }) {
 
 function Tier({ icon: Icon, name, body }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card">
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card zoom hover:border-navy-200">
       <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brandgreen-50 text-brandgreen-600">
         <Icon size={18} />
       </span>
@@ -184,7 +182,6 @@ function Tier({ icon: Icon, name, body }) {
 export function Promotions() {
   return (
     <ServiceShell
-      eyebrow="Promotions"
       title="Promote Your Business. Reach the Right Audience."
       lede={[
         "Welcome to our Commercial Promotion Services, designed to help businesses increase their visibility, promote their services, and connect with a relevant audience through our job portal.",
@@ -265,7 +262,6 @@ export function Promotions() {
 export function RecruitmentServices() {
   return (
     <ServiceShell
-      eyebrow="Recruitment Services"
       title="Connecting Employers with the Right Talent"
       lede={[
         "At QCloneJob, we help organizations connect with suitable candidates through our recruitment services. Our platform enables employers to publish job openings, reach potential candidates, identify relevant talent, and simplify their hiring process.",
@@ -357,7 +353,6 @@ export function RecruitmentServices() {
 export function JobSearchService() {
   return (
     <ServiceShell
-      eyebrow="Job Search"
       title="Discover Opportunities. Build Your Career."
       lede={[
         "Welcome to QCloneJob, your destination for exploring career opportunities and connecting with potential employers.",
