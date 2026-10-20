@@ -77,28 +77,65 @@ function TopLink({ to, active, children }) {
  * link. Click alone makes a mouse user work harder than they need to.
  */
 function NavMenu({ label, items, active }) {
+  /* CLICK IS THE ONLY WAY THIS OPENS.
+     ---------------------------------
+     The previous version opened on hover AND toggled on click, which made it
+     fail in a way that looked random:
+
+       1. Moving the pointer onto the button opened the menu (hover). The
+          click that followed ran a TOGGLE, so it closed again instantly —
+          clicking appeared to do nothing. On desktop the pointer always
+          enters before the click, so this happened almost every time.
+       2. onMouseLeave closed the menu, and there is a 4px gap between the
+          button and the panel. Moving down to an item crossed that gap,
+          left the container, and shut the menu before the cursor arrived.
+       3. On a touch screen the tap fired the hover handler first and the
+          same toggle-cancels-hover race applied.
+
+     Click-only has none of those races and behaves identically with a mouse,
+     a finger and a keyboard. */
   const [open, setOpen] = useState(false);
   const box = useRef(null);
+  const btn = useRef(null);
+  const { pathname, search } = useLocation();
+
+  /* Close when the route changes. Clicking an item already closes it, but a
+     link to the page you are ALREADY on does not remount this component, so
+     without this the menu would stay open over the page you just asked for. */
+  useEffect(() => { setOpen(false); }, [pathname, search]);
 
   useEffect(() => {
     if (!open) return;
+    /* pointerdown, not mousedown: it covers mouse, touch and pen in one
+       listener. It also fires before click, so the menu is already closing
+       as the click lands — and because the panel is inside `box`, clicking
+       an item is correctly treated as inside and the navigation still runs. */
     const away = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
-    const esc = (e) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", away);
-    document.addEventListener("keydown", esc);
+    const key = (e) => {
+      if (e.key === "Escape") { setOpen(false); btn.current?.focus(); }
+    };
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", key);
     return () => {
-      document.removeEventListener("mousedown", away);
-      document.removeEventListener("keydown", esc);
+      document.removeEventListener("pointerdown", away);
+      document.removeEventListener("keydown", key);
     };
   }, [open]);
 
   return (
     <div ref={box} className="relative"
-         onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
-      <button type="button" aria-haspopup="menu" aria-expanded={open}
+         /* Tabbing past the last item closes the menu, so a keyboard user is
+            never left with an invisible open panel behind the next control. */
+         onBlur={(e) => {
+           if (!e.currentTarget.contains(e.relatedTarget)) setOpen(false);
+         }}>
+      <button ref={btn} type="button" aria-haspopup="menu" aria-expanded={open}
               onClick={() => setOpen((v) => !v)}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); }
+              }}
               className={`flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors
-                ${active ? "bg-navy-50 text-navy" : "text-slate-700 hover:bg-slate-50 hover:text-navy"}`}>
+                ${active || open ? "bg-navy-50 text-navy" : "text-slate-700 hover:bg-slate-50 hover:text-navy"}`}>
         {label}
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden
              className={`ml-1 transition-transform ${open ? "rotate-180" : ""}`}>
@@ -108,16 +145,21 @@ function NavMenu({ label, items, active }) {
       </button>
 
       {open && (
-        <div role="menu"
-             className="absolute right-0 top-full z-40 mt-1 min-w-[210px] overflow-hidden
-                        rounded-xl border border-slate-200 bg-white py-1 shadow-cardhover">
-          {items.map((it) => (
-            <Link key={it.to} to={it.to} role="menuitem" onClick={() => setOpen(false)}
-                  className="block px-4 py-2.5 text-sm font-medium text-slate-700
-                             transition-colors hover:bg-navy-50 hover:text-navy">
-              {it.label}
-            </Link>
-          ))}
+        /* pt-1 on the wrapper instead of mt-1 on the panel: the gap between
+           button and panel is now INSIDE the element, so there is no dead
+           strip to cross. */
+        <div className="absolute right-0 top-full z-50 pt-1">
+          <div role="menu" aria-label={label}
+               className="min-w-[210px] overflow-hidden rounded-xl border border-slate-200
+                          bg-white py-1 shadow-cardhover">
+            {items.map((it) => (
+              <Link key={it.to} to={it.to} role="menuitem" onClick={() => setOpen(false)}
+                    className="block px-4 py-2.5 text-sm font-medium text-slate-700
+                               transition-colors hover:bg-navy-50 hover:text-navy">
+                {it.label}
+              </Link>
+            ))}
+          </div>
         </div>
       )}
     </div>
