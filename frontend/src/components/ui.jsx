@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { Navigate, useLocation, Link, useNavigate } from "react-router-dom";
+import { focusFirstError } from "../lib/formFocus";
 import { useAuth } from "../context/AuthContext";
 import { api, mediaUrl } from "../lib/api";
 import { IconLogout } from "./icons";
@@ -13,6 +14,20 @@ export function ToastProvider({ children }) {
   const show = useCallback((message, kind = "success") => {
     setToast({ message, kind });
     setTimeout(() => setToast(null), 4000);
+
+    /* Every error in the app surfaces through this one function, so hooking
+       it here gives auto-scroll to the whole application rather than form by
+       form. Deferred one frame: the toast usually fires in the same handler
+       that sets the error state, so the red field does not exist in the DOM
+       until React has re-rendered. Searching before that finds nothing.
+
+       No-ops when nothing on the page is marked invalid, so a network or
+       server error does not scroll the page somewhere arbitrary. */
+    if (kind === "error") {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => { focusFirstError(); });
+      });
+    }
   }, []);
   return (
     <ToastCtx.Provider value={show}>

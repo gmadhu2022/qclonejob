@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { IconCheck, IconBlock, IconSparkle } from "./icons";
+import { focusFirstError } from "../lib/formFocus";
 
 /**
  * Modal dialog for outcomes that deserve more than a toast — successful
@@ -43,7 +44,19 @@ export function DialogProvider({ children }) {
   const show = useCallback((opts) => {
     setDlg(typeof opts === "string" ? { title: opts, tone: "info" } : { tone: "info", ...opts });
   }, []);
-  const close = useCallback(() => setDlg(null), []);
+  const close = useCallback(() => {
+    /* After an error dialog is dismissed, put the person on the field that
+       caused it. The dialog explains WHAT is wrong; this answers WHERE —
+       which on a nine-section form is the harder half. Done on close rather
+       than on open, because the dialog covers the field while it is up. */
+    const wasError = dlg?.tone === "error";
+    setDlg(null);
+    if (wasError) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => { focusFirstError(); });
+      });
+    }
+  }, [dlg]);
 
   useEffect(() => {
     if (!dlg) return;
