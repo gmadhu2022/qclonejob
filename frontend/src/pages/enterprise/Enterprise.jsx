@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Routes, Route, Navigate, Link } from "react-router-dom";
-import { api, getToken, mediaUrl } from "../../lib/api";
+import { api, apiUrl, getToken, mediaUrl } from "../../lib/api";
 import { DashboardLayout, StatusBadge, useToast } from "../../components/ui";
 import { useDialog, useConfirm } from "../../components/Dialog";
 import Chat from "../../components/Chat";
@@ -2045,7 +2045,7 @@ function PostBanner() {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch("/api/uploads/media", {
+      const res = await fetch(apiUrl("/api/uploads/media"), {
         method: "POST",
         headers: { Authorization: `Bearer ${getToken()}` },
         body: fd,

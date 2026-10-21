@@ -115,6 +115,18 @@ export const api = {
  * proxies those; in production the static site and the API are on different
  * origins, so the path must be prefixed with the API base or the image 404s.
  */
+/** Absolute URL for an API path.
+ *
+ * Anything calling `fetch` directly — file downloads, raw uploads — MUST go
+ * through this. A bare fetch("/api/…") works in dev, where Vite proxies /api
+ * to the backend, and breaks in production, where the frontend and the API
+ * are separate hosts: the request hits the STATIC SITE, which answers unknown
+ * paths with index.html and a 200. The caller then saves an HTML page as
+ * .xlsx and Excel reports a corrupt file. */
+export function apiUrl(path) {
+  return `${BASE}${path.startsWith("/") ? "" : "/"}${path}`;
+}
+
 export function mediaUrl(path) {
   if (!path) return null;
   if (/^(https?:|data:|blob:)/.test(path)) return path;   // already absolute

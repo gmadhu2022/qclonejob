@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Routes, Route, Navigate, Link, useNavigate } from "react-router-dom";
-import { api, getToken, mediaUrl } from "../../lib/api";
+import { api, apiUrl, getToken, mediaUrl } from "../../lib/api";
 import { DashboardLayout, useToast } from "../../components/ui";
 import { useDialog, useConfirm } from "../../components/Dialog";
 import { IconBuilding, IconUpload, IconChart, IconSparkle, IconEdit, IconClose,
@@ -1172,13 +1172,30 @@ function DataUpload() {
    */
   const download = async (path, filename, type) => {
     try {
-      const res = await fetch(path, { headers: { Authorization: `Bearer ${getToken()}` } });
+      // apiUrl, not a bare path: in production the API is a different host.
+      const res = await fetch(apiUrl(path), { headers: { Authorization: `Bearer ${getToken()}` } });
       if (!res.ok) {
         let msg = `Download failed (${res.status})`;
         try { msg = (await res.json()).detail || msg; } catch { /* not JSON */ }
         throw new Error(msg);
       }
-      const blob = new Blob([await res.arrayBuffer()], { type });
+      /* A 200 is not proof the body is a spreadsheet. A static host answers
+         an unknown path with index.html and a 200, and that HTML would be
+         saved as .xlsx — which is exactly what Excel reports as a corrupt
+         file. Check what actually came back before writing it to disk. */
+      const got = (res.headers.get("content-type") || "").toLowerCase();
+      if (got.includes("text/html")) {
+        throw new Error("The server returned a web page instead of a file. "
+                      + "VITE_API_BASE is probably not set on the frontend build.");
+      }
+      const buf = await res.arrayBuffer();
+      const head = new Uint8Array(buf.slice(0, 4));
+      const isZip = head[0] === 0x50 && head[1] === 0x4b;      // "PK" — every .xlsx is a zip
+      if (filename.endsWith(".xlsx") && !isZip) {
+        throw new Error("That download was not a valid Excel file, so it wasn't saved. "
+                      + "Please try again or contact support.");
+      }
+      const blob = new Blob([buf], { type });
       if (blob.size < 200) throw new Error("The downloaded file looks empty. Please try again.");
 
       const url = URL.createObjectURL(blob);
