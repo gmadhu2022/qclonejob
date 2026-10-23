@@ -40,7 +40,30 @@ def login(form: OAuth2PasswordRequestForm = Depends(), expected_role: str | None
     the Job Seeker page with recruiter credentials is refused rather than
     silently redirecting them somewhere they didn't ask to go.
     """
-    user = db.query(models.User).filter(models.User.email == form.username).first()
+    # One address can now hold one account per portal, so "find the user with
+    # this email" is no longer a single answer. Resolution order:
+    #   1. the account for the portal they picked on the sign-in page
+    #   2. an ADMIN account on that address — admins sign in through any portal
+    #   3. if they picked nothing and there is exactly one account, that one
+    #   4. if they picked nothing and there are several, refuse and say so,
+    #      rather than silently logging them into whichever row came first
+    candidates = (db.query(models.User)
+                  .filter(models.User.email == form.username)
+                  .order_by(models.User.id).all())
+
+    user = None
+    if expected_role:
+        user = next((u for u in candidates if u.role == expected_role), None)
+        if user is None:
+            user = next((u for u in candidates if u.role == models.ROLE_ADMIN), None)
+    elif len(candidates) == 1:
+        user = candidates[0]
+    elif len(candidates) > 1:
+        roles = ", ".join(sorted(ROLE_LABEL.get(u.role, u.role) for u in candidates))
+        raise HTTPException(
+            status_code=400,
+            detail=(f"This email has more than one account ({roles}). "
+                    f"Choose which one you are signing in as."))
 
     # ONE message for both failures, deliberately.
     #
@@ -50,6 +73,24 @@ def login(form: OAuth2PasswordRequestForm = Depends(), expected_role: str | None
     # sentence comes back, and you know whether it is registered. Identical
     # copy on both paths closes that.
     WRONG = "User ID or password are wrong."
+
+    # They picked a portal, the address exists, but not on that portal.
+    # Only said once the PASSWORD checks out against one of their accounts —
+    # otherwise this reveals which addresses are registered to anyone who
+    # types one in. Without this branch the message would be "User ID or
+    # password are wrong", and someone with a perfectly good password would
+    # go and reset it.
+    if user is None and expected_role and candidates:
+        proven = next((u for u in candidates
+                       if verify_password(form.password, u.password_hash)), None)
+        if proven:
+            chose = ROLE_LABEL.get(expected_role, expected_role)
+            actual = ROLE_LABEL.get(proven.role, proven.role)
+            raise HTTPException(
+                status_code=403,
+                detail=(f"You selected the {chose} login, but these credentials belong to "
+                        f"a {actual} account. Switch to {actual} above and sign in again."))
+
     if not user or not verify_password(form.password, user.password_hash):
         raise HTTPException(status_code=401, detail=WRONG)
 
@@ -71,17 +112,8 @@ def login(form: OAuth2PasswordRequestForm = Depends(), expected_role: str | None
         raise HTTPException(status_code=403,
                             detail="This account is disabled. Please contact support@qclonejob.com.")
     # Portal lock — admins may use any portal, everyone else is held to theirs.
-    if expected_role and user.role != expected_role and user.role != models.ROLE_ADMIN:
-        chose = ROLE_LABEL.get(expected_role, expected_role)
-        actual = ROLE_LABEL.get(user.role, user.role)
-        # Name BOTH roles and the exact next action. "Wrong portal" on its own
-        # leaves someone guessing which of the other two they belong to, and
-        # they usually conclude their password is wrong and reset it.
-        raise HTTPException(
-            status_code=403,
-            detail=(f"You selected the {chose} login, but these credentials belong to "
-                    f"a {actual} account. Switch to {actual} above and sign in again."),
-        )
+    # (portal mismatch is handled before the password check, above — the
+    #  resolver guarantees user.role matches expected_role by this point)
 
     token = create_access_token(user)
     return schemas.Token(
@@ -288,12 +320,22 @@ def reset_check_email(body: dict, db: Session = Depends(get_db)):
     email = (body.get("email") or "").strip().lower()
     if not EMAIL_RE.match(email):
         raise HTTPException(400, "Please enter the correct email id")
-    user = db.query(models.User).filter(models.User.email == email).first()
-    if not user:
+    users = db.query(models.User).filter(models.User.email == email).all()
+    if not users:
         raise HTTPException(400, "Please enter the correct email id")
-    if not user.is_active:
+    if not any(u.is_active for u in users):
         raise HTTPException(400, "This account isn't active yet. Please contact support.")
-    return {"ok": True, "email": email, "message": "Account found. Send yourself an OTP to continue."}
+
+    # An address can hold one account per portal, so the reset has to know
+    # WHICH it is resetting. The roles are returned so the form can ask;
+    # with only one account there is nothing to ask and the form skips it.
+    roles = [{"role": u.role, "label": ROLE_LABEL.get(u.role, u.role)}
+             for u in users if u.is_active]
+    return {"ok": True, "email": email, "roles": roles,
+            "needs_role": len(roles) > 1,
+            "message": ("Account found. Send yourself an OTP to continue." if len(roles) == 1
+                        else "This email has more than one account. "
+                             "Choose which one you're resetting.")}
 
 
 @router.post("/reset-with-otp")
@@ -304,9 +346,22 @@ def reset_with_otp(body: dict, db: Session = Depends(get_db)):
     new_password = body.get("new_password") or ""
     confirm = body.get("confirm_password")
 
-    user = db.query(models.User).filter(models.User.email == email).first()
-    if not user:
+    role = (body.get("role") or "").strip() or None
+    matches = db.query(models.User).filter(models.User.email == email).all()
+    if not matches:
         raise HTTPException(400, "Please enter the correct email id")
+    if role:
+        user = next((u for u in matches if u.role == role), None)
+        if not user:
+            raise HTTPException(400, "Please enter the correct email id")
+    elif len(matches) == 1:
+        user = matches[0]
+    else:
+        # Refusing beats guessing: resetting the wrong one of someone's two
+        # accounts leaves them still locked out of the one they wanted, with
+        # a password they did not expect on the other.
+        raise HTTPException(400, "This email has more than one account. "
+                                 "Please choose which one you're resetting.")
 
     # Confirm is checked in the browser too, but a mismatch that reaches here
     # must not be silently resolved in favour of whichever field came first.

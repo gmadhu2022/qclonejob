@@ -490,8 +490,14 @@ export function ForgotPassword() {
     if (pw.length < 6) { setError("Password must be at least 6 characters."); return; }
     setError(null); setBusy(true);
     try {
+      /* One address can hold an account per portal, so the reset must say
+         which. The portal picked on the sign-in page is remembered there, and
+         that is the one they came from. Without it the server refuses rather
+         than resetting the wrong account — correct, but a dead end for the
+         user. */
       const r = await api.post("/api/auth/reset-with-otp",
-        { email, code, new_password: pw, confirm_password: confirm }, { auth: false });
+        { email, code, new_password: pw, confirm_password: confirm,
+          role: localStorage.getItem("hire_login_role") || undefined }, { auth: false });
       /* Requirement 4 — straight to the dashboard. Making someone who just
          proved ownership of the account log in again is pure friction. */
       setSession(r);

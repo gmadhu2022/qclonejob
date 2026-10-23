@@ -11,7 +11,7 @@ from ..config import settings
 from ..job_taxonomy import taxonomy_payload, skills_for_sector, ALL_SKILLS, SKILLS_BY_SECTOR
 from .. import banner_service, otp_service
 
-from .auth import EMAIL_RE          # one email shape across the whole API
+from .auth import EMAIL_RE, ROLE_LABEL          # one email shape across the whole API
 from .. import captcha
 
 router = APIRouter(prefix="/api/public", tags=["public"])
@@ -42,9 +42,14 @@ def register_enterprise(body: schemas.EnterpriseRegister, db: Session = Depends(
         if not (value or "").strip():
             raise HTTPException(400, f"{label} is required.")
 
-    if db.query(models.User).filter(models.User.email == email).first():
-        raise HTTPException(400, "An account already exists with this email. "
-                                 "Use another address, or log in with this one.")
+    # Scoped to THIS portal's role. The same person may hold a recruiter account
+    # and a job seeker account on one address; only a second account in the SAME
+    # portal is a genuine duplicate.
+    if db.query(models.User).filter(
+            models.User.email == email,
+            models.User.role == models.ROLE_ENTERPRISE).first():
+        raise HTTPException(400, "A recruiter account already exists with this email. "
+                                 "Log in with it, or use another address.")
     # The form sets an email_verified flag, but a flag from the browser proves
     # nothing — the check is the OTP record on the server. (OTP_REQUIRED stays
     # as the switch for the MOBILE code; the email one is always required now
@@ -79,10 +84,22 @@ def register_enterprise(body: schemas.EnterpriseRegister, db: Session = Depends(
 
 @router.post("/register/jobseeker", response_model=schemas.CredentialResult)
 def register_jobseeker(body: schemas.JobSeekerSelfRegister, db: Session = Depends(get_db)):
-    if db.query(models.User).filter(models.User.email == body.email).first():
-        raise HTTPException(400, "A user with this email already exists.")
+    # Normalised once and used throughout. The response builder below already
+    # referenced a bare `email`, which was never defined — this endpoint raised
+    # NameError (a 500) on every successful registration. Lower-cased too, so
+    # "Madhu@x.com" and "madhu@x.com" cannot become two job seeker accounts.
+    email = (body.email or "").strip().lower()
+
+    # Scoped to THIS portal's role. The same person may hold a recruiter account
+    # and a job seeker account on one address; only a second account in the SAME
+    # portal is a genuine duplicate.
+    if db.query(models.User).filter(
+            models.User.email == email,
+            models.User.role == models.ROLE_JOBSEEKER).first():
+        raise HTTPException(400, "A job seeker account already exists with this email. "
+                                 "Log in with it, or use another address.")
     password = generate_password()
-    user = models.User(email=body.email, password_hash=hash_password(password),
+    user = models.User(email=email, password_hash=hash_password(password),
                        role=models.ROLE_JOBSEEKER, must_change_password=True)
     db.add(user)
     db.flush()
@@ -94,15 +111,18 @@ def register_jobseeker(body: schemas.JobSeekerSelfRegister, db: Session = Depend
     data = body.model_dump()
     data["education"] = [e for e in (data.get("education") or [])]
     data["experience"] = [e for e in (data.get("experience") or [])]
-    seeker = models.JobSeeker(user_id=user.id, approval_status="pending",
+    self_approve = bool(getattr(settings, "JOBSEEKER_SELF_APPROVE", True))
+    seeker = models.JobSeeker(user_id=user.id,
+                              approval_status="approved" if self_approve else "pending",
                               registration_source="self",
                               institute_id=default_inst.id if default_inst else None, **data)
     db.add(seeker)
     db.commit()
-    name = f"{body.first_name or ''} {body.last_name or ''}".strip() or body.email
-    res = send_credentials_email(body.email, name, body.email, password)
+    name = f"{body.first_name or ''} {body.last_name or ''}".strip() or email
+    res = send_credentials_email(email, name, email, password)
     for admin in db.query(models.User).filter(models.User.role == models.ROLE_ADMIN).all():
-        notify(db, admin.id, "system", "New job seeker awaiting approval",
+        notify(db, admin.id, "system",
+               "New job seeker registered" if self_approve else "New job seeker awaiting approval",
                f"{name} registered voluntarily and needs review.", "/admin/approvals", commit=False)
     db.commit()
     return schemas.CredentialResult(email=email, user_id=email, password=password,
@@ -112,7 +132,7 @@ def register_jobseeker(body: schemas.JobSeekerSelfRegister, db: Session = Depend
 
 
 @router.get("/email-available")
-def email_available(email: str, db: Session = Depends(get_db)):
+def email_available(email: str, role: str | None = None, db: Session = Depends(get_db)):
     """Is this address free to register with? (requirement 5)
 
     Called as soon as the email field is filled in, so a duplicate is caught
@@ -123,12 +143,28 @@ def email_available(email: str, db: Session = Depends(get_db)):
     if not EMAIL_RE.match(email):
         return {"valid": False, "available": False,
                 "message": "Enter a valid email address, e.g. name@institute.edu"}
-    taken = db.query(models.User).filter(models.User.email == email).first() is not None
+    # Availability is per PORTAL now. Someone registering as a job seeker is
+    # not blocked by their own recruiter account on the same address, so a
+    # blanket "taken" would be wrong — and would send them off to invent a
+    # second email they do not need.
+    rows = db.query(models.User).filter(models.User.email == email).all()
+    if role:
+        taken = any(r.role == role for r in rows)
+        label = ROLE_LABEL.get(role, role)
+        msg = (f"A {label} account already exists with this email. Log in with it, "
+               f"or use another address.") if taken else "Email looks good."
+    else:
+        # No role given: fall back to the old global answer so any caller that
+        # has not been updated keeps behaving safely rather than optimistically.
+        taken = bool(rows)
+        msg = ("An account already exists with this email. Use another address, "
+               "or log in with this one.") if taken else "Email looks good."
+
     return {
         "valid": True,
         "available": not taken,
-        "message": ("An account already exists with this email. Use another address, "
-                    "or log in with this one." if taken else "Email looks good."),
+        "existing_roles": sorted({r.role for r in rows}),
+        "message": msg,
     }
 
 
@@ -147,9 +183,14 @@ def register_institute(body: schemas.InstituteRegister, db: Session = Depends(ge
     email = (body.email or "").strip().lower()
     if not EMAIL_RE.match(email):
         raise HTTPException(400, "Enter a valid email address, e.g. name@institute.edu")
-    if db.query(models.User).filter(models.User.email == email).first():
-        raise HTTPException(400, "An account already exists with this email. "
-                                 "Use another address, or log in with this one.")
+    # Scoped to THIS portal's role. The same person may hold a recruiter account
+    # and a job seeker account on one address; only a second account in the SAME
+    # portal is a genuine duplicate.
+    if db.query(models.User).filter(
+            models.User.email == email,
+            models.User.role == models.ROLE_INSTITUTE).first():
+        raise HTTPException(400, "An institute account already exists with this email. "
+                                 "Log in with it, or use another address.")
 
     # The email must be the one that was actually verified — otherwise the OTP
     # step can be passed with one address and the account opened on another.

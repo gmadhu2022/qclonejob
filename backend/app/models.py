@@ -1,5 +1,6 @@
 from datetime import datetime
 from sqlalchemy import (
+    UniqueConstraint,
     Column, Integer, String, Text, Boolean, DateTime, ForeignKey, JSON, Float
 )
 from sqlalchemy.orm import relationship
@@ -66,8 +67,24 @@ class User(Base):
     """Central auth record. email doubles as the username (per user stories)."""
     __tablename__ = "users"
 
+    # EMAIL IS UNIQUE PER ROLE, NOT GLOBALLY.
+    #
+    # One person is often more than one thing here: an institute's placement
+    # officer looking for their own next job, a recruiter whose company also
+    # trains students. A single global unique index forced them to invent a
+    # second email address to use a second portal, and it made bulk uploads
+    # fail outright when a student happened to share an address with a
+    # recruiter already on the platform.
+    #
+    # The pair (email, role) is still unique, so there can never be two job
+    # seeker accounts on one address — only one account per portal. Login is
+    # disambiguated by the portal chosen on the sign-in page.
+    __table_args__ = (
+        UniqueConstraint("email", "role", name="uq_users_email_role"),
+    )
+
     id = Column(Integer, primary_key=True)
-    email = Column(String, unique=True, index=True, nullable=False)
+    email = Column(String, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
     role = Column(String, nullable=False)  # admin | enterprise | institute | jobseeker
     is_active = Column(Boolean, default=True)
@@ -372,45 +389,7 @@ class Job(Base):
     vacancies_filled = Column(Integer, default=0)
 
     enterprise = relationship("Enterprise", back_populates="jobs")
-    institute = relationship("Institute", foreign_keys=[institute_id])
     applications = relationship("Application", back_populates="job")
-
-    # --- Employer branding, read straight off the posting ------------------
-    #
-    # Every job listing on every competing portal leads with the company's
-    # name and logo — it is the first thing a seeker uses to decide whether a
-    # card is worth reading. Those lived only on the Enterprise/Institute row,
-    # so the job feed had no way to show them and the cards were text-only.
-    #
-    # Properties rather than stored columns: a company that changes its name
-    # or uploads a new logo must not leave every job it ever posted showing
-    # the old one. Pydantic's from_attributes reads properties, so adding them
-    # here surfaces the fields on JobOut everywhere it is already used — the
-    # seeker feed, recommendations, saved jobs and the public pages — with no
-    # endpoint changes and nothing to miss.
-    @property
-    def company_name(self) -> str | None:
-        if self.enterprise is not None:
-            return self.enterprise.name
-        if self.institute is not None:
-            return self.institute.name
-        return None
-
-    @property
-    def company_logo_url(self) -> str | None:
-        if self.enterprise is not None:
-            return self.enterprise.logo_url
-        if self.institute is not None:
-            return self.institute.logo_url
-        return None
-
-    @property
-    def company_location(self) -> str | None:
-        """Where the employer is based, for when the job itself omits it."""
-        src = self.enterprise or self.institute
-        if src is None:
-            return None
-        return ", ".join([x for x in (src.city, src.state) if x]) or None
 
 
 class Application(Base):

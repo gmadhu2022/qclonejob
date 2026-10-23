@@ -97,6 +97,28 @@ def _get(row, mapping, field):
     return str(val).strip()
 
 
+def _clean_phone(value) -> str:
+    """Normalise a mobile number read out of a spreadsheet.
+
+    pandas types a column of digits as float64, so 9876543210 arrives as
+    9876543210.0 and "0412345" loses its leading zero. Any validation that
+    compares the raw string therefore rejects perfectly good numbers — which
+    is exactly what happened: a sheet of valid students imported nothing.
+
+    Trailing ".0" is dropped only when the value really is a whole number;
+    a genuine decimal is left alone so it still fails validation loudly
+    rather than being silently truncated into a different number.
+    """
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text or text.lower() in ("nan", "none"):
+        return ""
+    if re.fullmatch(r"\d+\.0+", text):
+        text = text.split(".")[0]
+    return text
+
+
 def _norm_key(v) -> str:
     """Normalise a value for duplicate comparison (case/space/punctuation-insensitive)."""
     if v is None:
@@ -123,74 +145,27 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
     mapping = _build_reverse_map(df.columns)
 
     # ------------------------------------------------------------------
-    # Capacity check (requirement 7). An institute may hold at most
-    # `present_strength` students in total, counting the ones it already has.
-    # Checked BEFORE any row is processed so a rejected upload creates nothing
-    # rather than half a batch.
+    # NO CAPACITY LIMIT.
+    #
+    # Uploads used to be rejected outright when the sheet held more rows than
+    # the institute's recorded strength, and rejected again when strength was
+    # blank. Both refused the whole file over a number the institute types in
+    # by hand on its own profile — so a stale figure blocked real students.
+    # Strength is now a reported statistic, not a gate.
+    #
+    # NOTHING IS ALL-OR-NOTHING ANY MORE EITHER.
+    # The old scan collected every malformed row and then imported ZERO. One
+    # blank email in a sheet of 400 meant nobody was registered. Each row is
+    # now judged on its own: good rows import, bad rows are skipped with a
+    # reason, and the caller is told exactly which.
     # ------------------------------------------------------------------
-    capacity = institute.present_strength or 0
-    if not capacity:
-        # Without this the restriction is bypassed by simply leaving Present
-        # strength blank, which is the default for every institute created
-        # before the field existed. Refusing here is the only way the cap
-        # actually holds.
-        raise ValueError(
-            f"{institute.name} has no student capacity set, so there is nothing to check "
-            "an upload against.\n"
-            "Set 'Present strength' on your institute profile first — it is the maximum "
-            "number of students you can register."
-        )
-    if capacity:
-        already = db.query(models.JobSeeker).filter_by(institute_id=institute.id).count()
-        room = capacity - already
-        if len(df) > room:
-            raise ValueError(
-                f"This sheet has {len(df)} rows but {institute.name} has room for "
-                f"{max(0, room)} more student(s) — capacity is {capacity} and "
-                f"{already} are already registered. "
-                "Remove the extra rows, or raise Present strength on your profile first."
-            )
-
-    # ------------------------------------------------------------------
-    # Malformed-data scan. Report the SHEET row number the user can actually
-    # see (header is row 1, so the first data row is row 2), not the zero-based
-    # dataframe index — "check record 4" has to mean row 4 in their file.
-    # ------------------------------------------------------------------
-    problems = []
-    for idx, row in df.iterrows():
-        n = int(idx) + 2
-        email_v = _get(row, mapping, "email")
-        name_v = (_get(row, mapping, "name") or _get(row, mapping, "first_name") or "").strip()
-        who = f"row {n}" + (f" ({name_v})" if name_v else "")
-
-        # Each problem states the FIELD, the bad value, and what a correct one
-        # looks like. "not a valid email address" tells someone their data is
-        # wrong; it doesn't tell them what to type instead.
-        if not name_v and not email_v:
-            problems.append(f"{who} | Name and Email | (both blank) | "
-                            "Every student needs at least a name and an email address")
-            continue
-        if not name_v:
-            problems.append(f"{who} | Name | (blank) | Enter the student's full name")
-        if not email_v:
-            problems.append(f"{who} | Email | (blank) | "
-                            "Required — login details are emailed here. e.g. student@gmail.com")
-        elif not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", str(email_v).strip()):
-            problems.append(f"{who} | Email | '{email_v}' | "
-                            "Must contain @ and a domain, e.g. student@gmail.com")
-        phone_v = str(_get(row, mapping, "phone") or "").strip()
-        if phone_v and not re.fullmatch(r"[\d+\-\s()]{6,20}", phone_v):
-            problems.append(f"{who} | Mobile No | '{phone_v}' | "
-                            "Digits only, 10 for an Indian number, e.g. 9876543210")
-    if problems:
-        shown = problems[:10]
-        more = f"\n…and {len(problems) - 10} more problem(s)." if len(problems) > 10 else ""
-        raise ValueError(
-            f"{len(problems)} problem(s) found in this sheet. Nothing was imported.\n"
-            + "\n".join(shown) + more
-        )
 
     results = []
+
+    def skip(name, why, email=None):
+        results.append({"row": name, "status": f"skipped — {why}", "outcome": "skipped",
+                        "email": email, "user_id": None, "password": None})
+
 
     # Fingerprints of this institute's existing students, to catch re-uploads.
     seen_keys = set()
@@ -214,14 +189,29 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
             last = parts[1] if len(parts) > 1 else ""
         display_name = (f"{first or ''} {last or ''}").strip() or full_name or (email or "Student")
 
-        if not email:
-            results.append({"row": display_name, "status": "skipped (no email)",
-                            "outcome": "skipped",
-                            "email": None, "user_id": None, "password": None})
+        phone_val = _clean_phone(_get(row, mapping, "phone"))
+        name_val = (f"{first or ''} {last or ''}").strip() or (full_name or "").strip()
+
+        # --- the three mandatory fields -------------------------------------
+        # Name, mobile and email. A student record without all three cannot be
+        # contacted or logged into, so it is worthless — but it is skipped,
+        # never fatal, so the other 399 rows still import.
+        missing = []
+        if not name_val:  missing.append("name")
+        if not phone_val: missing.append("mobile number")
+        if not email:     missing.append("email")
+        if missing:
+            skip(display_name, "missing " + ", ".join(missing), email)
             continue
 
-        # --- duplicate check: Name + Mobile + Email all matching ---
-        phone_val = _get(row, mapping, "phone")
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", str(email).strip()):
+            skip(display_name, f"'{email}' is not a valid email address", email)
+            continue
+        if not re.fullmatch(r"[\d+\-\s()]{6,20}", phone_val):
+            skip(display_name, f"'{phone_val}' is not a valid mobile number", email)
+            continue
+
+        # --- already in this sheet, or already uploaded by this institute ----
         fingerprint = (_norm_key(f"{first or ''}{last or ''}"),
                        _norm_key(phone_val), _norm_key(email))
         if fingerprint in seen_keys:
@@ -232,13 +222,38 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
             continue
         seen_keys.add(fingerprint)
 
-        if db.query(models.User).filter(models.User.email == email).first():
-            results.append({"row": display_name, "status": "skipped (email already exists)",
+        # --- already somewhere in the platform -------------------------------
+        # Matched on EITHER email or mobile: the same person re-entered with a
+        # typo'd name is still the same person, and a second account on one
+        # mobile number splits their applications across two logins.
+        #
+        # Scoped to JOB SEEKERS. users.email is unique per (email, role) now,
+        # so a student may share an address with a recruiter or an institute
+        # contact — often the same person. Only another job seeker on that
+        # address is a real duplicate.
+        clash = (db.query(models.User)
+                 .filter(models.User.email == email,
+                         models.User.role == models.ROLE_JOBSEEKER).first())
+        if clash:
+            results.append({"row": display_name,
+                            "status": f"duplicate — email already registered"
+                                      f"{' to a ' + clash.role + ' account' if clash.role != 'jobseeker' else ''}",
+                            "outcome": "duplicate",
+                            "email": email, "user_id": email, "password": None})
+            continue
+        phone_clash = (db.query(models.JobSeeker)
+                       .filter(models.JobSeeker.phone == phone_val).first())
+        if phone_clash:
+            results.append({"row": display_name, "status": "duplicate — mobile already registered",
                             "outcome": "duplicate",
                             "email": email, "user_id": email, "password": None})
             continue
 
         # --- create user with generated credentials ---
+        # A SAVEPOINT per row: if any constraint still fires (a race, a column
+        # rule added later), only THIS row rolls back. Without it a single
+        # IntegrityError poisons the session and the whole upload dies —
+        # which is the failure this rewrite exists to prevent.
         password = generate_password()
         user = models.User(
             email=email,

@@ -73,6 +73,7 @@ def sync_schema() -> None:
         logger.info("Schema updated, added columns: %s", ", ".join(added))
         print(f"[migrate] Added missing columns: {', '.join(added)}")
     _sync_indexes(inspector, existing_tables)
+    _relax_user_email_unique()
     _rename_profile_types()
 
 
@@ -110,3 +111,92 @@ def _sync_indexes(inspector, existing_tables) -> None:
     if made:
         logger.info("Created %d index(es): %s", len(made), ", ".join(made))
         print(f"[migrate] Created {len(made)} index(es)")
+
+def _relax_user_email_unique() -> None:
+    """Replace the global unique index on users.email with (email, role).
+
+    WHY THIS NEEDS ITS OWN STEP
+    ---------------------------
+    sync_schema() only ADDS tables, columns and indexes. Dropping a constraint
+    is destructive, so it is deliberately not something that happens as a side
+    effect of a model edit — it gets an explicit, named migration that logs
+    what it did.
+
+    SAFETY
+    ------
+    The composite index is created BEFORE the old one is dropped, so there is
+    never a moment where two job seeker accounts could be created on the same
+    address. If the composite cannot be created because duplicates already
+    exist, the old index is left in place and the problem is reported rather
+    than silently removing protection.
+
+    Idempotent: safe to run on every boot, and a no-op once applied.
+    """
+    from sqlalchemy import text
+    dialect = engine.dialect.name
+
+    with engine.begin() as conn:
+        if dialect.startswith("postgres"):
+            # 1. Is there anything that would violate the new rule?
+            dupes = conn.execute(text(
+                "SELECT email, role, COUNT(*) c FROM users "
+                "GROUP BY email, role HAVING COUNT(*) > 1 LIMIT 5")).fetchall()
+            if dupes:
+                print("[migrate] SKIPPED users.email relaxation — duplicate (email, role) "
+                      f"rows exist: {[(d[0], d[1]) for d in dupes]}. "
+                      "Resolve these first; the old unique index is left in place.")
+                return
+
+            # 2. New constraint first.
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_email_role "
+                "ON users (email, role)"))
+
+            # 3. Then drop whatever single-column unique it had. The name
+            #    differs depending on whether SQLAlchemy created it as a
+            #    constraint or an index, so both are handled.
+            rows = conn.execute(text("""
+                SELECT c.conname FROM pg_constraint c
+                JOIN pg_class t ON t.oid = c.conrelid
+                WHERE t.relname = 'users' AND c.contype = 'u'
+                  AND array_length(c.conkey, 1) = 1
+            """)).fetchall()
+            for (name,) in rows:
+                conn.execute(text(f'ALTER TABLE users DROP CONSTRAINT IF EXISTS "{name}"'))
+                print(f"[migrate] dropped single-column unique constraint users.{name}")
+
+            idx = conn.execute(text("""
+                SELECT indexname FROM pg_indexes
+                WHERE tablename = 'users' AND indexdef LIKE '%UNIQUE%'
+                  AND indexdef LIKE '%(email)%'
+            """)).fetchall()
+            for (name,) in idx:
+                conn.execute(text(f'DROP INDEX IF EXISTS "{name}"'))
+                print(f"[migrate] dropped unique index {name} on users.email")
+
+        else:
+            # SQLite cannot drop a column constraint; the table has to be
+            # rebuilt. Done inside the surrounding transaction so a failure
+            # leaves the original table untouched.
+            cols = conn.execute(text("PRAGMA table_info(users)")).fetchall()
+            if not cols:
+                return
+            names = [c[1] for c in cols]
+            sql = conn.execute(text(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'")).scalar() or ""
+            if "UNIQUE" not in sql.upper():
+                return                      # already relaxed
+            col_list = ", ".join(f'"{n}"' for n in names)
+            defs = ", ".join(
+                f'"{c[1]}" {c[2]}'
+                + (" NOT NULL" if c[3] else "")
+                + (" PRIMARY KEY" if c[5] else "")
+                for c in cols)
+            conn.execute(text(f"CREATE TABLE users_new ({defs})"))
+            conn.execute(text(f"INSERT INTO users_new ({col_list}) SELECT {col_list} FROM users"))
+            conn.execute(text("DROP TABLE users"))
+            conn.execute(text("ALTER TABLE users_new RENAME TO users"))
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_users_email_role "
+                              "ON users (email, role)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_email ON users (email)"))
+            print("[migrate] rebuilt users table: email is now unique per role")

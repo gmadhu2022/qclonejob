@@ -113,6 +113,12 @@ class Settings(BaseSettings):
     # Recruiters, like institutes, are live the moment they register.
     ENTERPRISE_SELF_APPROVE: bool = True
 
+    # Job seekers too. Holding a candidate at "pending" blocks the one thing
+    # the platform exists to do — let them apply — and nothing about a job
+    # seeker account needs vetting the way a JOB POSTING does. Admins are
+    # still notified of each signup; they just are not a gate.
+    JOBSEEKER_SELF_APPROVE: bool = True
+
     # Job postings are reviewed by an admin before they go live.
     #
     # Candidate alerts fire on APPROVAL, not on submission, because a
