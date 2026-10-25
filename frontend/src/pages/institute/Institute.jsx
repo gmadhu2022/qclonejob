@@ -1236,10 +1236,68 @@ function DataUpload() {
 
   const submit = async () => {
     if (!file) return toast("Choose an Excel or CSV file first.", "error");
+
+    /* Ask BEFORE importing, not after.
+       The sheet is inspected first — nothing is written — so if any student is
+       already registered the institute gets to decide. Importing and then
+       reporting gives them no choice: the accounts already exist by the time
+       they read the summary. */
+    setBusy(true);
+    let preview = null;
+    try {
+      preview = await api.upload("/api/institute/upload/preview", file);
+    } catch (err) {
+      setBusy(false);
+      const msg = err.message || "";
+      if (/student upload/i.test(msg)) {
+        // Wrong file entirely — the message already names the missing columns.
+        return dialog({ tone: "error", title: "That doesn't look like a student sheet",
+                        message: msg, confirmLabel: "Choose another file" });
+      }
+      if (/wrong file format/i.test(msg)) {
+        return dialog({ tone: "error", title: "Wrong File Format", message: msg,
+                        confirmLabel: "Choose another file" });
+      }
+      return toast(msg, "error");
+    }
+    setBusy(false);
+
+    if (preview?.duplicate_count > 0) {
+      const names = preview.duplicates.slice(0, 5)
+        .map((d) => `• ${d.row} — ${d.email}`).join("\n");
+      const more = preview.duplicate_count > 5
+        ? `\n…and ${preview.duplicate_count - 5} more` : "";
+      return dialog({
+        tone: "warn",
+        title: `${preview.duplicate_count} student(s) are already registered`,
+        message: `${names}${more}\n\n`
+               + `${preview.will_create} new student(s) would be created.`,
+        note: "Skipping imports everyone else and leaves the existing accounts "
+            + "untouched. Correcting the sheet imports nothing until you upload again.",
+        noteTone: "info",
+        /* Dialog supports `secondary`, not `cancelLabel` — the second option
+           has to be a real button, otherwise "correct the sheet" would only
+           be reachable by dismissing the dialog and guessing. */
+        confirmLabel: `Skip these and upload the other ${preview.will_create}`,
+        onConfirm: () => runUpload(true),
+        secondary: {
+          label: "I'll correct the sheet",
+          onClick: () => {
+            setFile(null);
+            toast("Nothing was imported. Fix the duplicate rows and upload again.");
+          },
+        },
+      });
+    }
+    runUpload(true);
+  };
+
+  const runUpload = async (skipDuplicates) => {
     setBusy(true);
     try {
       setUploadErrors(null);
-      const res = await api.upload("/api/institute/upload", file);
+      const res = await api.upload(
+        `/api/institute/upload?skip_duplicates=${skipDuplicates ? "true" : "false"}`, file);
       setResults(res.results);
       setBatch(res.batch);
       loadHistory();

@@ -91,8 +91,24 @@ export function Register() {
      bare /register opens on Job Seeker. Switching is in-page: all three forms
      live on this screen and only the selected one renders. */
   const { role: urlRole } = useParams();
-  const [role, setRole] = useState(
-    REG_ROLES.some((r) => r.key === urlRole) ? urlRole : "jobseeker");
+  /* Which registration form opens, in order of how explicit the signal is:
+       1. /register/<role>            — the person clicked a role-specific link
+       2. /register?as=<role>         — the header's Login menu carries this
+       3. the portal picked at sign-in — remembered by the login page
+       4. jobseeker                   — the common case
+     Defaulting straight to jobseeker was wrong: someone who clicked Register
+     from the RECRUITER login landed on a student form and had to notice the
+     mismatch and re-pick, which most people do not. */
+  const [params] = useSearchParams();
+  const [role, setRole] = useState(() => {
+    const valid = (k) => REG_ROLES.some((r) => r.key === k);
+    const asked = params.get("as");
+    if (valid(urlRole)) return urlRole;
+    if (valid(asked)) return asked;
+    const remembered = localStorage.getItem("hire_login_role");
+    if (valid(remembered)) return remembered;
+    return "jobseeker";
+  });
   const toast = useToast();
   const dialog = useDialog();
   const navigate = useNavigate();

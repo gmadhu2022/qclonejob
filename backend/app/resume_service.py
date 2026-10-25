@@ -127,7 +127,23 @@ def _norm_key(v) -> str:
     return "".join(ch for ch in t if ch.isalnum())
 
 
-def process_institute_upload(file_bytes: bytes, institute: models.Institute, db: Session) -> list[dict]:
+def inspect_institute_upload(file_bytes: bytes, institute: models.Institute,
+                             db: Session) -> dict:
+    """Read the sheet and report what WOULD happen. Writes nothing.
+
+    Exists so the institute can decide about duplicates before any account is
+    created. Importing first and reporting afterwards gives them no choice at
+    all — the accounts already exist by the time they read the summary.
+
+    Raises ValueError for a sheet that isn't a student upload, so the caller
+    gets the same clear header message it would get on a real import.
+    """
+    return process_institute_upload(file_bytes, institute, db, dry_run=True)
+
+
+def process_institute_upload(file_bytes: bytes, institute: models.Institute, db: Session,
+                             dry_run: bool = False,
+                             skip_duplicates: bool = True) -> list[dict]:
     """Parse the sheet and create seekers.
 
     Duplicate rule (requirement 1c): a row is treated as a duplicate when its
@@ -143,6 +159,33 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
         df = pd.read_csv(io.BytesIO(file_bytes), encoding_errors="replace")
     df.columns = [str(c) for c in df.columns]
     mapping = _build_reverse_map(df.columns)
+
+    # ------------------------------------------------------------------
+    # The sheet must actually BE a student sheet.
+    #
+    # Any workbook used to be accepted: an invoice, a timetable, last year's
+    # budget. Every row then failed its own validation and the institute was
+    # told "480 rows skipped" with no clue that they had picked the wrong
+    # file. Checking the HEADERS first turns that into one clear sentence.
+    # ------------------------------------------------------------------
+    # A name can arrive as one column ("Name") or two ("First name"/"Last
+    # name"); either satisfies the requirement. The alias table calls the
+    # single-column form `name`, not `full_name` — getting that wrong rejected
+    # sheets that were perfectly valid, which the test caught.
+    has_name = any(k in mapping for k in ("name", "first_name", "last_name"))
+    missing = []
+    if not has_name:                 missing.append("Name")
+    if "email" not in mapping:       missing.append("Email")
+    if "phone" not in mapping:       missing.append("Mobile No")
+    if missing:
+        found = ", ".join(str(c) for c in list(df.columns)[:8]) or "none"
+        raise ValueError(
+            "This sheet doesn't look like a student upload — the required "
+            f"column(s) {', '.join(missing)} were not found.\n\n"
+            f"Columns in your file: {found}\n\n"
+            "Download the template below and paste your data into it, keeping "
+            "the header row exactly as it is."
+        )
 
     # ------------------------------------------------------------------
     # NO CAPACITY LIMIT.
@@ -161,6 +204,22 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
     # ------------------------------------------------------------------
 
     results = []
+
+    def duplicate(name, why, email=None):
+        """Record a duplicate — or refuse the whole sheet.
+
+        All three duplicate paths (already in this sheet, email already
+        registered, mobile already registered) go through here, so the
+        institute's choice applies to every one of them. The first version
+        checked the policy in only one branch, and a row caught by either of
+        the other two slipped past it — which the test caught.
+        """
+        if not skip_duplicates and not dry_run:
+            raise ValueError(
+                f"'{email or name}' is already registered, and you chose to correct "
+                f"the sheet rather than skip duplicates. Nothing was imported.")
+        results.append({"row": name, "status": why, "outcome": "duplicate",
+                        "email": email, "user_id": email, "password": None})
 
     def skip(name, why, email=None):
         results.append({"row": name, "status": f"skipped — {why}", "outcome": "skipped",
@@ -215,10 +274,8 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
         fingerprint = (_norm_key(f"{first or ''}{last or ''}"),
                        _norm_key(phone_val), _norm_key(email))
         if fingerprint in seen_keys:
-            results.append({"row": display_name,
-                            "status": "duplicate — same name, mobile and email already uploaded",
-                            "outcome": "duplicate",
-                            "email": email, "user_id": email, "password": None})
+            duplicate(display_name,
+                      "duplicate — same name, mobile and email already uploaded", email)
             continue
         seen_keys.add(fingerprint)
 
@@ -235,25 +292,26 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
                  .filter(models.User.email == email,
                          models.User.role == models.ROLE_JOBSEEKER).first())
         if clash:
-            results.append({"row": display_name,
-                            "status": f"duplicate — email already registered"
-                                      f"{' to a ' + clash.role + ' account' if clash.role != 'jobseeker' else ''}",
-                            "outcome": "duplicate",
-                            "email": email, "user_id": email, "password": None})
+            note = ("" if clash.role == models.ROLE_JOBSEEKER
+                    else f" to a {clash.role} account")
+            duplicate(display_name, f"duplicate — email already registered{note}", email)
             continue
         phone_clash = (db.query(models.JobSeeker)
                        .filter(models.JobSeeker.phone == phone_val).first())
         if phone_clash:
-            results.append({"row": display_name, "status": "duplicate — mobile already registered",
-                            "outcome": "duplicate",
-                            "email": email, "user_id": email, "password": None})
+            duplicate(display_name, "duplicate — mobile already registered", email)
+            continue
+
+        # A dry run stops here: everything above is validation, everything
+        # below writes. Counting a row as "would be created" without creating
+        # it is what lets the institute decide about duplicates first.
+        if dry_run:
+            results.append({"row": display_name, "status": "will be created",
+                            "outcome": "created", "email": email,
+                            "user_id": email, "password": None})
             continue
 
         # --- create user with generated credentials ---
-        # A SAVEPOINT per row: if any constraint still fires (a race, a column
-        # rule added later), only THIS row rolls back. Without it a single
-        # IntegrityError poisons the session and the whole upload dies —
-        # which is the failure this rewrite exists to prevent.
         password = generate_password()
         user = models.User(
             email=email,

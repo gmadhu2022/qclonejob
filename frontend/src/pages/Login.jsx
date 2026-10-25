@@ -253,7 +253,7 @@ export default function Login() {
               </div>
             </div>
 
-            <Link to="/register"
+            <Link to={`/register/${role}`}
                   className="flex h-12 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl
                              border-2 border-navy bg-navy/[0.03] px-3 text-sm font-bold text-navy transition-all
                              hover:-translate-y-0.5 hover:bg-navy hover:text-white hover:shadow-cardhover">

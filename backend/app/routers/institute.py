@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas, plans
 from ..database import get_db
 from ..auth import require_role, get_current_user
+from .. import resume_service
 from ..resume_service import (process_institute_upload, sample_template_dataframe,
                               build_template_workbook)
 from ..notify_service import notify_job_alert
@@ -508,8 +509,45 @@ def download_history(current: models.User = Depends(get_current_user),
              "file_format": r.file_format, "downloaded_at": r.downloaded_at} for r in rows]
 
 
+@router.post("/upload/preview")
+async def preview_upload(file: UploadFile = File(...),
+                         current: models.User = Depends(get_current_user),
+                         db: Session = Depends(get_db)):
+    """Read the sheet and report what would happen — writes nothing.
+
+    The Data upload screen calls this first. It is what lets the institute be
+    ASKED about duplicates instead of being told about them afterwards, once
+    the accounts already exist.
+    """
+    inst = _institute(current, db)
+    if not (file.filename or "").lower().endswith((".xlsx", ".xls", ".xlsm", ".csv")):
+        raise HTTPException(400, "Wrong File Format — add only Excel/CSV files.")
+    data = await file.read()
+    try:
+        results = resume_service.inspect_institute_upload(data, inst, db)
+    except ValueError as e:
+        # Header problems are the institute picking the wrong file; the message
+        # already says which columns are missing.
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(400, f"Could not read the spreadsheet: {e}")
+
+    dupes = [r for r in results if r.get("outcome") == "duplicate"]
+    return {
+        "total": len(results),
+        "will_create": sum(1 for r in results if r.get("outcome") == "created"),
+        "skipped": sum(1 for r in results if r.get("outcome") == "skipped"),
+        "duplicates": [{"row": r["row"], "email": r.get("email"), "reason": r["status"]}
+                       for r in dupes],
+        "duplicate_count": len(dupes),
+        "problems": [{"row": r["row"], "reason": r["status"]}
+                     for r in results if r.get("outcome") == "skipped"],
+    }
+
+
 @router.post("/upload")
 async def upload_students(file: UploadFile = File(...),
+                          skip_duplicates: bool = True,
                           current: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Upload an Excel of 1..N students. For each row we auto-create a resume,
     generate credentials, store in DB, and email the student their user id + password."""
@@ -521,7 +559,8 @@ async def upload_students(file: UploadFile = File(...),
     inst = _institute(current, db)
     contents = await file.read()
     try:
-        results = process_institute_upload(contents, inst, db)
+        results = process_institute_upload(contents, inst, db,
+                                           skip_duplicates=skip_duplicates)
     except ValueError as e:
         # Capacity exceeded or malformed rows: the sheet parsed fine, so the
         # "could not read the spreadsheet" wrapper would send the user hunting
