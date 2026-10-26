@@ -59,6 +59,10 @@ const MENU = [
   { to: "/enterprise/profile", label: "Profile", icon: IconBuilding },
   { to: "/enterprise/resumes", label: "Search candidates", icon: IconSearch },
   { to: "/enterprise/post-job", label: "Post a Job", icon: IconBriefcase },
+  /* Back on the menu. It was reachable only from a Dashboard card, so the
+     one screen a recruiter returns to daily — their live postings — was the
+     hardest to find. */
+  { to: "/enterprise/manage-jobs", label: "Manage Job Posting", icon: IconLayers },
   { to: "/enterprise/billing", label: "Subscribe", icon: IconStar },
 ];
 
@@ -114,11 +118,6 @@ function Overview() {
   const byJob = jobs.filter((j) => j.applicants > 0)
     .sort((a2, b2) => b2.applicants - a2.applicants).slice(0, 8)
     .map((j) => ({ label: j.title, value: j.applicants }));
-
-  const byStatus = [
-    { label: "Active", value: d.jobs_active, color: "#4faa38" },
-    { label: "Closed", value: Math.max(0, (d.jobs_total || 0) - (d.jobs_active || 0)), color: "#94a3b8" },
-  ];
 
   const byLocation = Object.entries(
     jobs.reduce((m, j) => (j.location ? { ...m, [j.location]: (m[j.location] || 0) + 1 } : m), {})
@@ -186,8 +185,9 @@ function Overview() {
                          data={byJob} types={["hbar", "bar", "donut", "radial", "area"]} height={220} />
         <SwitchableChart title="Jobs by location" subtitle="Where you're hiring"
                          data={byLocation} types={["hbar", "bar", "donut", "pie"]} height={220} />
-        <SwitchableChart title="Posting status" subtitle="Active against closed"
-                         data={byStatus} types={["donut", "stacked", "bar", "pie"]} height={220} />
+        {/* "Posting status" removed: Manage Job Posting now shows the same
+            split as tab counts you can actually click through to, so a chart
+            of two numbers on the dashboard was duplication. */}
       </div>
 
       {d.applications > 0 && (
@@ -309,11 +309,11 @@ function ManageJobs() {
   /* ---------------- close / reopen a single job ---------------- */
   const closeJob = (job) => dialog({
     tone: "info",
-    title: job.status === "active" ? "Close this job?" : "Reopen this job?",
+    title: job.status === "active" ? "Close this job?" : "Activate this job from today?",
     message: job.status === "active"
       ? `"${job.title}" will stop accepting applications and disappear from job search.`
-      : `"${job.title}" will accept applications again.`,
-    confirmLabel: job.status === "active" ? "Close job" : "Reopen",
+      : `"${job.title}" will accept applications again, live for 15 days from today.`,
+    confirmLabel: job.status === "active" ? "Close job" : "Activate from today",
     secondary: { label: "Cancel" },
     onConfirm: async () => {
       try {
@@ -655,7 +655,7 @@ function ManageJobs() {
   }
 
   const matching = jobs
-    .filter((j) => j.status === tab)
+    .filter((j) => tab === "all" || j.status === tab)
     .filter((j) => !q || `${j.title} ${j.location} ${(j.key_skills || []).join(" ")}`.toLowerCase().includes(q.toLowerCase()));
   /* Each tab shows at most ten. Read as a DISPLAY cap, not a posting cap:
      capping how many jobs a recruiter may have live would contradict the paid
@@ -664,7 +664,8 @@ function ManageJobs() {
   const TAB_LIMIT = 10;
   const filtered = matching.slice(0, TAB_LIMIT);
   const hiddenCount = Math.max(0, matching.length - TAB_LIMIT);
-  const counts = { active: jobs.filter((j) => j.status === "active").length,
+  const counts = { all: jobs.length,
+                   active: jobs.filter((j) => j.status === "active").length,
                    closed: jobs.filter((j) => j.status === "closed").length };
 
   return (
@@ -728,7 +729,8 @@ function ManageJobs() {
           {/* Two states, not three. A job is either open or it isn't, and the
               count sits in a pill so the label stays readable at a glance. */}
           <div className="flex gap-2">
-            {[["active", "Active", "bg-brandgreen-50 text-brandgreen-600", "bg-brandgreen text-white"],
+            {[["all", "All jobs", "bg-navy-50 text-navy", "bg-navy text-white"],
+              ["active", "Active", "bg-brandgreen-50 text-brandgreen-600", "bg-brandgreen text-white"],
               ["closed", "Closed", "bg-slate-100 text-slate-500", "bg-slate-500 text-white"]].map(
               ([k, label, idleChip, activeChip]) => {
                 const on = tab === k;
@@ -886,6 +888,7 @@ function ManageJobs() {
             {filtered.length === 0 && (
               <div className="card col-span-full text-center text-slate-400">
                 {q ? "No jobs match your search."
+                   : tab === "all" ? "No jobs yet. Post your first one."
                    : tab === "active" ? "No active jobs. Post one, or check the Closed tab."
                    : "No closed jobs."}
               </div>

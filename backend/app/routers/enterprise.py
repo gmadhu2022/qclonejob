@@ -441,7 +441,10 @@ def update_status(application_id: int, body: schemas.ApplicationStatusUpdate,
     return {"message": f"Application status updated to {body.status}."}
 
 
-@router.put("/jobs/{job_id}/status", response_model=schemas.Message)
+# No response_model: the reply carries the new expiry date and status so the
+# list can update in place. schemas.Message would silently strip both — the
+# UI would show a success toast and a stale row.
+@router.put("/jobs/{job_id}/status")
 def set_job_status(job_id: int, body: dict, current: models.User = Depends(get_current_user),
                    db: Session = Depends(get_db)):
     """Close or reopen a job posting."""
@@ -453,8 +456,29 @@ def set_job_status(job_id: int, body: dict, current: models.User = Depends(get_c
     if not job:
         raise HTTPException(404, "Job not found.")
     job.status = status
+
+    if status == "active":
+        # Reopen from TODAY, always.
+        #
+        # expires_at was left untouched, so a job closed three weeks ago came
+        # back already past its expiry: it showed as "active" in the
+        # recruiter's list and was invisible to every seeker, with nothing on
+        # screen explaining why. Restarting the 15 days is also what the
+        # recruiter means by "activate" — they want it live now, not live for
+        # whatever remained of a window that has long since passed.
+        job.expires_at = plans.job_expiry(None)
+
+        # A posting that was reviewed before stays approved; one that never
+        # cleared review must not slip into the live feed via the reopen
+        # button while JOB_APPROVAL_REQUIRED is on.
+        if getattr(settings, "JOB_APPROVAL_REQUIRED", False) and job.approval_status != "approved":
+            job.approval_status = "pending"
+
     db.commit()
-    return {"message": f"Job {'reopened' if status == 'active' else 'closed'}."}
+    db.refresh(job)
+    return {"message": (f"Job reopened — live until "
+                        f"{job.expires_at:%d %b %Y}." if status == "active" else "Job closed."),
+            "expires_at": job.expires_at, "status": job.status}
 
 
 @router.get("/jobs/{job_id}/applicants")

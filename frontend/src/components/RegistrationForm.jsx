@@ -219,23 +219,24 @@ export function RegistrationFields({
                       placeholder="e.g. INDIA" />
             </RegSection>
 
-            <RegSection title="Contact person">
+            {/* Was a SECOND "Contact person" section. The person's name, phone
+                and email are already collected in the first section, so this
+                asked for the same three things again under the same heading —
+                which reads as a form bug and makes people wonder which one
+                counts. What is left here is genuinely different information,
+                so the heading now says what it actually holds. */}
+            <RegSection title={isInst ? "Additional details" : "Business details"}>
               <FField label="Designation" value={form.designation} onChange={setV("designation")}
                       placeholder="e.g. HR Manager" />
               <FField label="Promoter's name" value={form.promoter_name} onChange={setV("promoter_name")}
                       placeholder="e.g. Ramesh Kumar" />
               {isInst ? (
-                <>
-                  <div className="sm:col-span-2">
-                    <PhoneField label="Authorised person phone" value={form.authorised_person_phone}
-                                onChange={setV("authorised_person_phone")} />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <FField label="Authorised person email" type="email"
-                            value={form.authorised_person_email} onChange={setV("authorised_person_email")}
-                            placeholder="e.g. priya@institute.edu" />
-                  </div>
-                </>
+                /* The authorised person's phone and email used to be asked for
+                   here. They are the Contact Number and Official Mail already
+                   entered above, so they are now carried across automatically
+                   on submit — the institute profile and the main campus still
+                   get their contact details, nobody types them twice. */
+                null
               ) : (
                 <>
                   <FField label="GST No." value={form.gst_no} onChange={setV("gst_no")}
@@ -408,8 +409,11 @@ export function buildRegistrationPayload(role, form) {
       country: clean(form.country) || "INDIA",
       promoter_name: clean(form.promoter_name),
       authorised_person_name: clean(form.authorised_person_name),
-      authorised_person_phone: clean(form.authorised_person_phone),
-      authorised_person_email: clean(form.authorised_person_email),
+      // Carried over from the contact details entered once, above. The
+      // institute profile and the seeded main campus both read these, so
+      // dropping the duplicate FIELDS must not drop the DATA.
+      authorised_person_phone: clean(form.authorised_person_phone || form.phone),
+      authorised_person_email: clean(form.authorised_person_email || form.email),
       designation: clean(form.designation), website: clean(form.website),
       logo_url: clean(form.logo_url), about: clean(form.about),
       total_capacity: form.total_capacity ? Number(form.total_capacity) : null,

@@ -1258,7 +1258,22 @@ function DataUpload() {
         return dialog({ tone: "error", title: "Wrong File Format", message: msg,
                         confirmLabel: "Choose another file" });
       }
-      return toast(msg, "error");
+
+      /* ANYTHING ELSE AND WE UPLOAD ANYWAY.
+         The preview is a COURTESY — it exists to ask about duplicates before
+         importing. It is not permission to import.
+
+         This branch used to `return`, which made the whole feature depend on
+         a brand-new endpoint existing. Deploy the frontend before the backend
+         and /upload/preview 404s, this returned, and uploading silently
+         stopped working: the institute pressed Submit and no profiles were
+         ever created. A convenience must never be able to break the thing it
+         was added to improve.
+
+         The real upload validates headers and duplicates server-side too, so
+         skipping the preview loses the duplicate PROMPT, nothing else. */
+      console.warn("Upload preview unavailable, importing directly:", msg);
+      return runUpload(true);
     }
     setBusy(false);
 
