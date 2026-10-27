@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { api } from "../lib/api";
 import { useToast } from "./ui";
 import { useDialog } from "./Dialog";
@@ -74,6 +74,29 @@ export default function PostJobForm({
   const [jdText, setJdText] = useState("");
   const [jdOpen, setJdOpen] = useState(false);
   const [preview, setPreview] = useState(false);   // last look before posting
+  /* Which required fields are currently missing. Kept in state so the FIELDS
+     can show the error, not just a toast in the corner — "Please fill in:
+     Skills Required" is useless if you cannot find Skills Required. */
+  const [invalid, setInvalid] = useState([]);
+  const previewRef = useRef(null);
+
+  /* Clear a field's error the moment it is filled, rather than making the
+     person press Post again to find out they fixed it. */
+  const clearInvalid = (key) => setInvalid((xs) => xs.filter((k) => k !== key));
+
+  /* Bring the preview into view when it opens.
+     The panel renders ABOVE the form, so from the Preview button — which sits
+     at the very bottom — opening it changed nothing you could see. The page
+     silently grew taller somewhere off-screen and the button appeared dead.
+     Runs after the paint, because the panel does not exist to scroll to until
+     React has rendered it. */
+  useEffect(() => {
+    if (!preview) return;
+    const id = requestAnimationFrame(() => {
+      previewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [preview]);
 
   const parseJD = async () => {
     const r = await call("/api/ai/job/parse", { text: jdText });
@@ -157,15 +180,20 @@ export default function PostJobForm({
        and with alerts now firing on submit, that advert reaches every matching
        candidate before anyone notices. The server enforces the same five. */
     const missing = [
-      [!(form.title || "").trim(), "Job Title"],
-      [!(form.location || "").trim(), "Location"],
-      [!(form.key_skills || []).length, "Skills Required"],
-      [!(form.shift || "").trim(), "Job Shift"],
-      [!(form.description || "").trim(), "Job Description"],
-    ].filter(([bad]) => bad).map(([, name]) => name);
+      [!(form.title || "").trim(), "Job Title", "title"],
+      [!(form.location || "").trim(), "Location", "location"],
+      [!(form.key_skills || []).length, "Skills Required", "key_skills"],
+      [!(form.shift || "").trim(), "Job Shift", "shift"],
+      [!(form.description || "").trim(), "Job Description", "description"],
+    ].filter(([bad]) => bad);
     if (missing.length) {
-      return toast(`Please fill in: ${missing.join(", ")}.`, "error");
+      /* Mark the fields first, THEN toast. The toast handler scans the page
+         for anything marked invalid and scrolls to the first one, so the
+         order matters: toast first and there is nothing to find yet. */
+      setInvalid(missing.map(([, , key]) => key));
+      return toast(`Please fill in: ${missing.map(([, name]) => name).join(", ")}.`, "error");
     }
+    setInvalid([]);
     try {
       const job = await api.post(endpoint, { ...form, key_skills: form.key_skills || [] });
 
@@ -210,7 +238,7 @@ export default function PostJobForm({
   return (
     <div className="w-full">
       {preview && (
-        <div className="card mb-5 !border-navy-200 !bg-navy-50/30">
+        <div ref={previewRef} className="card mb-5 !border-navy-200 !bg-navy-50/30">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b
                           border-navy-100 pb-2">
             <h3 className="text-sm font-bold uppercase tracking-wide text-navy">
@@ -315,7 +343,10 @@ export default function PostJobForm({
 
             <div><label className="label">Job code</label>
               <input className="input" value={form.job_code || ""} onChange={set("job_code")} placeholder="e.g. ELEC/001" /></div>
-            <Combobox label="Location" required value={form.location} options={CITIES} onChange={setV("location")} />
+            <div data-invalid={invalid.includes("location") ? "true" : undefined}>
+              <Combobox label="Location" required value={form.location} options={CITIES}
+                        onChange={(v) => { setV("location")(v); clearInvalid("location"); }} />
+            </div>
             <Combobox label="Qualification/s" value={form.category} options={QUALIFICATIONS} onChange={setV("category")} aiField="required qualification" />
             <div><label className="label">No. of positions</label>
               <input className="input" value={form.no_of_positions || ""} onChange={set("no_of_positions")} /></div>
@@ -355,14 +386,34 @@ export default function PostJobForm({
             {/* Combobox, not a plain select: the list covers the common
                 patterns but a recruiter with an unusual one can still type it,
                 which a select would make impossible. */}
-            <Combobox label="Shift" required value={form.shift} options={SHIFTS}
-                      onChange={(v) => setForm((f) => ({ ...f, shift: v }))}
-                      placeholder="Select or type a shift" />
+            <div data-invalid={invalid.includes("shift") ? "true" : undefined}>
+              <Combobox label="Shift" required value={form.shift} options={SHIFTS}
+                        onChange={(v) => { setForm((f) => ({ ...f, shift: v })); clearInvalid("shift"); }}
+                        placeholder="Select or type a shift" />
+            </div>
 
-            <div className="sm:col-span-2 2xl:col-span-3">
-              <SkillPicker values={form.key_skills || []} onChange={setV("key_skills")} sector={form.sector}
-                           aiSuggestPath={aiOn && form.title ? "/api/ai/job/classify" : null}
-                           aiBody={{ title: form.title }} />
+            {/* Skills had NO VISIBLE LABEL, which is why "Please fill in:
+                Skills Required" sent people hunting. It is labelled now, marked
+                required, and carries data-invalid so the shared error-scroller
+                can bring the page to it. */}
+            <div className="sm:col-span-2 2xl:col-span-3"
+                 data-invalid={invalid.includes("key_skills") ? "true" : undefined}>
+              <label className="label">
+                Skills Required <span className="font-semibold text-red-400">*</span>
+              </label>
+              <div className={invalid.includes("key_skills")
+                ? "rounded-xl p-1 ring-2 ring-red-400 ring-offset-1" : ""}>
+                <SkillPicker values={form.key_skills || []}
+                             onChange={(v) => { setV("key_skills")(v); clearInvalid("key_skills"); }}
+                             sector={form.sector}
+                             aiSuggestPath={aiOn && form.title ? "/api/ai/job/classify" : null}
+                             aiBody={{ title: form.title }} />
+              </div>
+              {invalid.includes("key_skills") && (
+                <p className="mt-1.5 text-xs font-medium text-red-600">
+                  Add at least one skill — this is what matches your job to candidates.
+                </p>
+              )}
             </div>
 
             <div className="flex flex-wrap gap-4 sm:col-span-2 2xl:col-span-3">
