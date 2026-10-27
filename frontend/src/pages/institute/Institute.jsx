@@ -1317,7 +1317,36 @@ function DataUpload() {
       setBatch(res.batch);
       loadHistory();
       /* Requirement 49 — the fixed success message. */
-      confirm("Data upload is successful", { message: res.message });
+      /* The popup has to answer three questions, not one: how many profiles
+         exist now, what was skipped, and WHY. The old version showed only the
+         server's one-line count — an institute saw "3 row(s) skipped" and had
+         no idea which students were missing or what to fix. */
+      const rows = res.results || [];
+      const made = rows.filter((x) => x.outcome === "created");
+      const dupes = rows.filter((x) => x.outcome === "duplicate");
+      const bad = rows.filter((x) => x.outcome === "skipped");
+
+      const lines = [`${made.length} profile(s) created.`];
+      if (dupes.length) lines.push(`${dupes.length} already registered — skipped.`);
+      if (bad.length) lines.push(`${bad.length} row(s) incomplete — skipped.`);
+
+      /* Name the first few so the institute can go and fix them. Capped,
+         because a dialog listing 200 rows is a wall nobody reads — the full
+         list is in the table below the form. */
+      const detail = [...bad, ...dupes].slice(0, 6)
+        .map((x) => `• ${x.row || "(no name)"} — ${x.status.replace(/^skipped — /, "")}`);
+      const extra = bad.length + dupes.length - detail.length;
+
+      confirm("Data upload is successful", {
+        message: lines.join("\n")
+               + (detail.length ? `\n\n${detail.join("\n")}` : "")
+               + (extra > 0 ? `\n…and ${extra} more` : ""),
+        note: made.length
+          ? "Each new student has been emailed their user ID and password, and "
+          + "can sign in from the Job Seeker login straight away."
+          : "No new profiles were created from this sheet.",
+        noteTone: made.length ? "info" : "warn",
+      });
     } catch (err) {
       const msg = err.message || "Upload failed.";
       const wrongFormat = /wrong file format/i.test(msg);
