@@ -47,6 +47,10 @@ CONFIRM_PHRASE = "ERASE DATA"
 # Leaves first, parents last. Each entry: (label, model, optional filter fn).
 DELETE_ORDER = [
     ("Banner events",            models.BannerEvent,       None),
+    # Slot rows are rotation bookkeeping, recreated on demand the next time a
+    # banner is served. Leaving them behind would keep pointing the rotation
+    # at banners that no longer exist.
+    ("Banner slots",             models.BannerSlot,        None),
     ("Banners / ads",            models.Banner,            None),
     ("Applications",             models.Application,       None),
     ("Saved jobs",               models.SavedJob,          None),
@@ -70,6 +74,23 @@ DELETE_ORDER = [
 KEEP_ROLES = {models.ROLE_INSTITUTE, models.ROLE_ENTERPRISE,
               models.ROLE_ADMIN, models.ROLE_MANAGER}
 
+# Only these addresses survive. Everything else goes, including other
+# institute and recruiter accounts.
+#
+# An ALLOW-LIST, not a block-list: with a block-list, an account registered
+# tomorrow survives a wipe nobody meant it to survive. Named explicitly, the
+# script can only ever keep what is written here.
+#
+# Override at the command line:
+#   python reset_data.py --yes --keep a@x.com --keep b@x.com
+# Pass --keep-all-staff to fall back to the old behaviour (every admin,
+# institute and recruiter account stays).
+KEEP_EMAILS = {
+    "admin@qclonejob.com",
+    "institute@qclonejob.com",
+    "recruiter@qclonejob.com",
+}
+
 
 def plan(db):
     """What would be removed, counted but not touched."""
@@ -85,23 +106,50 @@ def plan(db):
     return rows
 
 
-def survivors(db):
-    keep = db.query(models.User).filter(models.User.role.in_(KEEP_ROLES)).all()
-    return [(u.email, u.role) for u in keep]
+def _kept(u, keep_emails, keep_all_staff: bool) -> bool:
+    if u.role not in KEEP_ROLES:
+        return False
+    if keep_all_staff:
+        return True
+    return (u.email or "").strip().lower() in keep_emails
 
 
-def run(db, dry: bool) -> None:
+def survivors(db, keep_emails, keep_all_staff=False):
+    rows = db.query(models.User).filter(models.User.role.in_(KEEP_ROLES)).all()
+    keep = [u for u in rows if _kept(u, keep_emails, keep_all_staff)]
+    drop = [u for u in rows if not _kept(u, keep_emails, keep_all_staff)]
+    return ([(u.email, u.role) for u in keep], [(u.email, u.role) for u in drop])
+
+
+def run(db, dry: bool, keep_emails=None, keep_all_staff: bool = False) -> None:
+    keep_emails = {e.strip().lower() for e in (keep_emails or KEEP_EMAILS)}
+
     print("\n--- WILL BE ERASED " + "-" * 50)
     for label, count in plan(db):
         print(f"  {label:<28} {count}")
 
-    keep = survivors(db)
+    keep, drop = survivors(db, keep_emails, keep_all_staff)
+    if drop:
+        print(f"  {'Other staff accounts':<28} {len(drop)}")
+        for email, role in drop:
+            print(f"      {email:<38} {role}")
+
     print("\n--- WILL BE KEPT (same User ID, same password) " + "-" * 21)
     for email, role in keep:
         print(f"  {email:<40} {role}")
     if not keep:
-        print("  (none — there are no institute/recruiter/admin accounts to keep)")
+        print("  (none — NOTHING would survive. Check the --keep addresses.)")
     print("-" * 69)
+
+    # A typo in --keep would wipe every login on the platform, so stop rather
+    # than carry out an instruction that was almost certainly not meant.
+    missing = keep_emails - {e.lower() for e, _ in keep}
+    if missing and not keep_all_staff:
+        print(f"\n  NOTE: no account found for: {', '.join(sorted(missing))}")
+    if not keep and not dry:
+        print("\nAborted: that would delete every login, leaving nobody able to "
+              "sign in. Check the addresses and try again.")
+        return
 
     if dry:
         print("\nDRY RUN — nothing was changed.")
@@ -123,13 +171,37 @@ def run(db, dry: bool) -> None:
          .delete(synchronize_session=False))
     print(f"  deleted {n:>6}  Job seeker logins")
 
+    # Staff accounts that are not on the keep list, and their profile rows.
+    #
+    # The PROFILE goes before the USER: institutes.user_id and
+    # enterprises.user_id point at users, so removing the user first leaves a
+    # dangling reference and Postgres refuses it. (SQLite would allow it,
+    # which is how this kind of thing passes locally and fails in production.)
+    drop_ids = [u.id for u in db.query(models.User)
+                .filter(models.User.role.in_(KEEP_ROLES)).all()
+                if not _kept(u, keep_emails, keep_all_staff)]
+    if drop_ids:
+        for label, model in (("Institute profiles", models.Institute),
+                             ("Recruiter profiles", models.Enterprise)):
+            n = (db.query(model).filter(model.user_id.in_(drop_ids))
+                 .delete(synchronize_session=False))
+            if n:
+                print(f"  deleted {n:>6}  {label} (not on the keep list)")
+        n = (db.query(models.User).filter(models.User.id.in_(drop_ids))
+             .delete(synchronize_session=False))
+        print(f"  deleted {n:>6}  staff logins not on the keep list")
+
     db.commit()
-    print("\nDone. Institute and recruiter logins are unchanged — same User ID, "
-          "same password.")
+    print("\nDone. The kept logins are unchanged — same User ID, same password.")
 
 
 def main() -> int:
-    dry = "--yes" not in sys.argv
+    argv = sys.argv[1:]
+    dry = "--yes" not in argv
+    keep_all_staff = "--keep-all-staff" in argv
+    cli_keep = {argv[i + 1].strip().lower()
+                for i, a in enumerate(argv) if a == "--keep" and i + 1 < len(argv)}
+    keep_emails = cli_keep or KEEP_EMAILS
     db = SessionLocal()
     try:
         if not dry:
@@ -142,7 +214,7 @@ def main() -> int:
             if typed != CONFIRM_PHRASE:
                 print("Aborted. Nothing was changed.")
                 return 1
-        run(db, dry)
+        run(db, dry, keep_emails, keep_all_staff)
         return 0
     finally:
         db.close()
