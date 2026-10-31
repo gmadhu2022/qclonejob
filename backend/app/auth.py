@@ -15,10 +15,26 @@ from . import models
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
-def hash_password(password: str) -> str:
-    # bcrypt has a hard 72-byte limit; truncate defensively.
-    pw = password.encode("utf-8")[:72]
-    return bcrypt.hashpw(pw, bcrypt.gensalt()).decode("utf-8")
+def hash_password(password: str, rounds: int | None = None) -> str:
+    """Hash a password with bcrypt.
+
+    `rounds` is the bcrypt cost factor. The default (12) is right for a
+    password a HUMAN chose: those come from a small, guessable space, so the
+    hash has to be expensive enough to make guessing impractical.
+
+    Bulk student uploads pass a lower factor, and that is a deliberate,
+    bounded exception — see BULK_BCRYPT_ROUNDS in config.py. The reasoning is
+    that those passwords are machine-generated and random, so an attacker has
+    to search the password space itself, which no cost factor can help them
+    with. Cost 10 is still at the level OWASP recommends as a minimum.
+
+    Existing hashes keep working whatever this is set to: bcrypt stores the
+    cost factor inside the hash, so verification reads it from there.
+    """
+    pw = password.encode("utf-8")[:72]          # bcrypt's hard 72-byte limit
+    cost = rounds or int(getattr(settings, "BCRYPT_ROUNDS", 12) or 12)
+    cost = max(4, min(16, cost))                # refuse a value that is absurd either way
+    return bcrypt.hashpw(pw, bcrypt.gensalt(rounds=cost)).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:

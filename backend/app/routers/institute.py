@@ -1,15 +1,19 @@
 import io
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import BackgroundTasks, APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from .. import models, schemas, plans
+import logging
 from ..database import get_db
+from ..email_utils import send_credentials_email
 from ..auth import require_role, get_current_user
 from .. import resume_service
 from ..resume_service import (process_institute_upload, sample_template_dataframe,
                               build_template_workbook)
 from ..notify_service import notify_job_alert
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/institute", tags=["institute"],
                    dependencies=[Depends(require_role(models.ROLE_INSTITUTE))])
@@ -509,6 +513,20 @@ def download_history(current: models.User = Depends(get_current_user),
              "file_format": r.file_format, "downloaded_at": r.downloaded_at} for r in rows]
 
 
+def _send_queued_credentials(queued: list) -> None:
+    """Send the credential emails for a finished upload, one by one.
+
+    Runs after the response, so a slow or failing mail provider costs the
+    institute nothing. Each send is isolated: one bad address must not stop
+    the other hundred students getting their login.
+    """
+    for email, name, password in queued:
+        try:
+            send_credentials_email(email, name, email, password)
+        except Exception as e:
+            logger.warning("Credential email to %s failed: %s", email, e)
+
+
 @router.post("/upload/preview")
 async def preview_upload(file: UploadFile = File(...),
                          current: models.User = Depends(get_current_user),
@@ -546,7 +564,8 @@ async def preview_upload(file: UploadFile = File(...),
 
 
 @router.post("/upload")
-async def upload_students(file: UploadFile = File(...),
+async def upload_students(background: BackgroundTasks,
+                          file: UploadFile = File(...),
                           skip_duplicates: bool = True,
                           current: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Upload an Excel of 1..N students. For each row we auto-create a resume,
@@ -561,6 +580,13 @@ async def upload_students(file: UploadFile = File(...),
     try:
         results = process_institute_upload(contents, inst, db,
                                            skip_duplicates=skip_duplicates)
+        # Credential emails go out AFTER the response. They were being sent
+        # inside the import loop — one live HTTPS call per student with the
+        # browser waiting, which is what pushed a 114-row sheet past the
+        # gateway timeout and surfaced as "Failed to fetch".
+        queued = getattr(results, "pending_emails", []) or []
+        if queued:
+            background.add_task(_send_queued_credentials, queued)
     except ValueError as e:
         # Capacity exceeded or malformed rows: the sheet parsed fine, so the
         # "could not read the spreadsheet" wrapper would send the user hunting

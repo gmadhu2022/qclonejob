@@ -92,6 +92,20 @@ class Settings(BaseSettings):
     TWILIO_AUTH_TOKEN: str = ""
     TWILIO_FROM_NUMBER: str = ""        # e.g. +14155238886
 
+    # bcrypt cost for passwords a person chose. 12 is a sensible default.
+    BCRYPT_ROUNDS: int = 12
+
+    # bcrypt cost for the passwords generated during a bulk student upload.
+    #
+    # Lower on purpose. At cost 12 each hash takes ~276 ms, so a 114-row sheet
+    # spent 31 seconds hashing alone, and the request timed out — the upload
+    # failed for every student rather than being slightly less expensive to
+    # attack. These passwords are random and machine-generated, so an attacker
+    # must search the password space itself; the work factor buys far less
+    # here than it does for a human-chosen password. 10 is still at OWASP's
+    # recommended minimum and takes ~70 ms.
+    BULK_BCRYPT_ROUNDS: int = 10
+
     OTP_REQUIRED: bool = False          # set True to enforce verification at registration
 
     # Email codes deliberately do not expire (registration requirement 7).
