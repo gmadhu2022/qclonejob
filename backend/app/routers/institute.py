@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas, plans
 import logging
+import time
 from ..database import get_db
 from ..email_utils import send_credentials_email
 from ..auth import require_role, get_current_user
@@ -578,8 +579,15 @@ async def upload_students(background: BackgroundTasks,
     inst = _institute(current, db)
     contents = await file.read()
     try:
+        _t0 = time.time()
         results = process_institute_upload(contents, inst, db,
                                            skip_duplicates=skip_duplicates)
+        # Logged so a slow upload can be diagnosed from the server, not
+        # guessed at from the browser. "Failed to fetch" tells you the
+        # connection dropped; it never tells you how long the work took or
+        # where the time went.
+        logger.info("Institute %s uploaded %s: %d row(s) in %.1fs",
+                    inst.id, file.filename, len(results), time.time() - _t0)
         # Credential emails go out AFTER the response. They were being sent
         # inside the import loop — one live HTTPS call per student with the
         # browser waiting, which is what pushed a 114-row sheet past the

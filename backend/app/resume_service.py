@@ -266,6 +266,10 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
     # `results.pending_emails = [...]` raises AttributeError at runtime.
     # Subclassing keeps every existing caller working: it IS a list, so
     # len(), iteration and indexing are unchanged.
+    # Collected during the loop, written in two statements after it.
+    pending_users: list = []
+    pending_seekers: list = []
+
     results = _Results()
     # Filled during the loop, drained by the caller after the response goes
     # out. A list, not a background thread started here, so the caller stays
@@ -383,7 +387,14 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
             must_change_password=True,
         )
         db.add(user)
-        db.flush()  # get user.id
+        # NOT flushed here.
+        #
+        # A flush is a round trip to the database. On Supabase that is a
+        # network hop — two per student, 228 for a 114-row sheet, 9-18
+        # seconds of pure waiting that never shows up when testing against a
+        # local SQLite file. The user rows are flushed together after the
+        # loop, which is where their ids come from.
+        pending_users.append(user)
 
         # --- build a single education row from the flat columns present ---
         education = []
@@ -415,7 +426,10 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
         full_address = ", ".join(p for p in address_parts if p)
 
         seeker = models.JobSeeker(
-            user_id=user.id,
+            # None at this point — the user has not been flushed yet, so it
+            # has no id. Set for real after the batch flush below. Left here
+            # so the constructor still names every column it fills.
+            user_id=None,
             institute_id=institute.id,
             experience=experience,
             headline=_get(row, mapping, "headline"),
@@ -440,8 +454,9 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
             languages=_split_list(row.get(mapping.get("languages"))) if "languages" in mapping else [],
             resume_template="classic",
         )
-        db.add(seeker)
-        db.flush()
+        # Held, not added: seeker.user_id needs an id that does not exist
+        # until the users are flushed below.
+        pending_seekers.append((user, seeker))
 
         # --- credentials email: QUEUED, not sent here ---
         #
@@ -464,6 +479,15 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
 
         results.append({"row": display_name, "status": "created", "outcome": "created",
                         "email": email, "user_id": email, "password": password})
+
+    # One flush for every user, then one for every seeker — two round trips
+    # for the whole sheet instead of two per student.
+    if pending_users:
+        db.flush()                       # assigns every pending user.id at once
+        for user, seeker in pending_seekers:
+            seeker.user_id = user.id
+            db.add(seeker)
+        db.flush()
 
     db.commit()
     # Attached to the list rather than returned separately so every existing
