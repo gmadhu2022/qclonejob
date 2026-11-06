@@ -1684,3 +1684,60 @@ def skills_for_sector(key: str) -> list[str]:
 
 
 ALL_SKILLS = sorted({s for group in SKILLS_BY_SECTOR.values() for s in group})
+
+
+# ---------------------------------------------------------------------------
+# Everyday and entry-level work (everyday_roles.py), merged in.
+#
+# Two things happen here:
+#   1. extra roles/skills are added to each sector, and
+#   2. every ROLE also becomes searchable as a SKILL — a maid, ward boy or
+#      dhobi describes what they can do by what they are, and the Key skills
+#      picker on the job seeker form only searches skills.
+# Duplicates are dropped case-insensitively, first spelling wins.
+# ---------------------------------------------------------------------------
+from .everyday_roles import EXTRA as _EXTRA, EVERYDAY_FIRST as _EVERYDAY_FIRST
+from .everyday_roles import NEW_SECTORS as _NEW_SECTORS
+
+# New everyday industries go in first, so the merges below treat them like
+# any other sector.
+_have = {s["key"] for s in SECTORS}
+for _ns in _NEW_SECTORS:
+    if _ns["key"] in _have:
+        continue
+    SECTORS.append({k: v for k, v in _ns.items() if k != "skills"})
+    SKILLS_BY_SECTOR[_ns["key"]] = list(_ns.get("skills", []))
+SECTOR_KEYS = [s["key"] for s in SECTORS]
+
+
+def _merge(base: list, extra) -> list:
+    seen = {x.lower() for x in base}
+    out = list(base)
+    for x in extra:
+        if x.lower() not in seen:
+            seen.add(x.lower())
+            out.append(x)
+    return out
+
+
+_SECTOR_BY_KEY = {s["key"]: s for s in SECTORS}
+for _key, _add in _EXTRA.items():
+    _sec = _SECTOR_BY_KEY.get(_key)
+    if _sec is not None:
+        _sec["roles"] = _merge(_sec["roles"], _add.get("roles", []))
+    # A sector that used to borrow another's pool (SKILL_ALIASES) starts from
+    # a copy of that pool, so it keeps everything it had before.
+    _pool = SKILLS_BY_SECTOR.get(_key) or list(SKILLS_BY_SECTOR.get(SKILL_ALIASES.get(_key, ""), []))
+    SKILLS_BY_SECTOR[_key] = _merge(_pool, list(_add.get("roles", [])) + list(_add.get("skills", [])))
+
+# Every sector's roles are searchable as skills of that sector too.
+for _sec in SECTORS:
+    _pool = SKILLS_BY_SECTOR.get(_sec["key"]) or list(SKILLS_BY_SECTOR.get(SKILL_ALIASES.get(_sec["key"], ""), []))
+    SKILLS_BY_SECTOR[_sec["key"]] = _merge(_pool, _sec["roles"])
+
+ALL_ROLES = sorted({r for s in SECTORS for r in s["roles"]})
+_everything = {s.lower(): s for group in SKILLS_BY_SECTOR.values() for s in group}
+# Everyday work first (what this platform is mainly for), then A-Z.
+_first = [s for s in _EVERYDAY_FIRST if s.lower() in _everything]
+_first_l = {s.lower() for s in _first}
+ALL_SKILLS = _first + sorted((v for k, v in _everything.items() if k not in _first_l), key=str.lower)

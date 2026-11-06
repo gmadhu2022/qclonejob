@@ -514,22 +514,13 @@ def download_history(current: models.User = Depends(get_current_user),
              "file_format": r.file_format, "downloaded_at": r.downloaded_at} for r in rows]
 
 
-def _send_queued_credentials(queued: list) -> None:
-    """Send the credential emails for a finished upload, one by one.
-
-    Runs after the response, so a slow or failing mail provider costs the
-    institute nothing. Each send is isolated: one bad address must not stop
-    the other hundred students getting their login.
-    """
-    for email, name, password in queued:
-        try:
-            send_credentials_email(email, name, email, password)
-        except Exception as e:
-            logger.warning("Credential email to %s failed: %s", email, e)
-
-
+# Both upload endpoints are plain `def`, not `async def`: FastAPI then runs
+# them in a worker thread. Parsing the sheet and talking to the database are
+# blocking calls; inside `async def` they froze the whole server, /healthz
+# stopped answering, and Render restarted the instance mid-upload — which
+# the browser reports as "Failed to fetch".
 @router.post("/upload/preview")
-async def preview_upload(file: UploadFile = File(...),
+def preview_upload(file: UploadFile = File(...),
                          current: models.User = Depends(get_current_user),
                          db: Session = Depends(get_db)):
     """Read the sheet and report what would happen — writes nothing.
@@ -541,7 +532,7 @@ async def preview_upload(file: UploadFile = File(...),
     inst = _institute(current, db)
     if not (file.filename or "").lower().endswith((".xlsx", ".xls", ".xlsm", ".csv")):
         raise HTTPException(400, "Wrong File Format — add only Excel/CSV files.")
-    data = await file.read()
+    data = file.file.read()
     try:
         results = resume_service.inspect_institute_upload(data, inst, db)
     except ValueError as e:
@@ -556,8 +547,11 @@ async def preview_upload(file: UploadFile = File(...),
         "total": len(results),
         "will_create": sum(1 for r in results if r.get("outcome") == "created"),
         "skipped": sum(1 for r in results if r.get("outcome") == "skipped"),
-        "duplicates": [{"row": r["row"], "email": r.get("email"), "reason": r["status"]}
+        "duplicates": [{"row": r["row"], "email": r.get("email"), "reason": r["status"],
+                        "kind": r.get("kind", "existing"), "row_no": r.get("row_no")}
                        for r in dupes],
+        "existing_count": sum(1 for r in dupes if r.get("kind", "existing") == "existing"),
+        "conflict_count": sum(1 for r in dupes if r.get("kind") == "conflict"),
         "duplicate_count": len(dupes),
         "problems": [{"row": r["row"], "reason": r["status"]}
                      for r in results if r.get("outcome") == "skipped"],
@@ -565,7 +559,7 @@ async def preview_upload(file: UploadFile = File(...),
 
 
 @router.post("/upload")
-async def upload_students(background: BackgroundTasks,
+def upload_students(background: BackgroundTasks,
                           file: UploadFile = File(...),
                           skip_duplicates: bool = True,
                           current: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -577,7 +571,7 @@ async def upload_students(background: BackgroundTasks,
     if not (file.filename or "").lower().endswith((".xlsx", ".xls", ".xlsm", ".csv")):
         raise HTTPException(400, "Wrong File Format — add only Excel/CSV files.")
     inst = _institute(current, db)
-    contents = await file.read()
+    contents = file.file.read()
     try:
         _t0 = time.time()
         results = process_institute_upload(contents, inst, db,
@@ -588,13 +582,12 @@ async def upload_students(background: BackgroundTasks,
         # where the time went.
         logger.info("Institute %s uploaded %s: %d row(s) in %.1fs",
                     inst.id, file.filename, len(results), time.time() - _t0)
-        # Credential emails go out AFTER the response. They were being sent
-        # inside the import loop — one live HTTPS call per student with the
-        # browser waiting, which is what pushed a 114-row sheet past the
-        # gateway timeout and surfaced as "Failed to fetch".
+        # Password hashing and credential emails happen AFTER the response
+        # (see finalize_bulk_credentials). Both are slow on a 0.1-CPU
+        # instance and the institute does not need to wait for either.
         queued = getattr(results, "pending_emails", []) or []
         if queued:
-            background.add_task(_send_queued_credentials, queued)
+            background.add_task(resume_service.finalize_bulk_credentials, queued)
     except ValueError as e:
         # Capacity exceeded or malformed rows: the sheet parsed fine, so the
         # "could not read the spreadsheet" wrapper would send the user hunting
@@ -644,6 +637,28 @@ def upload_history(current: models.User = Depends(get_current_user), db: Session
              "total_rows": b.total_rows, "created": b.created_count,
              "duplicates": b.duplicate_count, "skipped": b.skipped_count} for b in rows]
 
+
+
+# Clearing history removes only the LOG rows. The students those uploads
+# created stay registered — deleting a history entry must never delete people.
+@router.delete("/upload-history")
+def clear_upload_history(current: models.User = Depends(get_current_user),
+                         db: Session = Depends(get_db)):
+    inst = _institute(current, db)
+    n = (db.query(models.UploadBatch).filter_by(institute_id=inst.id)
+           .delete(synchronize_session=False))
+    db.commit()
+    return {"cleared": n}
+
+
+@router.delete("/download-history")
+def clear_download_history(current: models.User = Depends(get_current_user),
+                           db: Session = Depends(get_db)):
+    inst = _institute(current, db)
+    n = (db.query(models.InstituteDownloadLog).filter_by(institute_id=inst.id)
+           .delete(synchronize_session=False))
+    db.commit()
+    return {"cleared": n}
 
 def _first_education(seeker: models.JobSeeker) -> dict:
     """The education entry the dashboard groups by.

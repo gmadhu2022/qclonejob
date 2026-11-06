@@ -15,8 +15,6 @@ from sqlalchemy.orm import Session
 
 from . import models
 from .auth import hash_password, generate_password
-import os
-from concurrent.futures import ThreadPoolExecutor
 from .config import settings
 from .email_utils import send_credentials_email
 
@@ -223,44 +221,39 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
     # cost: correct, but a network round trip each, repeated per student.
     # Two SELECTs up front answer the same questions for the whole sheet.
     # ------------------------------------------------------------------
+    # Dicts, not sets: value = who already holds that email / mobile, so a
+    # rejected row can say "email X already belongs to <name>" instead of a
+    # bare "already registered" the institute has to puzzle out.
+    def _who(first, last, fallback):
+        return (f"{first or ''} {last or ''}").strip() or fallback
+
     existing_emails = {
-        (e or "").strip().lower()
-        for (e,) in db.query(models.User.email)
-                      .filter(models.User.role == models.ROLE_JOBSEEKER).all()
+        (e or "").strip().lower(): _who(f, l, e)
+        for (e, f, l) in db.query(models.User.email, models.JobSeeker.first_name,
+                                  models.JobSeeker.last_name)
+                           .outerjoin(models.JobSeeker, models.JobSeeker.user_id == models.User.id)
+                           .filter(models.User.role == models.ROLE_JOBSEEKER).all()
     }
     existing_phones = {
-        _clean_phone(p) for (p,) in db.query(models.JobSeeker.phone).all() if p
+        _clean_phone(p): _who(f, l, "another student")
+        for (p, f, l) in db.query(models.JobSeeker.phone, models.JobSeeker.first_name,
+                                  models.JobSeeker.last_name).all() if p
     }
 
     # ------------------------------------------------------------------
-    # Passwords hashed UP FRONT, in parallel.
+    # Passwords are NOT hashed inside the request.
     #
-    # bcrypt costs ~276 ms per password by design — that is the point of it.
-    # Done one at a time inside the loop it was 31 seconds of a 114-row
-    # upload, with the browser holding the connection open the whole time.
+    # Render's free instance has 0.1 CPU, where one bcrypt hash takes ~0.7 s.
+    # A 100-row sheet spent over a minute hashing while the request held the
+    # connection open; the instance stopped answering its health check, was
+    # restarted, and the browser reported "Failed to fetch". (The preview
+    # call hashed every row too, despite writing nothing.)
     #
-    # bcrypt releases the GIL while it works, so threads genuinely run in
-    # parallel here; this is one of the few places where a Python thread pool
-    # gives real speed-up. The cost per password is unchanged — no rounds
-    # reduced, nothing weakened — it is simply not serialised any more.
-    #
-    # A few more are hashed than will be used (rejected rows never claim
-    # one). That waste is far cheaper than the alternative: discovering how
-    # many are needed first, which means validating twice.
-    # The thread pool helps only where there is more than one core; on a
-    # single-CPU instance (Render's smaller tiers, and the container this was
-    # measured on) bcrypt is simply serial. The cost factor is what actually
-    # moves the number, so that is set deliberately for bulk-generated
-    # passwords — see BULK_BCRYPT_ROUNDS in config.py for the reasoning.
-    _rounds = int(getattr(settings, "BULK_BCRYPT_ROUNDS", 10) or 10)
-    _plain = [generate_password() for _ in range(len(df))]
-    pool_size = max(1, min(8, (os.cpu_count() or 1), len(df) or 1))
-    if pool_size > 1:
-        with ThreadPoolExecutor(max_workers=pool_size) as pool:
-            _hashes = list(pool.map(lambda p: hash_password(p, rounds=_rounds), _plain))
-    else:
-        _hashes = [hash_password(p, rounds=_rounds) for p in _plain]
-    _credentials = list(zip(_plain, _hashes))
+    # Users are now stored with PENDING_PASSWORD_HASH — which can never
+    # verify — and finalize_bulk_credentials() hashes the real password and
+    # emails it after the response has gone out. A student cannot log in
+    # before their credentials email arrives anyway.
+    # ------------------------------------------------------------------
 
     # A list subclass, because a plain list cannot carry an attribute —
     # `results.pending_emails = [...]` raises AttributeError at runtime.
@@ -276,7 +269,7 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
     # in control of when (and whether) mail is sent.
     pending_emails: list[tuple] = []
 
-    def duplicate(name, why, email=None):
+    def duplicate(name, why, email=None, kind="existing", row_no=None):
         """Record a duplicate — or refuse the whole sheet.
 
         All three duplicate paths (already in this sheet, email already
@@ -289,7 +282,11 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
             raise ValueError(
                 f"'{email or name}' is already registered, and you chose to correct "
                 f"the sheet rather than skip duplicates. Nothing was imported.")
+        # kind: "existing" = this exact student was uploaded before;
+        #       "conflict" = a different person whose email or mobile is
+        #       already taken (usually a copy-pasted row not fully edited).
         results.append({"row": name, "status": why, "outcome": "duplicate",
+                        "kind": kind, "row_no": row_no,
                         "email": email, "user_id": email, "password": None})
 
     def skip(name, why, email=None):
@@ -306,7 +303,9 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
             _norm_key(existing.email),
         ))
 
-    for _, row in df.iterrows():
+    for idx, row in df.iterrows():
+        # Spreadsheet row number as the institute sees it (header is row 1).
+        row_no = int(idx) + 2
         email = _get(row, mapping, "email")
 
         # Derive a display name from either name or first/last columns
@@ -346,7 +345,8 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
                        _norm_key(phone_val), _norm_key(email))
         if fingerprint in seen_keys:
             duplicate(display_name,
-                      "duplicate — same name, mobile and email already uploaded", email)
+                      "duplicate — same name, mobile and email already uploaded", email,
+                      kind="existing", row_no=row_no)
             continue
         seen_keys.add(fingerprint)
 
@@ -362,12 +362,24 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
         # Looked up in the sets loaded once above, not with a query per row.
         # Two round trips to Supabase per student is 228 round trips on a
         # 114-row sheet; over a network that is ~9 seconds of pure waiting.
-        if email in existing_emails:
-            duplicate(display_name, "duplicate — email already registered", email)
+        email_key = email.strip().lower()
+        if email_key in existing_emails:
+            duplicate(display_name,
+                      f"email {email} is already used by {existing_emails[email_key]}",
+                      email, kind="conflict", row_no=row_no)
             continue
         if phone_val and phone_val in existing_phones:
-            duplicate(display_name, "duplicate — mobile already registered", email)
+            duplicate(display_name,
+                      f"mobile {phone_val} is already used by {existing_phones[phone_val]}",
+                      email, kind="conflict", row_no=row_no)
             continue
+
+        # Claimed by this row, so a later row with the same email or mobile is
+        # a duplicate — recorded before the dry-run exit so the preview
+        # reports exactly what the real import will do.
+        existing_emails[email_key] = f"{display_name} (row {row_no} of this sheet)"
+        if phone_val:
+            existing_phones[phone_val] = f"{display_name} (row {row_no} of this sheet)"
 
         # A dry run stops here: everything above is validation, everything
         # below writes. Counting a row as "would be created" without creating
@@ -379,10 +391,10 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
             continue
 
         # --- create user with generated credentials ---
-        password, password_hash = _credentials.pop()
+        password = generate_password()
         user = models.User(
             email=email,
-            password_hash=password_hash,
+            password_hash=PENDING_PASSWORD_HASH,
             role=models.ROLE_JOBSEEKER,
             must_change_password=True,
         )
@@ -468,14 +480,7 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
         #
         # The institute does not need to wait for anyone's inbox. The caller
         # drains this queue after responding.
-        pending_emails.append((email, display_name, password))
-
-        # The row is in the database now, so it must also be in the sets —
-        # otherwise two rows sharing an email both pass and the second
-        # insert violates the unique index.
-        existing_emails.add(email)
-        if phone_val:
-            existing_phones.add(phone_val)
+        pending_emails.append((user, email, display_name, password))
 
         results.append({"row": display_name, "status": "created", "outcome": "created",
                         "email": email, "user_id": email, "password": password})
@@ -489,11 +494,58 @@ def process_institute_upload(file_bytes: bytes, institute: models.Institute, db:
             db.add(seeker)
         db.flush()
 
+    # User ids exist now (flushed above); read them before commit expires the objects.
+    queued = [(u.id, email, name, password) for u, email, name, password in pending_emails]
     db.commit()
     # Attached to the list rather than returned separately so every existing
     # caller — including the dry-run path — keeps working unchanged.
-    results.pending_emails = pending_emails          # type: ignore[attr-defined]
+    results.pending_emails = queued                  # type: ignore[attr-defined]
     return results
+
+
+# Stored on bulk-created users until their real hash is written. Not a valid
+# bcrypt hash, so verify_password() returns False for it — nobody can log in
+# with any password while it is in place.
+PENDING_PASSWORD_HASH = "!pending-bulk-upload"
+
+
+def finalize_bulk_credentials(queued: list) -> None:
+    """Hash each bulk-created student's password, then email it.
+
+    Runs as a background task after the upload response has been sent, with
+    its own DB session. Each student is committed before their email goes
+    out, so whoever receives credentials can log in with them. One failure
+    never stops the rest of the batch.
+    """
+    import logging
+    from .database import SessionLocal
+    log = logging.getLogger(__name__)
+    rounds = int(getattr(settings, "BULK_BCRYPT_ROUNDS", 10) or 10)
+    db = SessionLocal()
+    try:
+        for user_id, email, name, password in queued:
+            try:
+                # Only replace the placeholder: if the student already reset
+                # their password some other way, keep what they chose.
+                updated = (db.query(models.User)
+                             .filter(models.User.id == user_id,
+                                     models.User.password_hash == PENDING_PASSWORD_HASH)
+                             .update({models.User.password_hash:
+                                      hash_password(password, rounds=rounds)},
+                                     synchronize_session=False))
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                log.warning("Setting password for %s failed: %s", email, e)
+                continue
+            if not updated:
+                continue
+            try:
+                send_credentials_email(email, name, email, password)
+            except Exception as e:
+                log.warning("Credential email to %s failed: %s", email, e)
+    finally:
+        db.close()
 
 
 def build_template_workbook() -> bytes:

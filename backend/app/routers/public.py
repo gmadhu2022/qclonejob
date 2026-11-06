@@ -273,9 +273,18 @@ def skills(sector: str | None = None, q: str | None = None, limit: int = 400):
     pool = skills_for_sector(sector) if sector else ALL_SKILLS
     if q:
         ql = q.lower()
-        starts = [s for s in pool if s.lower().startswith(ql)]
-        contains = [s for s in pool if ql in s.lower() and s not in starts]
-        pool = starts + contains          # prefix matches first — feels faster to type against
+
+        def _match(src):
+            starts = [s for s in src if s.lower().startswith(ql)]
+            contains = [s for s in src if ql in s.lower() and s not in starts]
+            return starts + contains      # prefix matches first — feels faster to type against
+
+        pool = _match(pool)
+        # Typing inside an industry still finds the rest of the library, after
+        # that industry's own matches — a hospital can need a driver too.
+        if sector:
+            seen = {s.lower() for s in pool}
+            pool = pool + [s for s in _match(ALL_SKILLS) if s.lower() not in seen]
     return {"skills": pool[:limit], "total": len(pool),
             "sector": sector, "sectors": sorted(SKILLS_BY_SECTOR.keys())}
 

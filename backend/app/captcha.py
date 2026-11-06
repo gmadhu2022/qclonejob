@@ -53,22 +53,28 @@ def _b64d(raw: str) -> str:
 
 
 def issue() -> dict:
-    """Make a fresh challenge.
+    """Make a fresh challenge: addition or subtraction of two single digits.
 
-    Addition and multiplication of small numbers only: the point is to be
-    trivial for a person and to require an actual round trip, not to be a
-    puzzle. Anything harder fails accessibility and punishes the wrong people.
+    Trivial for a person and still needs a real round trip — the point is a
+    speed bump, not a puzzle. Subtraction always puts the larger number first
+    so the answer is never negative (0-18 in every case), which keeps it
+    answerable on a phone keypad without a minus sign.
     """
     a, b = random.randint(1, 9), random.randint(1, 9)
     if random.random() < 0.5:
-        question, answer = f"What is {a} + {b}?", a + b
+        op, answer = "+", a + b
     else:
-        question, answer = f"What is {a} × {b}?", a * b
+        a, b = max(a, b), min(a, b)
+        op, answer = "−", a - b
+    question = f"What is {a} {op} {b}?"
 
     body = json.dumps({"a": str(answer), "e": int(time.time()) + TTL_SECONDS},
                       separators=(",", ":"))
     encoded = _b64e(body)
-    return {"question": question, "token": f"{encoded}.{_sign(encoded)}"}
+    # a / op / b let the form draw the sum as tiles; question stays for
+    # older clients and screen readers.
+    return {"question": question, "a": a, "op": op, "b": b,
+            "token": f"{encoded}.{_sign(encoded)}"}
 
 
 def verify(token: str, answer: str) -> tuple[bool, str]:
