@@ -1,12 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import RichText from "./RichText";
 import ImageUpload from "./ImageUpload";
 import OtpField from "./OtpField";
-import PhoneField from "./PhoneField";
-import { Field as FField, Combobox, TagInput } from "./fields";
+import BasePhoneField from "./PhoneField";
+import { Combobox as BaseCombobox, TagInput } from "./fields";
+import { RegInput, RegPassword } from "./RegField";
 import SkillPicker from "./SkillPicker";
-import { IconCheck, IconEye, IconRefresh } from "./icons";
+import { IconCheck, IconRefresh, IconUser, IconMail, IconBuilding, IconGlobe, IconMapPin,
+         IconHash, IconUsers, IconPhone, IconBriefcase, IconShield, IconDoc } from "./icons";
 import { CITIES, STATES, COURSES, SKILLS } from "../lib/options";
 
 /* =====================================================================
@@ -23,6 +25,50 @@ import { CITIES, STATES, COURSES, SKILLS } from "../lib/options";
        can't receive their codes, and the admin endpoints don't check them.
      - no "Already registered? Log in" footer.
    ===================================================================== */
+
+/* ---------------------------------------------------------------------
+   Every registration field goes through FField, so the whole form shares
+   one look (RegField) and one set of inline checks. The icon and the
+   format check are picked from the field's label.
+   --------------------------------------------------------------------- */
+const WEBSITE_RE = /^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}(\/\S*)?$/i;
+const GST_RE = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/i;
+const PAN_RE = /^[A-Z]{5}\d{4}[A-Z]$/i;
+
+function iconFor(label = "") {
+  const l = label.toLowerCase();
+  if (/mail/.test(l)) return IconMail;
+  if (/land line|phone|mobile/.test(l)) return IconPhone;
+  if (/website/.test(l)) return IconGlobe;
+  if (/institute name/.test(l)) return IconBuilding;
+  if (/organisation/.test(l)) return IconBriefcase;
+  // Numbers first: "capacity" contains "city".
+  if (/pincode|capacity|strength/.test(l)) return IconHash;
+  if (/address|district|city|state|country/.test(l)) return IconMapPin;
+  if (/gst|pan/.test(l)) return IconShield;
+  if (/designation/.test(l)) return IconBriefcase;
+  if (/promoter|contact person/.test(l)) return IconUsers;
+  if (/name/.test(l)) return IconUser;
+  return IconDoc;
+}
+
+function validatorFor(label = "") {
+  const l = label.toLowerCase();
+  if (/mail/.test(l)) return (v) => (EMAIL_PATTERN.test(v.trim()) ? null : "Invalid email format");
+  if (/website/.test(l)) return (v) => (WEBSITE_RE.test(v.trim()) ? null : "Enter a valid website, e.g. www.yourcompany.com");
+  if (/pincode/.test(l)) return (v) => (/^\d{6}$/.test(v) ? null : "Pincode must be 6 digits");
+  if (/gst/.test(l)) return (v) => (GST_RE.test(v.trim()) ? null : "GST No. must be 15 characters, e.g. 36AABCU9603R1ZM");
+  if (/pan/.test(l)) return (v) => (PAN_RE.test(v.trim()) ? null : "PAN must be 10 characters, e.g. AABCU9603R");
+  if (/land line/.test(l)) return (v) => (/^[\d\s-]{6,15}$/.test(v) ? null : "Enter a valid landline with STD code");
+  if (/name|person/.test(l)) return (v) => (v.trim().length >= 2 ? null : "Must contain at least 2 letters");
+  return null;
+}
+
+function FField({ label, validate, ...rest }) {
+  return <RegInput label={label} icon={iconFor(label)} validate={validate || validatorFor(label)} {...rest} />;
+}
+const Combobox = (p) => <BaseCombobox variant="reg" icon={IconMapPin} {...p} />;
+const PhoneField = (p) => <BasePhoneField variant="reg" {...p} />;
 
 export function RegistrationFields({
   role, form, setForm, formKey = 0, admin = false,
@@ -46,26 +92,26 @@ export function RegistrationFields({
     return (
       <div className="card grid gap-4 sm:grid-cols-2">
             <FField label="First name" required value={form.first_name} onChange={setV("first_name")}
-                    placeholder="e.g. Madhu" />
+                    placeholder="e.g. Emily" />
             <FField label="Last name" value={form.last_name} onChange={setV("last_name")}
-                    placeholder="e.g. Gundu" />
+                    placeholder="e.g. Johnson" />
             <div className="sm:col-span-2">
               <FField label="Email (becomes your User ID)" type="email" required value={form.email}
-                      onChange={setV("email")} placeholder="e.g. you@gmail.com" />
+                      onChange={setV("email")} placeholder="e.g. emily.johnson@gmail.com" />
             </div>
             <div className="sm:col-span-2">
               <PhoneField label="Phone" value={form.phone} onChange={setV("phone")} />
             </div>
             <Combobox label="Location" value={form.location} options={CITIES} onChange={setV("location")}
-                      placeholder="e.g. Hyderabad" />
+                      placeholder="e.g. Austin, Texas" />
             <div className="sm:col-span-2">
               {/* SkillPicker, not a 29-item local array: job posting already
                   searched the full 1,147-skill library from the server, so a
                   seeker could only tag themselves with skills recruiters
                   mostly weren't asking for. One source, both sides. */}
-              <SkillPicker label="Key skills" values={form.skillList || []}
+              <SkillPicker variant="reg" label="Key skills" values={form.skillList || []}
                            onChange={(v) => setForm((f) => ({ ...f, skillList: v }))}
-                           placeholder="Type a skill — e.g. Python, Excel, Welding" />
+                           placeholder="Type a skill — e.g. Customer Service, Excel, Welding" />
             </div>
       </div>
     );
@@ -83,11 +129,11 @@ export function RegistrationFields({
                 <div className="min-w-0">
                   <FField label={isInst ? "Institute Name" : "Organisation Name"} required
                           value={form.name} onChange={setV("name")}
-                          placeholder={isInst ? "e.g. Coco Soft Institute" : "e.g. Campus Connect Limited"} />
+                          placeholder={isInst ? "e.g. Lincoln Valley Technical College" : "e.g. Summit Ridge Technologies Inc."} />
                   <div className="mt-4">
                     <FField label="Official Mail" required type="email"
                             value={form.email} onChange={setV("email")}
-                            placeholder="e.g. hr@yourcompany.com" />
+                            placeholder={isInst ? "e.g. admissions@lincolnvalley.edu" : "e.g. hr@summitridgetech.com"} />
                   </div>
                 </div>
 
@@ -106,7 +152,7 @@ export function RegistrationFields({
                     It was previously three sections apart. */}
                 <FField label="Contact Person" required value={form.authorised_person_name}
                         onChange={setV("authorised_person_name")}
-                        placeholder={isInst ? "e.g. Priya Sharma, Placement Officer" : "e.g. Priya Sharma, HR Manager"} />
+                        placeholder={isInst ? "e.g. Sarah Thompson, Placement Officer" : "e.g. Michael Carter, HR Manager"} />
               </div>
 
               <div className="sm:col-span-2">
@@ -121,13 +167,13 @@ export function RegistrationFields({
                       that has only mobiles. */}
                   <FField label="Land line (if any)" value={form.landline}
                           onChange={setV("landline")}
-                          placeholder="e.g. 040-2345 6789"
-                          hint="Optional — with STD code." />
+                          placeholder="e.g. 512-555-0147"
+                          hint="Optional — include the area code." />
                 </div>
               )}
 
               <FField label="Website" value={form.website} onChange={setV("website")}
-                      placeholder="e.g. www.yourcompany.com" />
+                      placeholder={isInst ? "e.g. www.lincolnvalley.edu" : "e.g. www.summitridgetech.com"} />
               {isInst && (
                 <>
                   {/* Two separate numbers, not one "strength": capacity is what
@@ -139,6 +185,8 @@ export function RegistrationFields({
                           placeholder="e.g. 1200"
                           hint="Maximum students across all courses" />
                   <FField label="Current Strength" required value={form.current_strength}
+                          validate={(v) => (form.total_capacity && Number(v) > Number(form.total_capacity)
+                            ? "Can't be more than Total Capacity" : null)}
                           onChange={(v) => setV("current_strength")(String(v).replace(/\D/g, ""))}
                           placeholder="e.g. 840"
                           hint="Students on the rolls today" />
@@ -200,23 +248,23 @@ export function RegistrationFields({
               <div className="sm:col-span-2">
                 <FField label="Address line 1" required={!isInst} value={form.address1}
                         onChange={setV("address1")}
-                        placeholder="e.g. Plot 42, Kukatpally Industrial Area" />
+                        placeholder={isInst ? "e.g. 450 Maple Street" : "e.g. 1200 Congress Avenue, Suite 400"} />
               </div>
               <div className="sm:col-span-2">
                 <FField label="Address line 2" value={form.address2} onChange={setV("address2")}
-                        placeholder="e.g. Near Metro Pillar 1129 (optional)" />
+                        placeholder={isInst ? "e.g. Near Riverside Park (optional)" : "e.g. Downtown Business District (optional)"} />
               </div>
               <Combobox label="City" value={form.city} options={CITIES} onChange={setV("city")}
-                        placeholder="e.g. Hyderabad" />
+                        placeholder={isInst ? "e.g. Springfield" : "e.g. Austin"} />
               <FField label="District" value={form.district} onChange={setV("district")}
-                      placeholder="e.g. Medchal-Malkajgiri" />
+                      placeholder={isInst ? "e.g. Sangamon County" : "e.g. Travis County"} />
               <Combobox label="State" value={form.state} options={STATES} onChange={setV("state")}
-                        placeholder="e.g. Telangana" />
+                        placeholder={isInst ? "e.g. Illinois" : "e.g. Texas"} />
               <FField label="Pincode" required={!isInst} value={form.pincode}
                       onChange={(v) => setV("pincode")(String(v).replace(/\D/g, "").slice(0, 6))}
                       placeholder="e.g. 500072" />
               <FField label="Country" value={form.country ?? "INDIA"} onChange={setV("country")}
-                      placeholder="e.g. INDIA" />
+                      placeholder="e.g. USA" />
             </RegSection>
 
             {/* Was a SECOND "Contact person" section. The person's name, phone
@@ -227,9 +275,9 @@ export function RegistrationFields({
                 so the heading now says what it actually holds. */}
             <RegSection title={isInst ? "Additional details" : "Business details"}>
               <FField label="Designation" value={form.designation} onChange={setV("designation")}
-                      placeholder="e.g. HR Manager" />
+                      placeholder={isInst ? "e.g. Director of Career Services" : "e.g. Talent Acquisition Manager"} />
               <FField label="Promoter's name" value={form.promoter_name} onChange={setV("promoter_name")}
-                      placeholder="e.g. Ramesh Kumar" />
+                      placeholder={isInst ? "e.g. David Anderson" : "e.g. Robert Mitchell"} />
               {isInst ? (
                 /* The authorised person's phone and email used to be asked for
                    here. They are the Contact Number and Official Mail already
@@ -252,7 +300,7 @@ export function RegistrationFields({
                 <div className="sm:col-span-2">
                   <TagInput label="Courses offered" values={form.courseList || []} options={COURSES}
                             onChange={(v) => setForm((f) => ({ ...f, courseList: v }))}
-                            placeholder="e.g. B.Tech, Diploma, MBA"
+                            placeholder="e.g. Computer Science, Nursing, MBA"
                             hint="Add every course your institute runs — recruiters filter by course." />
                 </div>
               )}
@@ -313,7 +361,6 @@ export function RegSection({ title, children }) {
  */
 export function PasswordSection({ form, setForm }) {
   const [show, setShow] = useState(false);
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const pw = form.password || "";
   const confirm = form.confirm_password || "";
@@ -323,50 +370,21 @@ export function PasswordSection({ form, setForm }) {
 
   return (
     <div className="card">
-      <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-2">
-        <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">
-          Create your password
-        </h3>
-        <button type="button" onClick={() => setShow((v) => !v)}
-                className="flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-navy">
-          <IconEye size={13} /> {show ? "Hide" : "Show"}
-        </button>
-      </div>
+      <h3 className="mb-4 border-b border-slate-100 pb-2 text-sm font-bold uppercase tracking-wide text-slate-500">
+        Create your password
+      </h3>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className="label">
-            Password <span className="font-semibold text-red-400">*</span>
-          </label>
-          <input className={`input ${tooShort ? "!border-red-400 !bg-red-50/40" : ""}`}
-                 type={show ? "text" : "password"} value={pw}
-                 autoComplete="new-password"
-                 placeholder="At least 6 characters"
-                 onChange={set("password")} />
-        </div>
-        <div>
-          <label className="label">
-            Confirm password <span className="font-semibold text-red-400">*</span>
-          </label>
-          <input className={`input ${mismatch ? "!border-red-400 !bg-red-50/40" : ""}
-                             ${matched ? "!border-brandgreen !bg-brandgreen-50/40" : ""}`}
-                 type={show ? "text" : "password"} value={confirm}
-                 autoComplete="new-password"
-                 placeholder="Type it again"
-                 onChange={set("confirm_password")} />
-        </div>
+        <RegPassword label="Password" required value={pw} placeholder="At least 6 characters"
+                     show={show} onToggle={() => setShow((v) => !v)}
+                     error={tooShort ? "Password must contain at least 6 characters" : null}
+                     onChange={(v) => setForm((f) => ({ ...f, password: v }))} />
+        <RegPassword label="Confirm password" required value={confirm} placeholder="Type it again"
+                     show={show} onToggle={() => setShow((v) => !v)} ok={matched}
+                     error={mismatch ? "Passwords are not matching" : null}
+                     onChange={(v) => setForm((f) => ({ ...f, confirm_password: v }))} />
       </div>
 
-      {tooShort && (
-        <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
-          Password must be at least 6 characters.
-        </p>
-      )}
-      {mismatch && (
-        <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
-          Passwords are not matching
-        </p>
-      )}
       {matched && (
         <p className="mt-3 flex items-center gap-1.5 rounded-lg bg-brandgreen-50 px-3 py-2
                       text-xs font-bold text-brandgreen-600">
@@ -506,12 +524,17 @@ export function validateRegistration(role, form) {
 export function CaptchaField({ form, setForm }) {
   const [challenge, setChallenge] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [spin, setSpin] = useState(0);
+  const [touched, setTouched] = useState(false);
+  const rootRef = useRef(null);
 
   const load = async () => {
     setLoading(true);
+    setSpin((n) => n + 1);
     try {
       const c = await api.get("/api/auth/captcha", { auth: false });
       setChallenge(c);
+      setTouched(false);
       setForm((f) => ({ ...f, captcha_token: c.token, captcha_answer: "" }));
     } catch {
       setChallenge({ question: "Couldn't load the security check.", token: "" });
@@ -520,31 +543,77 @@ export function CaptchaField({ form, setForm }) {
 
   useEffect(() => { load(); }, []);
 
+  // Like the other fields: show "required" once Submit is pressed.
+  useEffect(() => {
+    const f = rootRef.current?.closest("form");
+    if (!f) return;
+    const on = () => setTouched(true);
+    f.addEventListener("submit", on, true);
+    return () => f.removeEventListener("submit", on, true);
+  }, []);
+
+  const answer = form.captcha_answer || "";
+  const missing = touched && !answer;
+  // Older servers send only `question`; parse it so the tiles still work.
+  const parts = challenge?.op ? challenge
+    : (() => { const m = /(\d+)\s*([+−-])\s*(\d+)/.exec(challenge?.question || "");
+               return m ? { a: m[1], op: m[2] === "-" ? "−" : m[2], b: m[3] } : null; })();
+
+  const Tile = ({ children, tone = "num" }) => (
+    <span key={`${spin}-${children}`}
+          className={`captcha-pop flex h-12 w-12 items-center justify-center rounded-2xl text-2xl font-extrabold tabular-nums sm:h-14 sm:w-14
+            ${tone === "op" ? "bg-transparent text-slate-400 !w-7"
+              : "bg-white text-navy shadow-[0_6px_16px_-6px_rgba(79,70,229,.45)] ring-1 ring-indigo-100"}`}>
+      {children}
+    </span>
+  );
+
   return (
-    <div className="card">
-      <h3 className="mb-4 border-b border-slate-100 pb-2 text-sm font-bold uppercase tracking-wide text-slate-500">
-        Security check
-      </h3>
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="flex h-11 min-w-[170px] items-center justify-center rounded-xl border
-                        border-slate-200 bg-slate-50 px-4 font-mono text-base font-bold
-                        tracking-wide text-navy select-none">
-          {loading ? "…" : challenge?.question || "…"}
+    <div ref={rootRef} className="card reg-keep overflow-hidden !p-0">
+      {/* Header */}
+      <div className="flex items-center gap-3 border-b border-slate-100 px-6 py-4">
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brandgreen to-navy text-white shadow-md">
+          <IconShield size={18} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-bold text-slate-800">Security check</h3>
+          <p className="text-xs text-slate-500">Solve this quick sum to show you're a person.</p>
         </div>
-        <div className="w-32">
-          <label className="label">Your answer</label>
-          <input className="input" inputMode="numeric" value={form.captcha_answer || ""}
-                 placeholder="?"
-                 onChange={(e) => setForm((f) => ({
-                   ...f, captcha_answer: e.target.value.replace(/[^0-9-]/g, "") }))} />
-        </div>
-        <button type="button" onClick={load} disabled={loading}
-                className="btn-outline btn-sm mb-0.5 flex items-center gap-1.5">
-          <IconRefresh size={13} /> New question
+        <button type="button" onClick={load} disabled={loading} aria-label="New question"
+                className="flex items-center gap-1.5 rounded-xl border-[1.5px] border-indigo-100 bg-white px-3 py-2 text-xs font-semibold text-navy transition-colors hover:bg-navy-50 disabled:opacity-60">
+          <IconRefresh size={13} className={loading ? "animate-spin" : ""} /> New question
         </button>
       </div>
-      <p className="mt-2 text-xs text-slate-400">
-        This confirms you're a person. If the question is unclear, press New question for another.
+
+      {/* The sum */}
+      <div className="captcha-bg flex flex-wrap items-center justify-center gap-2 px-6 py-6 sm:gap-3">
+        {loading && !parts ? (
+          <span className="h-14 w-56 animate-pulse rounded-2xl bg-white/70" />
+        ) : parts ? (
+          <>
+            <Tile>{parts.a}</Tile>
+            <Tile tone="op">{parts.op}</Tile>
+            <Tile>{parts.b}</Tile>
+            <Tile tone="op">=</Tile>
+            <span className={`flex h-12 w-20 items-center rounded-2xl border-2 bg-white transition-all sm:h-14 sm:w-24
+                              ${missing ? "border-red-400 ring-4 ring-red-100"
+                                : answer ? "border-brandgreen-400 ring-4 ring-brandgreen-100"
+                                : "border-dashed border-indigo-300 focus-within:border-solid focus-within:border-navy focus-within:ring-4 focus-within:ring-navy/10"}`}>
+              <input inputMode="numeric" maxLength={2} aria-label={challenge?.question || "Your answer"}
+                     value={answer} placeholder="?"
+                     onBlur={() => setTouched(true)}
+                     onChange={(e) => setForm((f) => ({ ...f, captcha_answer: e.target.value.replace(/\D/g, "").slice(0, 2) }))}
+                     className="w-full bg-transparent text-center text-2xl font-extrabold tabular-nums text-slate-900 outline-none placeholder:text-indigo-300" />
+            </span>
+          </>
+        ) : (
+          <span className="text-sm text-red-500">{challenge?.question || "…"}</span>
+        )}
+      </div>
+
+      <p className={`border-t border-slate-100 px-6 py-3 text-xs ${missing ? "font-medium text-red-500" : "text-slate-400"}`}>
+        {missing ? "Please answer the sum above."
+                 : "Only adding or taking away single numbers. Can't read it? Press New question."}
       </p>
     </div>
   );

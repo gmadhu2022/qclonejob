@@ -25,6 +25,7 @@ export default function FileDrop({
   busyLabel = "Uploading…",
   preview,                // optional node rendered instead of the file chip
   compact = false,
+  minimal = false,        // single-row strip instead of the tall drop zone
 }) {
   const [dragging, setDragging] = useState(false);
   const inputId = useId();
@@ -38,6 +39,72 @@ export default function FileDrop({
     dragging: "border-navy bg-navy-50 scale-[1.01]",
     idle: "border-slate-300 bg-slate-50/60 hover:border-navy-300 hover:bg-navy-50/30",
   }[state];
+
+  const dropHandlers = {
+    onDragOver: (e) => { e.preventDefault(); if (!busy) setDragging(true); },
+    onDragLeave: () => setDragging(false),
+    onDrop: (e) => {
+      e.preventDefault(); setDragging(false);
+      if (!busy) onPick(e.dataTransfer.files?.[0] || null);
+    },
+    onClick: open,
+    onKeyDown: (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
+    },
+    role: "button",
+    tabIndex: 0,
+    "aria-busy": busy,
+    "aria-label": title,
+  };
+  const fileInput = (
+    <input id={inputId} type="file" className="hidden" accept={accept}
+           onChange={(e) => { onPick(e.target.files[0] || null); e.target.value = ""; }} />
+  );
+
+  /* Minimal: a small tile (about 220 x 100) — icon, one line of text and
+     the accepted formats. Same drop and keyboard behaviour as the full zone. */
+  if (minimal) {
+    const tile = {
+      busy: "border-slate-200 bg-slate-50",
+      filled: "border-brandgreen-300 bg-brandgreen-50/40",
+      dragging: "border-navy bg-navy-50",
+      idle: "border-slate-300 bg-white hover:border-navy-300 hover:bg-slate-50",
+    }[state];
+    return (
+      <div>
+        <div {...dropHandlers}
+             className={`flex h-[100px] w-56 max-w-full cursor-pointer flex-col items-center
+               justify-center gap-1 rounded-lg border border-dashed px-3 text-center
+               transition-colors duration-150 ${tile} ${busy ? "cursor-wait" : ""}`}>
+          <span className={file ? "text-brandgreen-600" : "text-slate-400"}>
+            {busy ? <Spinner /> : file ? <IconCheck size={18} /> : <IconUpload size={18} />}
+          </span>
+          {busy ? (
+            <p className="text-xs font-medium text-slate-600">{busyLabel}</p>
+          ) : file ? (
+            <>
+              <p className="w-full truncate text-xs font-medium text-slate-800">{file.name}</p>
+              <p className="text-[11px] text-slate-500">{(file.size / 1024).toFixed(0)} KB · ready</p>
+            </>
+          ) : (
+            <>
+              <p className="text-xs font-medium text-slate-700">{title}</p>
+              {hint && <p className="text-[11px] text-slate-400">{hint}</p>}
+            </>
+          )}
+          {fileInput}
+        </div>
+        {preview}
+        {file && onClear && !busy && (
+          <button type="button" onClick={onClear}
+                  className="mt-1.5 flex items-center gap-1 text-xs font-medium text-slate-400
+                             transition-colors hover:text-red-500">
+            <IconClose size={12} /> Remove file
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div>

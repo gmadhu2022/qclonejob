@@ -1,3 +1,5 @@
+import { regBox, RegIcon } from "./RegField";
+import { IconMail, IconPhone, IconLock } from "./icons";
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { useToast } from "./ui";
@@ -107,8 +109,9 @@ export default function OtpField({ label, channel = "sms", value, onChange,
       </div>
       <div className="mt-1.5 flex gap-2">
         {hideInput ? (
-          <div className={`input flex items-center !bg-slate-50 ${verified ? "!border-brandgreen !bg-brandgreen-50/40" : ""}`}>
-            <span className={value ? "text-slate-700" : "text-slate-400"}>
+          <div className={`${regBox({ ok: verified })} min-w-0 flex-1`}>
+            <RegIcon Icon={isEmail ? IconMail : IconPhone} />
+            <span className={`truncate py-2.5 text-sm ${value ? "text-slate-700" : "text-slate-400"}`}>
               {value || `Enter your ${isEmail ? "email" : "contact number"} above first`}
             </span>
           </div>
@@ -133,10 +136,13 @@ export default function OtpField({ label, channel = "sms", value, onChange,
 
       {sent && !verified && (
         <div className="mt-2 flex gap-2">
-          <input className={`input tracking-[0.4em] ${error ? "!border-red-400 !bg-red-50/40" : ""}`}
-                 maxLength={6} placeholder="000000"
-                 inputMode="numeric" value={code}
-                 onChange={(e) => { setCode(e.target.value.replace(/[^0-9]/g, "")); setError(null); }} />
+          <div className={`${regBox({ error })} min-w-0 flex-1`}>
+            <RegIcon Icon={IconLock} error={error} />
+            <input className={`min-w-0 flex-1 bg-transparent py-2.5 text-sm tracking-[0.4em] outline-none placeholder:text-slate-400 ${error ? "text-red-600" : "text-slate-800"}`}
+                   maxLength={6} placeholder="000000"
+                   inputMode="numeric" value={code}
+                   onChange={(e) => { setCode(e.target.value.replace(/[^0-9]/g, "")); setError(null); }} />
+          </div>
           <button type="button" className="btn shrink-0" onClick={verify}
                   disabled={busy || code.length < 6}>Verify</button>
         </div>

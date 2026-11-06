@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { COUNTRIES, findCountry, DEFAULT_ISO } from "../lib/countries";
 import Flag from "./Flag";
+import { RegLabel, RegError } from "./RegField";
+import { IconPhone } from "./icons";
 
 /**
  * Phone input: searchable country picker (flag + dial code) beside a field
@@ -22,7 +24,20 @@ export default function PhoneField({
   hint,
   placeholder,
   error,
+  variant,
 }) {
+  const reg = variant === "reg";
+  const [touched, setTouched] = useState(false);
+  const [focus, setFocus] = useState(false);
+  // Like the other registration fields: show "required" once Submit is pressed.
+  const rootRef = useRef(null);
+  useEffect(() => {
+    const form = rootRef.current?.closest("form");
+    if (!reg || !form) return;
+    const on = () => setTouched(true);
+    form.addEventListener("submit", on, true);
+    return () => form.removeEventListener("submit", on, true);
+  }, [reg]);
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const boxRef = useRef(null);
@@ -55,10 +70,15 @@ export default function PhoneField({
   }, [q]);
 
   const short = digits.length > 0 && digits.length < country.length;
+  const regError = reg && touched
+    ? (required && !digits ? `${label} is required`
+       : short ? `${country.name} numbers are ${country.length} digits — ${country.length - digits.length} more to go`
+       : null)
+    : null;
 
   return (
-    <div>
-      {label && (
+    <div ref={rootRef}>
+      {reg ? <RegLabel label={label} required={required} /> : label && (
         <label className="label">
           {label}{required && <span className="text-red-500"> *</span>}
         </label>
@@ -68,14 +88,28 @@ export default function PhoneField({
           inside this row, and clipping the row clipped the dropdown to ~44px —
           which is why the country list appeared blank. Corners are rounded on
           the child elements instead. */}
-      <div className={`flex items-stretch rounded-xl border bg-white transition-colors
+      <div className={reg
+        ? `flex items-stretch rounded-2xl border-[1.5px] transition-colors
+           ${regError ? "border-red-400 bg-red-50/50"
+             : focus ? "border-navy bg-white ring-4 ring-navy/10"
+             : touched && digits.length === country.length ? "border-brandgreen-400 bg-white"
+             : "border-indigo-100 bg-[#f6f7ff] hover:border-indigo-200"}`
+        : `flex items-stretch rounded-xl border bg-white transition-colors
         ${error || short ? "border-red-300" : "border-slate-200 focus-within:border-navy"}`}>
+        {reg && (
+          <span className={`my-1.5 ml-1.5 flex h-8 w-8 shrink-0 items-center justify-center self-center rounded-lg border-[1.5px] bg-white
+                            ${regError ? "border-red-300 text-red-500" : "border-indigo-100 text-navy"}`}>
+            <IconPhone size={15} />
+          </span>
+        )}
 
         {/* ---- country picker ---- */}
         <div className="relative" ref={boxRef}>
           <button type="button" onClick={() => { setOpen((o) => !o); setQ(""); }}
-                  className="flex h-full items-center gap-1.5 rounded-l-xl border-r border-slate-200 bg-slate-50/70 px-3
-                             text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100">
+                  className={reg
+                    ? "flex h-full items-center gap-1.5 border-r border-indigo-100 px-2.5 text-sm font-semibold text-slate-700"
+                    : `flex h-full items-center gap-1.5 rounded-l-xl border-r border-slate-200 bg-slate-50/70 px-3
+                             text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100`}>
             <Flag iso={country.iso} emoji={country.flag} size={22} />
             <span className="tabular-nums">{country.dial}</span>
             <span className={`text-[9px] text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}>▼</span>
@@ -130,6 +164,8 @@ export default function PhoneField({
             if (e.key.length === 1 && !/\d/.test(e.key) && !e.ctrlKey && !e.metaKey) e.preventDefault();
           }}
           onChange={(e) => emit(country.iso, e.target.value)}
+          onFocus={() => setFocus(true)}
+          onBlur={() => { setFocus(false); setTouched(true); }}
           className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm tabular-nums outline-none"
         />
 
@@ -139,12 +175,13 @@ export default function PhoneField({
         </span>
       </div>
 
-      {short && (
+      {reg && <RegError error={regError} hint={hint} />}
+      {!reg && short && (
         <p className="mt-1 text-xs text-red-500">
           {country.name} numbers are {country.length} digits — {country.length - digits.length} more to go.
         </p>
       )}
-      {hint && !short && <p className="mt-1 text-xs text-slate-400">{hint}</p>}
+      {!reg && hint && !short && <p className="mt-1 text-xs text-slate-400">{hint}</p>}
     </div>
   );
 }

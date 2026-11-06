@@ -40,6 +40,10 @@ export default {
       },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        // Headings in the dashboard top bar.
+        display: ['"Times New Roman"', 'Times', 'serif'],
+        // Registration page titles.
+        heading: ['Poppins', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
         /* Neutral-tinted, not navy-tinted. A coloured shadow reads as a glow

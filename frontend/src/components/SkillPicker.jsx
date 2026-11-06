@@ -13,7 +13,7 @@ import { useToast } from "./ui";
  * - Free text is always allowed — the library is a shortcut, not a restriction.
  */
 export default function SkillPicker({ label = "Key skills", values = [], onChange,
-                                      sector, aiSuggestPath, aiBody, hint }) {
+                                      sector, aiSuggestPath, aiBody, hint, variant }) {
   const toast = useToast();
   const [query, setQuery] = useState("");
   const [pool, setPool] = useState([]);
@@ -91,8 +91,11 @@ export default function SkillPicker({ label = "Key skills", values = [], onChang
         </div>
       </div>
 
-      <div className="mt-1.5 flex min-h-[46px] flex-wrap items-center gap-1.5 rounded-xl border border-slate-300 bg-white p-2
-                      transition-shadow focus-within:border-navy focus-within:ring-2 focus-within:ring-navy/15">
+      <div className={variant === "reg"
+        ? `mt-1.5 flex min-h-[46px] flex-wrap items-center gap-1.5 rounded-2xl border-[1.5px] border-indigo-100 bg-[#f6f7ff] p-2
+           transition-colors hover:border-indigo-200 focus-within:border-navy focus-within:bg-white focus-within:ring-4 focus-within:ring-navy/10`
+        : `mt-1.5 flex min-h-[46px] flex-wrap items-center gap-1.5 rounded-xl border border-slate-300 bg-white p-2
+                      transition-shadow focus-within:border-navy focus-within:ring-2 focus-within:ring-navy/15`}>
         {values.map((v) => (
           <span key={v} className="group flex items-center gap-1 rounded-lg bg-navy-50 px-2 py-1 text-xs font-medium text-navy
                                    transition-colors hover:bg-navy hover:text-white">

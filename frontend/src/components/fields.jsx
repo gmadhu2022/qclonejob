@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { useToast } from "./ui";
-import { IconSearch, IconCheck, IconSparkle } from "./icons";
+import { IconSearch, IconCheck, IconSparkle, IconChevronDown } from "./icons";
+import { regBox, RegIcon, RegLabel, RegError } from "./RegField";
 
 /* ---------------- Floating-label input ---------------- */
 export function Field({ label, value, onChange, type = "text", required, hint, error,
@@ -44,7 +45,8 @@ export function Field({ label, value, onChange, type = "text", required, hint, e
 /* ---------------- Searchable combobox ----------------
    Type to filter; allows free text; optional AI suggestions. */
 export function Combobox({ label, value, onChange, options = [], placeholder = "Type to search…",
-                          allowCustom = true, aiField, aiContext, required, hint }) {
+                          allowCustom = true, aiField, aiContext, required, hint,
+                          variant, icon }) {
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -74,9 +76,36 @@ export function Combobox({ label, value, onChange, options = [], placeholder = "
   };
 
   const pick = (v) => { onChange?.(v); setQuery(""); setOpen(false); };
+  const [touched, setTouched] = useState(false);
+  const reg = variant === "reg";
+  const regError = reg && touched && !open && required && !String(value || "").trim()
+    ? `${label} is required` : null;
 
   return (
     <div ref={ref} className="relative">
+      {reg ? (
+        <>
+          <RegLabel label={label} required={required} />
+          <div className={regBox({ error: regError, focus: open })}>
+            <RegIcon Icon={icon} error={regError} focus={open} />
+            <input
+              className="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-slate-800 outline-none placeholder:text-slate-400"
+              value={open ? query : (value || "")}
+              placeholder={value || placeholder}
+              onFocus={() => { setOpen(true); setQuery(""); }}
+              onBlur={() => setTouched(true)}
+              onChange={(e) => { setQuery(e.target.value); if (allowCustom) onChange?.(e.target.value); }}
+            />
+            <button type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => setOpen((o) => !o)}
+                    className="mr-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-[1.5px] border-indigo-100 bg-white text-navy">
+              <IconChevronDown size={15} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+            </button>
+          </div>
+          <RegError error={regError} hint={hint} />
+        </>
+      ) : (
+      <>
       <label className="label">{label}{required && <span className="text-red-400"> *</span>}</label>
       <div className="relative">
         <input
@@ -89,6 +118,8 @@ export function Combobox({ label, value, onChange, options = [], placeholder = "
         <IconSearch size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
       </div>
       {hint && <p className="mt-1 text-xs text-slate-400">{hint}</p>}
+      </>
+      )}
 
       {open && (
         <div className="absolute z-40 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-cardhover">

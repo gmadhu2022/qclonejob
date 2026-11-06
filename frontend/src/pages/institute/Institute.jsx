@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, Link, useNavigate } from "react-router-dom";
 import { api, apiUrl, getToken, mediaUrl } from "../../lib/api";
 import { DashboardLayout, useToast } from "../../components/ui";
 import { useDialog, useConfirm } from "../../components/Dialog";
+import { useAuth } from "../../context/AuthContext";
 import { IconBuilding, IconUpload, IconChart, IconSparkle, IconEdit, IconClose,
          IconCheck, IconDownload, IconLayers, IconUser, IconTrend } from "../../components/icons";
 import Chat from "../../components/Chat";
@@ -1148,6 +1149,25 @@ function DataUpload() {
   const confirm = useConfirm();
   const dialog = useDialog();
   const navigate = useNavigate();
+  const { logout } = useAuth();
+
+  /* 401/403 on an upload means this tab's login is no longer the institute's.
+     The token lives in localStorage, which every tab shares — signing in as
+     one of the uploaded students in another tab (to try their credentials)
+     replaces it, and from then on every institute call here is refused.
+     The raw "You don't have access to this resource" says nothing useful;
+     explain what happened and offer the way back instead. */
+  const sessionLost = (msg) =>
+    /don't have access|could not validate credentials|not authenticated/i.test(msg || "");
+  const showSessionLost = () => dialog({
+    tone: "warn",
+    title: "Please sign in again as the institute",
+    message: "This browser is now signed in to a different account, so the upload "
+           + "was not sent. This usually happens after signing in as a student in "
+           + "another tab.\n\nNothing was imported.",
+    confirmLabel: "Sign in as institute",
+    onConfirm: () => { logout(); navigate("/login?as=institute"); },
+  });
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState(null);
@@ -1161,6 +1181,39 @@ function DataUpload() {
   const loadHistory = () => api.get("/api/institute/upload-history").then(setHistory).catch(() => {});
   const loadDownloads = () => api.get("/api/institute/download-history").then(setDownloads).catch(() => {});
   useEffect(() => { loadHistory(); loadDownloads(); }, []);
+
+  /* Clearing removes the LOG entries only — students already registered from
+     those uploads stay registered. Said in the dialog so nobody hesitates. */
+  const clearHistory = (kind) => {
+    const isUploads = kind === "uploads";
+    dialog({
+      tone: "warn",
+      title: isUploads ? "Clear upload history?" : "Clear download history?",
+      message: isUploads
+        ? "All entries in Upload history will be removed."
+        : "All entries in Download history will be removed.",
+      note: isUploads
+        ? "Students already registered are NOT deleted — only this list is cleared."
+        : "Only this list is cleared. Files you downloaded are not affected.",
+      noteTone: "info",
+      confirmLabel: "Clear history",
+      onConfirm: async () => {
+        try {
+          await api.del(isUploads ? "/api/institute/upload-history"
+                                  : "/api/institute/download-history");
+          if (isUploads) { setHistory([]); } else { setDownloads([]); }
+          toast(isUploads ? "Upload history cleared." : "Download history cleared.");
+        } catch (err) {
+          toast(err.message || "Could not clear history.", "error");
+        }
+      },
+      secondary: { label: "Cancel", onClick: () => {} },
+    });
+  };
+
+  // The result of the last upload lives only on this screen; clearing it
+  // just hides it (passwords included) — nothing on the server changes.
+  const clearResult = () => { setResults(null); setBatch(null); setUploadErrors(null); };
 
   /**
    * Download an authenticated file.
@@ -1249,6 +1302,7 @@ function DataUpload() {
     } catch (err) {
       setBusy(false);
       const msg = err.message || "";
+      if (sessionLost(msg)) return showSessionLost();
       if (/student upload/i.test(msg)) {
         // Wrong file entirely — the message already names the missing columns.
         return dialog({ tone: "error", title: "That doesn't look like a student sheet",
@@ -1277,29 +1331,66 @@ function DataUpload() {
     }
     setBusy(false);
 
+    /* Duplicates come in two kinds, and the institute needs them apart:
+         existing — this exact student was uploaded before. Nothing to do;
+                    they are simply ignored.
+         conflict — a DIFFERENT person whose email or mobile is already taken,
+                    usually a copied row whose email wasn't changed. These are
+                    the rows to fix, so they are listed with the reason and
+                    the spreadsheet row number. */
     if (preview?.duplicate_count > 0) {
-      const names = preview.duplicates.slice(0, 5)
-        .map((d) => `• ${d.row} — ${d.email}`).join("\n");
-      const more = preview.duplicate_count > 5
-        ? `\n…and ${preview.duplicate_count - 5} more` : "";
+      const dupes = preview.duplicates || [];
+      const conflicts = dupes.filter((d) => d.kind === "conflict");
+      const existing = dupes.length - conflicts.length;
+      const newCount = preview.will_create || 0;
+
+      const conflictLines = conflicts.slice(0, 5)
+        .map((d) => `• ${d.row_no ? `Row ${d.row_no}: ` : ""}${d.row} — ${d.reason}`);
+      if (conflicts.length > 5) conflictLines.push(`…and ${conflicts.length - 5} more`);
+
+      const parts = [];
+      if (newCount) parts.push(`${newCount} new student(s) will be registered.`);
+      if (existing) parts.push(`${existing} student(s) already uploaded — they will be ignored.`);
+      if (conflicts.length) {
+        parts.push(`${conflicts.length} row(s) can't be registered — the email or mobile `
+                 + `belongs to someone else:\n${conflictLines.join("\n")}`);
+      }
+      const message = parts.join("\n\n");
+
+      // Nothing new at all: just inform, there is nothing to confirm.
+      if (newCount === 0) {
+        setFile(null);
+        return dialog({
+          tone: conflicts.length ? "warn" : "info",
+          title: conflicts.length ? "No new students to upload" : "Already uploaded",
+          message,
+          note: conflicts.length
+            ? "Each student needs their own email and mobile number. Fix the rows "
+              + "above and upload the sheet again — the students already uploaded "
+              + "will be ignored."
+            : "Nothing was imported and no existing account was changed.",
+          noteTone: conflicts.length ? "warn" : "info",
+          confirmLabel: "OK",
+        });
+      }
+
       return dialog({
-        tone: "warn",
-        title: `${preview.duplicate_count} student(s) are already registered`,
-        message: `${names}${more}\n\n`
-               + `${preview.will_create} new student(s) would be created.`,
-        note: "Skipping imports everyone else and leaves the existing accounts "
-            + "untouched. Correcting the sheet imports nothing until you upload again.",
+        tone: conflicts.length ? "warn" : "info",
+        title: `${newCount} new student(s) found`,
+        message,
+        note: "Only the new students are registered. Existing accounts are not changed."
+            + (conflicts.length ? " The rows listed can be fixed and uploaded later." : ""),
         noteTone: "info",
         /* Dialog supports `secondary`, not `cancelLabel` — the second option
            has to be a real button, otherwise "correct the sheet" would only
            be reachable by dismissing the dialog and guessing. */
-        confirmLabel: `Skip these and upload the other ${preview.will_create}`,
+        confirmLabel: `Upload ${newCount} new student(s)`,
         onConfirm: () => runUpload(true),
         secondary: {
           label: "I'll correct the sheet",
           onClick: () => {
             setFile(null);
-            toast("Nothing was imported. Fix the duplicate rows and upload again.");
+            toast("Nothing was imported. Fix the sheet and upload again.");
           },
         },
       });
@@ -1326,21 +1417,23 @@ function DataUpload() {
       const dupes = rows.filter((x) => x.outcome === "duplicate");
       const bad = rows.filter((x) => x.outcome === "skipped");
 
-      const lines = [`${made.length} profile(s) created.`];
-      if (dupes.length) lines.push(`${dupes.length} already registered — skipped.`);
-      if (bad.length) lines.push(`${bad.length} row(s) incomplete — skipped.`);
+      /* List only the NEW students by name — that is what the institute
+         wants to confirm. Rows already registered are just a count; naming
+         110 students who were ignored buries the 2 that were added. The full
+         per-row list stays in the results table below the form. */
+      const lines = [`${made.length} new student(s) registered`
+                     + (made.length ? ":" : ".")];
+      const names = made.slice(0, 8).map((x) => `• ${x.row || x.email} — ${x.email}`);
+      if (made.length > names.length) names.push(`…and ${made.length - names.length} more`);
 
-      /* Name the first few so the institute can go and fix them. Capped,
-         because a dialog listing 200 rows is a wall nobody reads — the full
-         list is in the table below the form. */
-      const detail = [...bad, ...dupes].slice(0, 6)
-        .map((x) => `• ${x.row || "(no name)"} — ${x.status.replace(/^skipped — /, "")}`);
-      const extra = bad.length + dupes.length - detail.length;
+      const counts = [];
+      if (dupes.length) counts.push(`${dupes.length} record(s) already registered — ignored.`);
+      if (bad.length) counts.push(`${bad.length} row(s) incomplete — skipped (see the table below).`);
 
       confirm("Data upload is successful", {
         message: lines.join("\n")
-               + (detail.length ? `\n\n${detail.join("\n")}` : "")
-               + (extra > 0 ? `\n…and ${extra} more` : ""),
+               + (names.length ? `\n${names.join("\n")}` : "")
+               + (counts.length ? `\n\n${counts.join("\n")}` : ""),
         note: made.length
           ? "Each new student has been emailed their user ID and password, and "
           + "can sign in from the Job Seeker login straight away."
@@ -1349,6 +1442,7 @@ function DataUpload() {
       });
     } catch (err) {
       const msg = err.message || "Upload failed.";
+      if (sessionLost(msg)) return showSessionLost();
       const wrongFormat = /wrong file format/i.test(msg);
       const malformed = /problem\(s\) found in this sheet|malformed student data/i.test(msg);
       const noCapacity = /no student capacity set/i.test(msg);
@@ -1429,7 +1523,7 @@ function DataUpload() {
 
   return (
     <div className="max-w-5xl">
-      <h1 className="mb-2 text-xl font-semibold">Data upload</h1>
+      <h1 className="mb-1.5 text-base font-semibold text-slate-800">Data upload</h1>
       <p className="mb-4 text-sm text-gray-600">
         Upload an Excel or CSV of one or many students. A resume is auto-created from the
         available columns, stored in the database, and each student is emailed their login
@@ -1438,15 +1532,19 @@ function DataUpload() {
 
       {errorTable}
 
-      {/* --- Upload box + Submit (requirements 46-47) --- */}
-      <div className="card">
+      {/* --- Upload box + Submit (requirements 46-47) ---
+           w-fit: the card hugs the small upload tile instead of stretching
+           across the page with empty space on the right. */}
+      <div className="card w-fit max-w-full">
         <label className="label">Upload box</label>
         <FileDrop
+          minimal
+          title="Choose file or drag here"
           accept=".xlsx,.xls,.xlsm,.csv"
           file={file}
           onPick={pickFile}
           onClear={() => setFile(null)}
-          hint="Excel (.xlsx, .xls, .xlsm) and CSV only — anything else is rejected" />
+          hint="XLSX, XLS, XLSM or CSV" />
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button className="btn !px-8" onClick={submit} disabled={busy || !file}>
@@ -1489,7 +1587,12 @@ function DataUpload() {
 
       {batch && (
         <div className="card mt-4 border-brandgreen-100 bg-brandgreen-50/40">
-          <h3 className="font-semibold text-brandgreen-600">Data upload is successful</h3>
+          <div className="flex items-start gap-2">
+            <h3 className="flex-1 font-semibold text-brandgreen-600">Data upload is successful</h3>
+            <button type="button" className="btn-outline btn-sm" onClick={clearResult}>
+              Clear result
+            </button>
+          </div>
           <p className="mt-1 text-sm text-slate-700">
             <b>{batch.filename}</b> · uploaded {new Date(batch.uploaded_at).toLocaleString()}
           </p>
@@ -1504,7 +1607,14 @@ function DataUpload() {
 
       {results && (
         <div className="card mt-4">
-          <h2 className="mb-2 font-semibold">Result</h2>
+          <div className="mb-2 flex items-center gap-2">
+            <h2 className="flex-1 font-semibold">Result</h2>
+            {!batch && (
+              <button type="button" className="btn-outline btn-sm" onClick={clearResult}>
+                Clear result
+              </button>
+            )}
+          </div>
           <div className="overflow-x-auto">
             <table className="table">
               <thead><tr><th>Student</th><th>User ID</th><th>Password</th><th>Status</th></tr></thead>
@@ -1538,6 +1648,12 @@ function DataUpload() {
               {label}
             </button>
           ))}
+          <div className="flex-1" />
+          {(tab === "uploads" ? history.length : downloads.length) > 0 && (
+            <button type="button" className="btn-outline btn-sm" onClick={() => clearHistory(tab)}>
+              Clear {tab === "uploads" ? "upload" : "download"} history
+            </button>
+          )}
         </div>
 
         {tab === "uploads" ? (

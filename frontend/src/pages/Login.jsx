@@ -19,38 +19,46 @@ const ROLES = [
   { key: "institute",  label: "Institute" },
 ];
 
-/* The panel speaks to whoever is actually signing in. One generic blurb for
-   three different audiences says nothing useful to any of them. */
+/* The panel speaks to whoever is actually signing in, and every line is a
+   feature that exists in that portal. Numbers are counts from the code:
+   20 = jobseeker.TEMPLATE_META, 57 = job_taxonomy.SECTORS (industries),
+   11 = models.APPLICATION_STATUSES. Update them together. */
 const COPY = {
   jobseeker: {
+    badge: "Job Seeker portal",
     title: "Your next job starts here",
-    sub: "Sign in to apply, track every application and see who viewed you.",
+    sub: "Sign in to apply, track every application and talk to recruiters.",
     points: [
-      "Apply with a resume built for you",
-      "Track every application from applied to hired",
-      "See which recruiters viewed your profile",
-      "Get matched to jobs that fit your skills",
+      "A resume built from your profile — 20 designs to choose from",
+      "Recommended jobs matched to your skills",
+      "Track every application, from Applied to Hired",
+      "See which recruiters viewed you, and chat with them",
     ],
+    metrics: [["20", "Resume designs"], ["57", "Industries"], ["AI", "Cover letters & interview prep"]],
   },
   enterprise: {
+    badge: "Recruiter portal",
     title: "Hire faster, hire better",
-    sub: "Sign in to post roles and search candidates.",
+    sub: "Sign in to post jobs, search candidates and manage applicants.",
     points: [
-      "Post a job and reach matching candidates instantly",
-      "Search resumes by skill, location and education",
-      "Manage every applicant in one inbox",
-      "Advertise openings across the platform",
+      "Post jobs — and draft the description with AI",
+      "Search candidates by skills, location, education and branch",
+      "Move applicants through every stage, interviews to offer",
+      "Promote your openings with banner ads",
     ],
+    metrics: [["57", "Industries"], ["11", "Hiring stages"], ["AI", "Candidate summaries"]],
   },
   institute: {
+    badge: "Institute portal",
     title: "Place your students",
-    sub: "Sign in to manage courses, students and placements.",
+    sub: "Sign in to onboard students, manage courses and track placements.",
     points: [
-      "Upload your students in one spreadsheet",
-      "Track course-wise seats, strength and placements",
-      "Advertise admissions to job seekers",
-      "Keep every campus and course in one place",
+      "Bulk-upload students from Excel or CSV — logins emailed automatically",
+      "Duplicates caught before anything is imported",
+      "Manage campuses, courses, seats and strength",
+      "Post jobs and ads that reach job seekers",
     ],
+    metrics: [["1 sheet", "Whole batch onboarded"], ["Auto", "Student logins"], ["Live", "Placement stats"]],
   },
 };
 
@@ -163,9 +171,10 @@ export default function Login() {
           <Link to="/"><Logo className="h-12" variant="pill" /></Link>
         </div>
 
-        <div className="relative">
+        {/* key={role}: the whole block re-animates when the portal changes */}
+        <div key={role} className="relative">
           <span className="animate-in delay-1 inline-flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-brandgreen-400 glass">
-            <IconSparkle size={12} /> AI-powered hiring
+            <IconSparkle size={12} /> {copy.badge}
           </span>
           <h2 className="animate-in delay-2 mt-5 max-w-lg text-[42px] font-extrabold leading-[1.1] tracking-tight text-white">
             {copy.title}
@@ -184,10 +193,10 @@ export default function Login() {
           </ul>
         </div>
 
-        <div className="relative flex gap-10 border-t border-white/10 pt-7">
-          <Metric value="6" label="Job categories" />
-          <Metric value="4" label="Portals" />
-          <Metric value="AI" label="Built in" />
+        <div key={`m-${role}`} className="relative grid grid-cols-3 gap-6 border-t border-white/10 pt-7">
+          {copy.metrics.map(([v, l], i) => (
+            <div key={l} className={`animate-in delay-${i + 1}`}><Metric value={v} label={l} /></div>
+          ))}
         </div>
       </div>
 
@@ -261,8 +270,7 @@ export default function Login() {
             </Link>
 
             <p className="mt-3 text-center text-xs text-slate-400">
-              New to QCloneJob? Registering takes about a minute — you'll choose whether
-              you're a job seeker, an employer or an institute.
+              New to QCloneJob? Register as a job seeker, recruiter or institute.
             </p>
           </div>
 

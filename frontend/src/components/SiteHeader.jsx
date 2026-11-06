@@ -36,7 +36,7 @@ export default function SiteHeader({ sub }) {
   const onServices = pathname.startsWith("/services");
 
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
         <Link to="/" aria-label="QCloneJob home"><Logo className="h-10" /></Link>
 

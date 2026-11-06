@@ -1316,9 +1316,8 @@ function ResumeSearch() {
     // Only institutes that actually have students, so the dropdown can't offer
     // a filter that returns nothing.
     api.get("/api/enterprise/institutes").then(setInstitutes).catch(() => {});
-    /* Suggestions come from the skills on YOUR OWN postings, not the full
-       1,147-skill library: if you never asked for Kubernetes, offering it as a
-       search term only leads to an empty result set. */
+    /* Suggestions from the skills on YOUR OWN postings come first; the full
+       library is listed under them (see libSuggestions). */
     api.get("/api/enterprise/jobs").then((js) => {
       const all = new Set();
       (js || []).forEach((j) => (j.key_skills || []).forEach((k) => k && all.add(k.trim())));
@@ -1341,6 +1340,24 @@ function ResumeSearch() {
   const suggestions = jobSkills
     .filter((k) => !terms.some((t) => t.toLowerCase() === k.toLowerCase()))
     .filter((k) => !lastTerm || k.toLowerCase().includes(lastTerm))
+    .slice(0, 10);
+
+  /* The full skill library (2,900+ roles and skills, everyday work first),
+     shown UNDER the recruiter's own posting skills. Own skills stay first
+     because they are what applicants were matched against; the library is
+     there so a search is never limited to what was posted before. */
+  const [libSkills, setLibSkills] = useState([]);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      api.get(`/api/public/skills?limit=12${lastTerm ? `&q=${encodeURIComponent(lastTerm)}` : ""}`, { auth: false })
+        .then((r) => setLibSkills(r.skills || [])).catch(() => setLibSkills([]));
+    }, 180);
+    return () => clearTimeout(t);
+  }, [lastTerm]);
+  const ownL = new Set(suggestions.map((k) => k.toLowerCase()));
+  const libSuggestions = libSkills
+    .filter((k) => !ownL.has(k.toLowerCase()))
+    .filter((k) => !terms.some((t) => t.toLowerCase() === k.toLowerCase()))
     .slice(0, 10);
 
   const addSkill = (k) => {
@@ -1436,19 +1453,37 @@ function ResumeSearch() {
                  onKeyDown={(e) => e.key === "Enter" && search()}
                  placeholder="Add skills" />
 
-          {suggestOpen && suggestions.length > 0 && (
+          {suggestOpen && (suggestions.length > 0 || libSuggestions.length > 0) && (
             <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-xl
                             border border-slate-200 bg-white py-1 shadow-cardhover">
-              <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                Skills from your postings
-              </p>
-              <div className="max-h-56 overflow-y-auto">
-                {suggestions.map((k) => (
-                  <button key={k} type="button" onMouseDown={() => addSkill(k)}
-                          className="block w-full px-3 py-1.5 text-left text-[13px] text-slate-600 hover:bg-navy-50 hover:text-navy">
-                    {k}
-                  </button>
-                ))}
+              <div className="max-h-72 overflow-y-auto">
+                {suggestions.length > 0 && (
+                  <>
+                    <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Skills from your postings
+                    </p>
+                    {suggestions.map((k) => (
+                      <button key={k} type="button" onMouseDown={() => addSkill(k)}
+                              className="block w-full px-3 py-1.5 text-left text-[13px] text-slate-600 hover:bg-navy-50 hover:text-navy">
+                        {k}
+                      </button>
+                    ))}
+                  </>
+                )}
+                {libSuggestions.length > 0 && (
+                  <>
+                    <p className={`px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400
+                                   ${suggestions.length ? "mt-1 border-t border-slate-100 pt-2" : ""}`}>
+                      All roles &amp; skills
+                    </p>
+                    {libSuggestions.map((k) => (
+                      <button key={k} type="button" onMouseDown={() => addSkill(k)}
+                              className="block w-full px-3 py-1.5 text-left text-[13px] text-slate-600 hover:bg-navy-50 hover:text-navy">
+                        {k}
+                      </button>
+                    ))}
+                  </>
+                )}
               </div>
             </div>
           )}

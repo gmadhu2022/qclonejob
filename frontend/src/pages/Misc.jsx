@@ -24,8 +24,7 @@ function AuthShell({ title, subtitle, children, wide }) {
               when this page was opened directly and there is nothing to go
               back to. */}
           <button type="button" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/"))}
-                  className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500
-                             transition-colors hover:text-navy">
+                  className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition-colors hover:text-navy">
             ← Back
           </button>
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">{title}</h1>
@@ -84,6 +83,219 @@ const REG_ROLES = [
   { key: "enterprise", label: "Recruiter", tag: "Hire talent", icon: IconBriefcase },
   { key: "institute", label: "Institute", tag: "Place students", icon: IconBuilding },
 ];
+
+/* ---------------------------------------------------------------------
+   Registration layout: one card, light-grey step rail on the left (account
+   type + numbered steps whose circles sit on the rail's edge), white form
+   panel on the right. Steps follow each role's real flow.
+   --------------------------------------------------------------------- */
+const okEmail = (v) => EMAIL_PATTERN.test((v || "").trim());
+const REG_STEPS = {
+  jobseeker: [
+    { label: "Your details", hint: "Name, email, phone", find: "First name",
+      done: (f) => Boolean((f.first_name || "").trim()) && okEmail(f.email) },
+    { label: "Create account", hint: "Login details emailed", find: "Create account", done: () => false },
+  ],
+  enterprise: [
+    { label: "Company details", hint: "Name, mail, contact", find: "Company details",
+      done: (f) => Boolean((f.name || "").trim() && (f.authorised_person_name || "").trim() && f.phone) && okEmail(f.email) },
+    { label: "Address", hint: "Office and pincode", find: "Address",
+      done: (f) => Boolean((f.address1 || "").trim()) && /^\d{6}$/.test(f.pincode || "") },
+    { label: "Verify & submit", hint: "Email OTP and security check", find: "Verify your email",
+      done: (f) => Boolean(f.email_verified && (f.captcha_answer || "").trim()) },
+  ],
+  institute: [
+    { label: "Institute details", hint: "Name, contact, capacity", find: "Institute details",
+      done: (_, stage) => stage >= 2 },
+    { label: "Verify email", hint: "6-digit code", find: "Verify your email",
+      done: (_, stage) => stage >= 3 },
+    { label: "Complete profile", hint: "Password, address, courses", find: "Create your password",
+      done: (f) => (f.password || "").length >= 6 && f.password === f.confirm_password },
+  ],
+};
+
+function findSection(text) {
+  return [...document.querySelectorAll(".reg-panel h3, .reg-panel h4, .reg-panel label, .reg-panel button")]
+    .find((el) => el.textContent.trim().toLowerCase().startsWith(text.toLowerCase())) || null;
+}
+/* On desktop the form panel is its own scroll area and the page does not
+   scroll; on phones the page scrolls as usual. Everything below asks which
+   one is actually scrolling right now. */
+function regScroller() {
+  const p = document.querySelector(".reg-panel");
+  if (p && p.scrollHeight > p.clientHeight + 1 && getComputedStyle(p).overflowY !== "visible") return p;
+  return null;
+}
+
+function scrollToSection(text) {
+  const el = findSection(text);
+  if (!el) return;
+  const panel = regScroller();
+  if (panel) {
+    const top = el.getBoundingClientRect().top - panel.getBoundingClientRect().top + panel.scrollTop - 24;
+    panel.scrollTo({ top, behavior: "smooth" });
+  } else {
+    window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 96, behavior: "smooth" });
+  }
+}
+
+/* Scroll-spy: which step's section the reader is looking at. A section is
+   "current" once its heading has passed 40% of the way down the visible
+   area. Sections not on the page yet (institute stages) are skipped. */
+function useSectionSpy(steps, deps) {
+  const [current, setCurrent] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const panel = regScroller();
+      const viewTop = panel ? panel.getBoundingClientRect().top : 0;
+      const viewH = panel ? panel.clientHeight : window.innerHeight;
+      const line = viewTop + viewH * 0.4;
+      let idx = 0;
+      steps.forEach((st, i) => {
+        const el = findSection(st.find);
+        if (el && el.getBoundingClientRect().top <= line) idx = i;
+      });
+      // At the very bottom the last reachable step is current — but only once
+      // the reader has actually scrolled (a short form starts "at the bottom").
+      const y = panel ? panel.scrollTop : window.scrollY;
+      const atEnd = panel ? panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 4
+                          : window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
+      if (y > 40 && atEnd) {
+        for (let i = steps.length - 1; i >= 0; i--) if (findSection(steps[i].find)) { idx = Math.max(idx, i); break; }
+      }
+      setCurrent(idx);
+    };
+    const on = () => { if (!raf) raf = requestAnimationFrame(update); };
+    const panel = document.querySelector(".reg-panel");
+    update();
+    window.addEventListener("scroll", on, { passive: true });
+    window.addEventListener("resize", on);
+    panel?.addEventListener("scroll", on, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", on);
+      window.removeEventListener("resize", on);
+      panel?.removeEventListener("scroll", on);
+      cancelAnimationFrame(raf);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  return current;
+}
+
+function RegShell({ role, onRole, steps, form, stage, complete, title, subtitle, children }) {
+  const navigate = useNavigate();
+  const states = steps.map((s) => complete || s.done(form, stage));
+  const spy = useSectionSpy(steps, [role, stage, complete]);
+  const active = complete ? -1 : spy;
+  return (
+    <div className="flex min-h-screen flex-col bg-slate-100/70 lg:h-screen lg:overflow-hidden">
+      <SiteHeader />
+      <div className="flex flex-1 justify-center px-4 py-5 sm:px-6 lg:min-h-0 lg:py-4">
+        <div className="w-full max-w-5xl lg:h-full">
+          <div className="grid overflow-clip rounded-3xl bg-white shadow-[0_24px_60px_-24px_rgba(15,23,42,0.25)] ring-1 ring-slate-200/70 lg:h-full lg:grid-cols-[210px_minmax(0,1fr)]">
+            {/* ---------- Left rail: pinned, fits the screen; only the form scrolls ---------- */}
+            <aside className="reg-rail relative lg:border-r lg:border-slate-200">
+              <div className="relative z-10 flex flex-col gap-4 p-4 lg:h-full lg:gap-0">
+                <button type="button" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/"))}
+                        className="mb-1 inline-flex w-fit items-center gap-1 rounded-lg px-1.5 py-1 text-xs font-semibold text-slate-500 transition-colors hover:bg-white hover:text-navy lg:mb-3">
+                  ← Back
+                </button>
+                {/* Account type — compact segmented list */}
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">I'm registering as</span>
+                  <div className="mt-2 grid grid-cols-3 gap-1 rounded-2xl bg-white p-1 shadow-sm ring-1 ring-slate-200 lg:grid-cols-1">
+                    {REG_ROLES.map((r) => {
+                      const on = role === r.key;
+                      return (
+                        <button key={r.key} type="button" onClick={() => onRole(r.key)} disabled={complete}
+                          className={`flex items-center gap-2 rounded-xl px-2 py-1 text-left transition-all duration-200 disabled:cursor-default
+                            ${on ? "bg-gradient-to-r from-navy to-indigo-500 text-white shadow-md" : "text-slate-600 hover:bg-slate-50"}`}>
+                          <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md
+                            ${on ? "bg-white/20" : "bg-slate-100 text-slate-500"}`}>
+                            <r.icon size={13} />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block truncate text-[12px] font-bold">{r.label}</span>
+                                                      </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Progress */}
+                <div className="lg:mt-4">
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Your progress</span>
+                    <span className="text-[11px] font-bold text-navy">{states.filter(Boolean).length}/{steps.length}</span>
+                  </div>
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                    <div className="h-full rounded-full bg-gradient-to-r from-brandgreen to-navy transition-[width] duration-500"
+                         style={{ width: `${(states.filter(Boolean).length / steps.length) * 100}%` }} />
+                  </div>
+                </div>
+
+                {/* Steps — circles straddle the rail's right edge on desktop */}
+                <ol className="relative flex gap-2 lg:mt-4 lg:block lg:flex-1 lg:space-y-2.5">
+                  {/* connector line behind the circles */}
+                  <span aria-hidden="true" className="absolute -right-4 top-5 bottom-5 hidden w-px bg-slate-200 lg:block" />
+                  {steps.map((s, i) => {
+                    const done = states[i];
+                    const on = i === active;
+                    return (
+                      <li key={s.label} className="relative flex-1">
+                        <button type="button" onClick={() => !complete && scrollToSection(s.find)}
+                                className={`group flex w-full items-center gap-3 rounded-xl py-1 pl-2 pr-2 text-left transition-colors lg:pr-6
+                                            ${on ? "bg-white shadow-sm ring-1 ring-indigo-100" : "hover:bg-white/60"}`}>
+                          <span className="min-w-0 flex-1">
+                            <span className={`block text-[13px] font-bold transition-colors ${on ? "text-navy" : done ? "text-slate-700" : "text-slate-400"}`}>
+                              {s.label}
+                            </span>
+                            <span className="hidden truncate text-[10.5px] text-slate-400 lg:block">{s.hint}</span>
+                          </span>
+                          <span className={`relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[13px] font-extrabold
+                                            transition-all duration-300 lg:absolute lg:-right-[34px] lg:top-1/2 lg:-translate-y-1/2
+                                            ${on ? `${done ? "bg-brandgreen text-white" : "bg-white text-navy"} shadow-[0_8px_24px_-6px_rgba(79,70,229,.55)] ring-[3px] ring-navy`
+                                              : done ? "bg-brandgreen text-white shadow-[0_8px_20px_-6px_rgba(79,170,56,.7)]"
+                                              : "bg-white text-slate-400 shadow ring-1 ring-slate-200"}`}>
+                            {done && !on ? <IconCheck size={16} /> : i + 1}
+                            {on && <span className="absolute inset-0 animate-ping rounded-full ring-2 ring-navy/30" />}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+
+                {/* Help card */}
+                <div className="hidden rounded-2xl bg-gradient-to-br from-navy to-indigo-500 p-3 text-white shadow-lg lg:block [@media(max-height:620px)]:!hidden">
+                  <span className="text-[12px] font-bold">Need help signing up?</span>
+                  <span className="mt-0.5 block text-[11px] leading-snug text-white/75">
+                    Write to <a href="mailto:support@qclonejob.com" className="font-semibold text-white underline-offset-2 hover:underline">support@qclonejob.com</a>
+                  </span>
+                  <span className="mt-2 block border-t border-white/15 pt-2 text-[11px] text-white/75">
+                    Already registered?{" "}
+                    <Link to={`/login/${role}`} className="font-semibold text-white hover:underline">Log in</Link>
+                  </span>
+                </div>
+              </div>
+            </aside>
+
+            {/* ---------- Form panel ---------- */}
+            <section className="reg-panel min-w-0 p-5 sm:p-8 lg:h-full lg:overflow-y-auto lg:overscroll-contain lg:pl-12">
+              <h1 className="font-heading text-[24px] font-bold uppercase leading-tight tracking-[0.04em] text-slate-900 sm:text-[28px]"><span className="bg-gradient-to-r from-slate-900 via-navy to-indigo-500 bg-clip-text text-transparent">{title}</span></h1>
+              <span aria-hidden="true" className="mt-2 block h-1 w-12 rounded-full bg-gradient-to-r from-brandgreen to-navy" />
+              {subtitle && <p className="mt-1.5 text-sm text-slate-500">{subtitle}</p>}
+              <div className="mt-6">{children}</div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function Register() {
   /* Account type is chosen HERE rather than on the login page. The URL param
@@ -282,73 +494,56 @@ export function Register() {
 
   if (result) {
     /* Requirement 10 — "Registration Successful", and a Login button that is
-       actually usable. An institute that set its own password can sign in
-       immediately; anyone still waiting on approval is told so plainly rather
-       than being sent to a login that will refuse them. */
+       actually usable. Anyone still waiting on approval is told so plainly
+       rather than being sent to a login that will refuse them. */
     const pending = /pending/i.test(result.status || "");
     return (
-      <AuthShell title={pending ? "Registration received" : "Registration Successful"}
-                 subtitle={pending
-                   ? "We'll email you as soon as your account is activated."
-                   : "Your account is ready to use."}>
-        <div className="card text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-brandgreen-50 text-brandgreen-600">
-            <IconCheck size={26} />
+      <RegShell role={role} onRole={() => {}} steps={REG_STEPS[role]} form={form} stage={stage} complete
+                title="" subtitle="">
+        <div className="mx-auto max-w-md py-6 text-center">
+          <div className="reg-burst relative mx-auto flex h-28 w-28 items-center justify-center">
+            <span className="absolute inset-0 rounded-full bg-brandgreen-100" />
+            <span className="absolute inset-3 rounded-full bg-brandgreen-200/70" />
+            <span className="relative flex h-16 w-16 items-center justify-center rounded-full bg-brandgreen text-white shadow-lg">
+              <IconCheck size={30} />
+            </span>
+            {Array.from({ length: 12 }).map((_, i) => (
+              <span key={i} className="reg-ray absolute left-1/2 top-1/2 h-2 w-1 rounded-full"
+                    style={{ background: i % 2 ? "#4f46e5" : "#4faa38", "--r": `${i * 30}deg` }} />
+            ))}
           </div>
-          <p className="mt-4 text-lg font-extrabold text-navy">
-            {pending ? result.status : "Registration Successful"}
+          <p className="mt-6 text-xs font-bold uppercase tracking-[0.2em] text-brandgreen-600">
+            {pending ? "Registration received" : "Setup completed!"}
           </p>
-          <p className="mt-2 text-sm text-slate-500">
+          <h2 className="mt-2 font-heading text-[24px] font-bold uppercase tracking-[0.04em] text-slate-900">
+            {pending ? result.status : "Registration Successful"}
+          </h2>
+          <p className="mt-3 text-sm text-slate-500">
             Your User ID is <b className="text-slate-700">{result.email}</b>
             {result.password
               ? " — your password was emailed to that address."
               : ". Sign in with the password you just chose."}
           </p>
-          <Link to={`/login/${role}`}
-                className={`mt-6 w-full ${pending ? "btn-outline" : "btn"}`}>
+          <Link to={`/login/${role}`} className={`mt-8 w-full !py-3 ${pending ? "btn-outline" : "btn"}`}>
             {pending ? "Go to login" : "Login"}
           </Link>
           {pending && (
             <p className="mt-3 text-xs text-slate-400">
-              Logging in before approval will be refused — that's expected.
+              Logging in before approval will be refused — that's expected. We'll email you once it's activated.
             </p>
           )}
         </div>
-      </AuthShell>
+      </RegShell>
     );
   }
 
   return (
-    <AuthShell wide
-      title={isInst ? "Register your institute" : isEnt ? "Register as an employer" : "Create your job seeker account"}
+    <RegShell role={role} onRole={switchRole} steps={REG_STEPS[role]} form={form} stage={stage}
+      title={isInst ? "Institute Sign Up" : isEnt ? "Employer Sign Up" : "Job Seeker Sign Up"}
       subtitle={isInst ? "Onboard your students in bulk and connect them to employers."
                        : isEnt ? "Post jobs, search resumes and manage applications."
                        : "Build your resume, apply to jobs and track every application."}>
       <form onSubmit={submit} className="space-y-4">
-        {/* Account type — all three registrations live on this one page. */}
-        <div className="grid gap-2 sm:grid-cols-3">
-          {REG_ROLES.map((r) => {
-            const active = role === r.key;
-            return (
-              <button key={r.key} type="button" onClick={() => switchRole(r.key)}
-                className={`flex items-center gap-2.5 rounded-xl border p-3 text-left transition-all
-                  ${active ? "border-navy bg-navy-50 shadow-sm"
-                           : "border-slate-200 bg-white hover:border-navy-200 hover:bg-slate-50"}`}>
-                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg
-                  ${active ? "bg-navy text-white" : "bg-slate-100 text-slate-500"}`}>
-                  <r.icon size={17} />
-                </span>
-                <span className="min-w-0">
-                  <span className={`block truncate text-[13px] font-bold ${active ? "text-navy" : "text-slate-700"}`}>
-                    {r.label}
-                  </span>
-                  <span className="block truncate text-[11px] text-slate-400">{r.tag}</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
         <RegistrationFields role={role} form={form} setForm={setForm} formKey={formKey}
                             stage={isInst ? stage : 3}
                             otpSendTick={otpSendTick}
@@ -402,7 +597,7 @@ export function Register() {
           </div>
         )}
       </form>
-    </AuthShell>
+    </RegShell>
   );
 }
 
