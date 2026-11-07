@@ -650,3 +650,124 @@
   .rv-confetti { display: none; }
 }
 
+/* ---- BETA badge next to the logo ---- */
+.beta-badge::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.55) 50%, transparent 70%);
+  transform: translateX(-120%); animation: betaShine 3.5s ease-in-out infinite;
+}
+@keyframes betaShine { 0%, 60% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
+@media (prefers-reduced-motion: reduce) { .beta-badge::after { animation: none; display: none; } }
+
+/* ---- Login page ---- */
+.login-bg {
+  background:
+    radial-gradient(rgba(79,70,229,.10) 1px, transparent 1px) 0 0 / 22px 22px,
+    linear-gradient(160deg, #f8fafc 0%, #eef2ff 55%, #f0fdf4 100%);
+}
+.login-grid {
+  background-image: linear-gradient(rgba(255,255,255,.06) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(255,255,255,.06) 1px, transparent 1px);
+  background-size: 40px 40px;
+  -webkit-mask-image: radial-gradient(ellipse at 30% 30%, #000 20%, transparent 75%);
+          mask-image: radial-gradient(ellipse at 30% 30%, #000 20%, transparent 75%);
+}
+@keyframes loginFloat { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-8px) rotate(1deg); } }
+.login-float { animation: loginFloat 5s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .login-float { animation: none; } }
+
+/* ---- Login v2: dark mesh showcase + floating sample screens ---- */
+.login-mesh {
+  background:
+    radial-gradient(1200px 600px at 10% 0%, #312e81 0%, transparent 60%),
+    radial-gradient(900px 500px at 100% 100%, #14532d 0%, transparent 55%),
+    #0b0a24;
+}
+@keyframes loginOrbA { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(60px, 40px) scale(1.15); } }
+@keyframes loginOrbB { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(-50px, -40px) scale(1.1); } }
+.login-orb-a { animation: loginOrbA 14s ease-in-out infinite; }
+.login-orb-b { animation: loginOrbB 16s ease-in-out infinite; }
+@keyframes loginIn { from { opacity: 0; transform: translateY(24px) scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes loginBob { 0%, 100% { translate: 0 0; } 50% { translate: 0 -8px; } }
+.login-f1, .login-f2, .login-f3 { animation: loginIn .7s cubic-bezier(.2,.8,.3,1) both, loginBob 6s ease-in-out infinite; }
+.login-f1 { animation-delay: .1s, .8s; rotate: -2deg; }
+.login-f2 { animation-delay: .25s, 1.6s; rotate: 2deg; }
+.login-f3 { animation-delay: .4s, 2.4s; rotate: -1deg; }
+@keyframes loginBar { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.login-bar { transform-origin: bottom; animation: loginBar .8s cubic-bezier(.2,.8,.3,1) both; }
+@keyframes loginWave { 0%, 100% { transform: rotate(0); } 20%, 60% { transform: rotate(16deg); } 40%, 80% { transform: rotate(-8deg); } }
+.login-form-bg {
+  background:
+    radial-gradient(500px 300px at 100% 0%, rgba(79,70,229,.07), transparent 70%),
+    radial-gradient(400px 300px at 0% 100%, rgba(79,170,56,.07), transparent 70%),
+    #fff;
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-orb-a, .login-orb-b, .login-f1, .login-f2, .login-f3, .login-bar { animation: none !important; }
+}
+
+/* ---- Login: light glossy showcase on white ---- */
+.login-gloss {
+  background:
+    radial-gradient(600px 380px at 0% 0%, rgba(199,210,254,.55), transparent 65%),
+    radial-gradient(520px 360px at 100% 100%, rgba(187,247,208,.55), transparent 65%),
+    linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: inset 0 1px 0 #fff, 0 30px 60px -40px rgba(30,27,75,.35);
+}
+.login-dots {
+  background-image: radial-gradient(rgba(79,70,229,.13) 1px, transparent 1px);
+  background-size: 20px 20px;
+  -webkit-mask-image: radial-gradient(ellipse at 60% 60%, #000 25%, transparent 75%);
+          mask-image: radial-gradient(ellipse at 60% 60%, #000 25%, transparent 75%);
+}
+.login-glass {
+  background: linear-gradient(160deg, rgba(255,255,255,.95), rgba(255,255,255,.7));
+  backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid rgba(255,255,255,.9);
+  box-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(15,23,42,.04), 0 22px 44px -18px rgba(30,27,75,.28);
+  overflow: hidden;
+}
+.login-glass::before {           /* glossy sheen across the top */
+  content: ""; position: absolute; inset: 0 0 55% 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,.75), rgba(255,255,255,0));
+}
+.login-glass > * { position: relative; }
+.login-btn-gloss { position: relative; overflow: hidden; }
+.login-btn-gloss::before {
+  content: ""; position: absolute; inset: 0 0 50% 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,.28), rgba(255,255,255,0));
+}
+
+/* ---- Login v4: centred card on white ---- */
+.auth-grid {
+  background-image: linear-gradient(rgba(15,23,42,.045) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(15,23,42,.045) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(ellipse 60% 55% at 50% 40%, #000 30%, transparent 75%);
+          mask-image: radial-gradient(ellipse 60% 55% at 50% 40%, #000 30%, transparent 75%);
+}
+.auth-glow {
+  background: radial-gradient(closest-side, rgba(99,102,241,.22), rgba(79,170,56,.12) 55%, transparent);
+  filter: blur(20px);
+}
+.auth-card {
+  background: rgba(255,255,255,.92);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(226,232,240,.9);
+  box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -8px rgba(15,23,42,.10), 0 30px 60px -30px rgba(79,70,229,.25);
+}
+.auth-btn { box-shadow: 0 1px 0 rgba(255,255,255,.15) inset, 0 8px 20px -8px rgba(15,23,42,.55); }
+.auth-btn::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(110deg, transparent 35%, rgba(255,255,255,.22) 50%, transparent 65%);
+  transform: translateX(-100%); transition: transform .7s ease;
+}
+.auth-btn:hover::after { transform: translateX(100%); }
+
+/* ---- Login photo slideshow: slow Ken Burns zoom + caption chip ---- */
+@keyframes loginKB { from { transform: scale(1.02) translate(0, 0); } to { transform: scale(1.12) translate(-1.5%, -1%); } }
+.login-kb { animation: loginKB 7s ease-out both; }
+@keyframes loginChip { from { opacity: 0; transform: translateY(-8px) scale(.95); } to { opacity: 1; transform: none; } }
+.login-chip { animation: loginChip .5s cubic-bezier(.2,.8,.3,1.2) both; }
+@media (prefers-reduced-motion: reduce) { .login-kb, .login-chip { animation: none !important; } }
+

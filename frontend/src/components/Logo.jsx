@@ -37,11 +37,14 @@ export default function Logo({ className = "h-9", variant = "plain", beta = true
      noise. The title attribute carries the meaning for anyone who hovers. */
   const badge = showBeta ? (
     <span title="This product is in beta — features may change."
-          className={`select-none rounded-md px-1.5 py-0.5 text-[9px] font-extrabold
-                      uppercase leading-none tracking-[0.08em]
-                      ${variant === "pill"
-                        ? "bg-navy-50 text-navy"
-                        : "bg-brandgreen-50 text-brandgreen-600"}`}>
+          className="beta-badge relative inline-flex select-none items-center gap-1.5 overflow-hidden rounded-full
+                     bg-gradient-to-r from-navy to-brandgreen-600 py-[3px] pl-2 pr-2.5 text-[10px] font-extrabold
+                     uppercase leading-none tracking-[0.14em] text-white
+                     shadow-[0_4px_12px_-3px_rgba(79,70,229,.55)] ring-1 ring-white/40">
+      <span aria-hidden="true" className="relative flex h-1.5 w-1.5">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white/80" />
+        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white" />
+      </span>
       Beta
     </span>
   ) : null;

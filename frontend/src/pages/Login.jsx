@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../components/ui";
 import { useDialog } from "../components/Dialog";
-import { Field } from "../components/fields";
 import Logo from "../components/Logo";
-import { IconCheck, IconEye, IconSparkle, IconUserPlus } from "../components/icons";
+import { IconCheck, IconUserPlus, IconUser, IconBriefcase, IconBuilding, IconMail, IconLock } from "../components/icons";
+import { RegInput, RegPassword } from "../components/RegField";
 
 const ROLE_HOME = { admin: "/admin", enterprise: "/enterprise", institute: "/institute", jobseeker: "/jobseeker" };
 
@@ -34,6 +34,7 @@ const COPY = {
       "Track every application, from Applied to Hired",
       "See which recruiters viewed you, and chat with them",
     ],
+    activity: ["Application update", "Electrician · now Shortlisted"],
     metrics: [["20", "Resume designs"], ["57", "Industries"], ["AI", "Cover letters & interview prep"]],
   },
   enterprise: {
@@ -46,6 +47,7 @@ const COPY = {
       "Move applicants through every stage, interviews to offer",
       "Promote your openings with banner ads",
     ],
+    activity: ["New applicant", "Ravi Kumar applied · Electrician"],
     metrics: [["57", "Industries"], ["11", "Hiring stages"], ["AI", "Candidate summaries"]],
   },
   institute: {
@@ -58,9 +60,71 @@ const COPY = {
       "Manage campuses, courses, seats and strength",
       "Post jobs and ads that reach job seekers",
     ],
+    activity: ["Data upload is successful", "4 students created · logins emailed"],
     metrics: [["1 sheet", "Whole batch onboarded"], ["Auto", "Student logins"], ["Live", "Placement stats"]],
   },
 };
+
+/* Login photo slideshows. Every job seeker slide is a different kind of
+   work the platform covers; recruiter slides are hiring moments. Photos are
+   Unsplash (free licence) in assets/login/. Add a slide = add a file + a line. */
+const SLIDE_FILES = import.meta.glob("../assets/login/*.jpg", { eager: true, import: "default" });
+const slide = (name) => SLIDE_FILES[`../assets/login/${name}.jpg`];
+const SLIDES = {
+  // Skilled professions first, then everyday and entry-level work.
+  jobseeker: [
+    ["seeker-nurse", "Nurse"], ["seeker-developer", "Software Developer"], ["seeker-doctor", "Doctor"],
+    ["seeker-electrician", "Electrician"], ["seeker-construction", "Construction Worker"],
+    ["seeker-welder", "Welder & Fabricator"], ["seeker-cook", "Cook & Kitchen Staff"],
+    ["seeker-housekeeping", "Housekeeping & Cleaning"], ["seeker-warehouse", "Warehouse & Delivery"],
+    ["seeker-retail", "Shop & Billing Staff"],
+  ],
+  enterprise: [
+    ["recruiter-interview", "Interview candidates"], ["recruiter-resumes", "Review resumes"],
+    ["recruiter-shortlist", "Shortlist with your team"], ["recruiter-discuss", "Discuss applicants"],
+    ["recruiter-offer", "Make the offer"], ["recruiter-welcome", "Welcome new hires"],
+  ],
+  institute: [
+    ["institute-classroom", "Classroom training"], ["institute-lecture", "Lectures & workshops"],
+    ["institute-students", "Student projects"], ["institute-library", "Library & study"],
+    ["institute-campus", "Your campus"], ["institute-graduation", "Graduation & placement"],
+  ],
+};
+
+function PhotoSlides({ role, fallback }) {
+  const list = SLIDES[role] || [[null, null]];
+  const [i, setI] = useState(0);
+  useEffect(() => { setI(0); }, [role]);
+  useEffect(() => {
+    if (list.length < 2) return;
+    const t = setInterval(() => setI((n) => (n + 1) % list.length), 3500);
+    return () => clearInterval(t);
+  }, [role, list.length]);
+  const cur = list[i % list.length];
+  return (
+    <>
+      {list.map(([name], k) => (
+        <img key={`${role}-${k}`} src={name ? slide(name) : fallback} alt="" draggable="false"
+             className={`login-kb absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ease-out
+                         ${k === i % list.length ? "opacity-100" : "opacity-0"}`}
+             style={{ animationPlayState: k === i % list.length ? "running" : "paused" }} />
+      ))}
+      {cur[1] && (
+        <div className="absolute right-6 top-24 z-10 flex flex-col items-end gap-2">
+          <span key={`${role}-${i}`} className="login-chip inline-flex items-center gap-2 rounded-full bg-white/90 px-3.5 py-1.5 text-[12.5px] font-semibold text-slate-800 shadow-lg backdrop-blur">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-brandgreen" />
+            {role === "jobseeker" ? "Jobs for: " : ""}{cur[1]}
+          </span>
+          <span className="flex gap-1">
+            {list.map((_, k) => (
+              <span key={k} className={`h-1.5 rounded-full transition-all duration-500 ${k === i % list.length ? "w-5 bg-white" : "w-1.5 bg-white/50"}`} />
+            ))}
+          </span>
+        </div>
+      )}
+    </>
+  );
+}
 
 export default function Login() {
   const { login } = useAuth();
@@ -157,134 +221,114 @@ export default function Login() {
     finally { setBusy(false); }
   };
 
+  const RoleIcon = { jobseeker: IconUser, enterprise: IconBriefcase, institute: IconBuilding };
+  const roleIdx = Math.max(0, ROLES.findIndex((r) => r.key === role));
+  const QUOTE = {
+    jobseeker: ["Find work that fits you.", "From daily-wage to post-graduate roles, across India."],
+    enterprise: ["Hire the right people, faster.", "Search resumes by skill and city, and manage every applicant."],
+    institute: ["Put every student in front of employers.", "Upload one sheet — every student gets a profile and login."],
+  }[role];
+
   return (
-    <div className="grid min-h-screen lg:grid-cols-[1.1fr_1fr]">
-      {/* ---------------- Brand panel ---------------- */}
-      <div className="relative hidden overflow-hidden bg-navy-900 lg:flex lg:flex-col lg:justify-between lg:p-14">
-        {/* aurora wash */}
-        <div className="pointer-events-none absolute -left-1/4 -top-1/4 h-[560px] w-[560px] rounded-full bg-brandgreen/25 blur-3xl aurora-blob" />
-        <div className="pointer-events-none absolute -bottom-1/4 -right-1/4 h-[600px] w-[600px] rounded-full bg-navy-600/50 blur-3xl aurora-blob-2" />
-        <div className="pointer-events-none absolute inset-0 opacity-[0.06]"
-             style={{ backgroundImage: "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)", backgroundSize: "48px 48px" }} />
+    <div className="grid min-h-screen bg-white lg:h-screen lg:grid-cols-[1.1fr_1fr] lg:overflow-hidden">
+      {/* ---------------- Photo panel ---------------- */}
+      <div className="relative hidden overflow-hidden lg:block">
+        <PhotoSlides role={role} />
+        {/* readability: dark brand gradient from the bottom, light tint on top */}
+        <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-[#0f0c3d] via-[#1e1b4b]/55 to-[#1e1b4b]/10" />
 
-        <div className="relative animate-in">
-          <Link to="/"><Logo className="h-12" variant="pill" /></Link>
-        </div>
+        <div className="relative flex h-full flex-col justify-between p-10 text-white">
+          <div className="flex items-center justify-between">
+            <Link to="/"><Logo className="h-9" variant="pill" /></Link>
+            <Link to="/" className="rounded-full bg-black/25 px-3 py-1.5 text-[11px] font-semibold text-white/90 ring-1 ring-white/25 backdrop-blur transition-colors hover:bg-black/40">
+              ← Back to site
+            </Link>
+          </div>
 
-        {/* key={role}: the whole block re-animates when the portal changes */}
-        <div key={role} className="relative">
-          <span className="animate-in delay-1 inline-flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-brandgreen-400 glass">
-            <IconSparkle size={12} /> {copy.badge}
-          </span>
-          <h2 className="animate-in delay-2 mt-5 max-w-lg text-[42px] font-extrabold leading-[1.1] tracking-tight text-white">
-            {copy.title}
-          </h2>
-          <p className="animate-in delay-3 mt-3 max-w-md text-[15px] leading-relaxed text-navy-100">{copy.sub}</p>
-
-          <ul className="animate-in delay-4 mt-8 space-y-3.5">
-            {copy.points.map((p) => (
-              <li key={p} className="flex items-start gap-3 text-[14px] text-white/85">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brandgreen text-white">
-                  <IconCheck size={12} />
+          <div key={role}>
+            <span className="animate-in inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[10.5px] font-bold uppercase tracking-[0.16em] text-white ring-1 ring-white/25 backdrop-blur">
+              <span className="h-1.5 w-1.5 rounded-full bg-brandgreen-400" /> {copy.badge}
+            </span>
+            <h2 className="animate-in delay-1 mt-4 max-w-lg font-heading text-[40px] font-bold leading-[1.08] tracking-tight drop-shadow-sm">
+              {QUOTE[0]}
+            </h2>
+            <p className="animate-in delay-2 mt-3 max-w-md text-[15px] leading-relaxed text-white/80">{QUOTE[1]}</p>
+            <div className="animate-in delay-3 mt-6 flex flex-wrap gap-2">
+              {copy.metrics.map(([v, l]) => (
+                <span key={l} className="rounded-xl bg-white/12 px-3 py-2 ring-1 ring-white/20 backdrop-blur-md">
+                  <span className="block font-heading text-[18px] font-bold leading-none">{v}</span>
+                  <span className="mt-1 block text-[10px] font-semibold uppercase tracking-wider text-white/70">{l}</span>
                 </span>
-                {p}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div key={`m-${role}`} className="relative grid grid-cols-3 gap-6 border-t border-white/10 pt-7">
-          {copy.metrics.map(([v, l], i) => (
-            <div key={l} className={`animate-in delay-${i + 1}`}><Metric value={v} label={l} /></div>
-          ))}
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
       {/* ---------------- Form panel ---------------- */}
-      <div className="flex items-center justify-center bg-white px-6 py-10">
-        <div className="w-full max-w-[380px]">
-          <Link to="/" className="mb-8 flex justify-center lg:hidden"><Logo className="h-10" /></Link>
+      <div className="relative flex min-w-0 items-center justify-center px-5 py-8 sm:px-12 lg:overflow-y-auto">
+        <div className="w-full min-w-0 max-w-[380px]">
+          <Link to="/" className="mb-6 flex justify-center lg:hidden"><Logo className="h-10" /></Link>
 
           <div className="animate-in">
-            <h1 className="text-[26px] font-extrabold tracking-tight text-navy">Login</h1>
-            <p className="mt-1.5 text-sm text-slate-500">
-              Enter your email and password — we'll take you to the right place.
-            </p>
+            <h1 className="font-heading text-[30px] font-bold leading-tight tracking-tight text-slate-900">Sign in</h1>
+            <p className="mt-1 text-sm text-slate-500">Welcome back — choose your portal to continue.</p>
           </div>
 
-          {/* Portal picker. Segmented rather than a dropdown so all three are
-              visible at once — a closed <select> hides the fact that you are
-              about to sign in as the wrong one. */}
-          <div className="animate-in delay-1 mt-6">
-            <span className="label">I'm signing in as</span>
-            <div role="radiogroup" aria-label="Account type"
-                 className="grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
-              {ROLES.map((r) => {
-                const active = role === r.key;
-                return (
-                  <button key={r.key} type="button" role="radio" aria-checked={active}
-                          onClick={() => pickRole(r.key)}
-                          className={`rounded-lg px-2 py-2 text-[12.5px] font-semibold transition-all
-                            ${active ? "bg-white text-navy shadow-card"
-                                     : "text-slate-500 hover:text-navy"}`}>
-                    {r.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <form onSubmit={submit} className="animate-in delay-2 mt-4 space-y-3.5">
-            <Field label="Email (User ID)" type="email" value={email} onChange={setEmail} required autoComplete="username"
-                   placeholder="e.g. admin@institute.edu"
-                   hint="Your official email address is your User ID on every portal." />
-            <div>
-              <Field label="Password" type={showPw ? "text" : "password"} value={password}
-                     onChange={setPassword} required autoComplete="current-password" />
-              <div className="mt-1.5 flex items-center justify-between">
-                <button type="button" onClick={() => setShowPw((v) => !v)}
-                        className="flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-navy">
-                  <IconEye size={13} /> {showPw ? "Hide password" : "Show password"}
+          <div role="radiogroup" aria-label="Account type"
+               className="animate-in delay-1 relative mt-6 grid grid-cols-3 border-b border-slate-200">
+            <span aria-hidden="true"
+                  className="absolute -bottom-px h-[3px] rounded-full bg-navy transition-transform duration-300 ease-out"
+                  style={{ left: 0, width: "calc(100% / 3)", transform: `translateX(${roleIdx * 100}%)` }} />
+            {ROLES.map((r) => {
+              const active = role === r.key;
+              const Ic = RoleIcon[r.key];
+              return (
+                <button key={r.key} type="button" role="radio" aria-checked={active}
+                        onClick={() => pickRole(r.key)}
+                        className={`flex items-center justify-center gap-1.5 pb-3 pt-1 text-[13px] font-semibold transition-colors
+                          ${active ? "text-navy" : "text-slate-400 hover:text-slate-600"}`}>
+                  <Ic size={15} /> {r.label}
                 </button>
-                <Link to="/forgot-password" className="text-xs font-medium text-navy hover:underline">Forgot password?</Link>
+              );
+            })}
+          </div>
+
+          <form onSubmit={submit} className="animate-in delay-2 mt-6 space-y-4">
+            <RegInput label="Email (User ID)" icon={IconMail} type="email" value={email} onChange={setEmail}
+                      required autoComplete="username" placeholder="name@company.com"
+                      validate={(v) => (/^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test(v.trim()) ? null : "Invalid email format")} />
+            <div>
+              <div className="mb-1.5 flex items-baseline justify-between">
+                <span className="text-[13px] font-semibold text-slate-800">Password <span className="text-red-500">*</span></span>
+                <Link to="/forgot-password" className="text-xs font-semibold text-navy hover:underline">Forgot password?</Link>
               </div>
+              <RegPassword value={password} onChange={setPassword} required placeholder="Enter your password"
+                           autoComplete="current-password" show={showPw} onToggle={() => setShowPw((v) => !v)} />
             </div>
-            <button className="btn w-full !rounded-xl !py-3 !text-[15px] shadow-lg shadow-navy/20" disabled={busy}>
-              {busy ? "Signing in…" : "Sign in"}
+            <button disabled={busy}
+                    className="auth-btn group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-full bg-navy py-3.5 text-[15px] font-semibold text-white transition-all hover:bg-indigo-700 disabled:opacity-70">
+              {busy ? "Signing in…" : (
+                <>Sign in
+                  <svg className="transition-transform group-hover:translate-x-1" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                </>
+              )}
             </button>
           </form>
 
-          <div className="animate-in delay-3 mt-5">
-            <div className="relative my-4">
-              <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-slate-200" /></div>
-              <div className="relative flex justify-center">
-                <span className="bg-white px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">or</span>
-              </div>
-            </div>
-
-            <Link to={`/register/${role}`}
-                  className="flex h-12 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl
-                             border-2 border-navy bg-navy/[0.03] px-3 text-sm font-bold text-navy transition-all
-                             hover:-translate-y-0.5 hover:bg-navy hover:text-white hover:shadow-cardhover">
-              <IconUserPlus size={16} /> Register for free
-            </Link>
-
-            <p className="mt-3 text-center text-xs text-slate-400">
-              New to QCloneJob? Register as a job seeker, recruiter or institute.
-            </p>
+          <div className="animate-in delay-3 mt-6 flex items-center gap-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            <span className="h-px flex-1 bg-slate-200" /> New to QCloneJob? <span className="h-px flex-1 bg-slate-200" />
           </div>
+          <Link to={`/register/${role}`}
+                className="animate-in delay-3 mt-4 flex w-full items-center justify-center gap-2 rounded-full border-[1.5px] border-navy py-3 text-[14px] font-semibold text-navy transition-colors hover:bg-navy hover:text-white">
+            <IconUserPlus size={16} /> Join now — it's free
+          </Link>
 
+          <p className="mt-6 flex items-center justify-center gap-1.5 text-[11px] text-slate-400">
+            <IconLock size={11} /> Passwords are stored encrypted and never shared.
+          </p>
         </div>
       </div>
-    </div>
-  );
-}
-
-function Metric({ value, label }) {
-  return (
-    <div>
-      <div className="text-[26px] font-extrabold leading-none text-white">{value}</div>
-      <div className="mt-1 text-[11px] uppercase tracking-wider text-navy-200">{label}</div>
     </div>
   );
 }
