@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../components/ui";
@@ -65,63 +65,86 @@ const COPY = {
   },
 };
 
-/* Login photo slideshows. Every job seeker slide is a different kind of
-   work the platform covers; recruiter slides are hiring moments. Photos are
-   Unsplash (free licence) in assets/login/. Add a slide = add a file + a line. */
-const SLIDE_FILES = import.meta.glob("../assets/login/*.jpg", { eager: true, import: "default" });
-const slide = (name) => SLIDE_FILES[`../assets/login/${name}.jpg`];
+/* Login video slideshows — real people at work, moving. Each clip is a
+   6-second, soundless, ~250 KB loop in public/login-video/ (Mixkit free
+   licence), with a .jpg poster of its first frame so the panel is never
+   empty while a clip loads. Add a slide = add <name>.mp4 + <name>.jpg and a
+   line below. Order: skilled roles first, then everyday work. */
 const SLIDES = {
-  // Skilled professions first, then everyday and entry-level work.
   jobseeker: [
-    ["seeker-nurse", "Nurse"], ["seeker-developer", "Software Developer"], ["seeker-doctor", "Doctor"],
-    ["seeker-electrician", "Electrician"], ["seeker-construction", "Construction Worker"],
+    ["seeker-nurse", "Nurse"], ["seeker-developer", "Software Developer"],
+    ["seeker-electrician", "Electrician"], ["seeker-construction", "Construction & Site Work"],
     ["seeker-welder", "Welder & Fabricator"], ["seeker-cook", "Cook & Kitchen Staff"],
-    ["seeker-housekeeping", "Housekeeping & Cleaning"], ["seeker-warehouse", "Warehouse & Delivery"],
+    ["seeker-cleaning", "Housekeeping & Cleaning"], ["seeker-warehouse", "Warehouse & Delivery"],
     ["seeker-retail", "Shop & Billing Staff"],
   ],
   enterprise: [
-    ["recruiter-interview", "Interview candidates"], ["recruiter-resumes", "Review resumes"],
-    ["recruiter-shortlist", "Shortlist with your team"], ["recruiter-discuss", "Discuss applicants"],
-    ["recruiter-offer", "Make the offer"], ["recruiter-welcome", "Welcome new hires"],
+    ["recruiter-interview", "Interview candidates"], ["recruiter-desk", "Review applicants"],
+    ["recruiter-shortlist", "Shortlist with your team"], ["recruiter-meeting", "Plan your hiring"],
+    ["recruiter-handshake", "Make the hire"],
   ],
   institute: [
-    ["institute-classroom", "Classroom training"], ["institute-lecture", "Lectures & workshops"],
-    ["institute-students", "Student projects"], ["institute-library", "Library & study"],
-    ["institute-campus", "Your campus"], ["institute-graduation", "Graduation & placement"],
+    ["institute-university", "Universities & colleges"], ["institute-medical", "Medical & nursing colleges"],
+    ["institute-coaching", "Coaching centres"], ["institute-tuition", "Tuition & skill classes"],
+    ["institute-lab", "Science & engineering labs"], ["institute-library", "Library & exam prep"],
+    ["institute-campus", "Campus life"], ["institute-graduation", "Graduation & placement"],
   ],
 };
+/* Bump CLIP_VERSION whenever clips are replaced, so browsers (and Render's
+   cache) fetch the new files instead of reusing an old or failed copy. */
+const CLIP_VERSION = "2";
+const CLIP = (name, ext) => `/login-video/${name}.${ext}?v=${CLIP_VERSION}`;
 
-function PhotoSlides({ role, fallback }) {
-  const list = SLIDES[role] || [[null, null]];
+function PhotoSlides({ role }) {
+  const list = SLIDES[role] || SLIDES.jobseeker;
   const [i, setI] = useState(0);
+  const [failed, setFailed] = useState({});
+  const refs = useRef([]);
+  const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
   useEffect(() => { setI(0); }, [role]);
+
+  // Play only the current clip; the others stay paused (and unloaded until their turn).
   useEffect(() => {
-    if (list.length < 2) return;
-    const t = setInterval(() => setI((n) => (n + 1) % list.length), 3500);
-    return () => clearInterval(t);
-  }, [role, list.length]);
+    refs.current.forEach((v, k) => {
+      if (!v) return;
+      if (k === i && !reduce) { v.currentTime = 0; v.play().catch(() => {}); }
+      else v.pause();
+    });
+    // Advance when the clip ends; the timer is a fallback if a clip can't play.
+    const t = setTimeout(() => setI((n) => (n + 1) % list.length), 6200);
+    return () => clearTimeout(t);
+  }, [i, role, list.length, reduce]);
+
   const cur = list[i % list.length];
   return (
     <>
-      {list.map(([name], k) => (
-        <img key={`${role}-${k}`} src={name ? slide(name) : fallback} alt="" draggable="false"
-             className={`login-kb absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ease-out
-                         ${k === i % list.length ? "opacity-100" : "opacity-0"}`}
-             style={{ animationPlayState: k === i % list.length ? "running" : "paused" }} />
+      {/* still image of the current clip underneath — visible instantly and
+          if the video can't play */}
+      <img src={CLIP(cur[0], "jpg")} alt="" aria-hidden="true" draggable="false"
+           className="absolute inset-0 h-full w-full object-cover" />
+      {list.map(([name], k) => failed[name] ? null : (
+        <video key={`${role}-${name}`} ref={(el) => { refs.current[k] = el; }}
+               className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ease-out
+                           ${k === i ? "opacity-100" : "opacity-0"}`}
+               poster={CLIP(name, "jpg")} muted playsInline preload={k === i || k === (i + 1) % list.length ? "auto" : "none"}
+               onEnded={() => setI((n) => (n + 1) % list.length)} aria-hidden="true"
+               onError={() => setFailed((f) => ({ ...f, [name]: true }))}>
+          <source src={CLIP(name, "mp4")} type="video/mp4" onError={() => setFailed((f) => ({ ...f, [name]: true }))} />
+        </video>
       ))}
-      {cur[1] && (
-        <div className="absolute right-6 top-24 z-10 flex flex-col items-end gap-2">
-          <span key={`${role}-${i}`} className="login-chip inline-flex items-center gap-2 rounded-full bg-white/90 px-3.5 py-1.5 text-[12.5px] font-semibold text-slate-800 shadow-lg backdrop-blur">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-brandgreen" />
-            {role === "jobseeker" ? "Jobs for: " : ""}{cur[1]}
-          </span>
-          <span className="flex gap-1">
-            {list.map((_, k) => (
-              <span key={k} className={`h-1.5 rounded-full transition-all duration-500 ${k === i % list.length ? "w-5 bg-white" : "w-1.5 bg-white/50"}`} />
-            ))}
-          </span>
-        </div>
-      )}
+      <div className="absolute right-6 top-24 z-10 flex flex-col items-end gap-2">
+        <span key={`${role}-${i}`} className="login-chip inline-flex items-center gap-2 rounded-full bg-white/90 px-3.5 py-1.5 text-[12.5px] font-semibold text-slate-800 shadow-lg backdrop-blur">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-brandgreen" />
+          {role === "jobseeker" ? "Jobs for: " : ""}{cur[1]}
+        </span>
+        <span className="flex gap-1">
+          {list.map((_, k) => (
+            <button key={k} type="button" aria-label={`Show ${list[k][1]}`} onClick={() => setI(k)}
+                    className={`h-1.5 rounded-full transition-all duration-500 ${k === i ? "w-5 bg-white" : "w-1.5 bg-white/50 hover:bg-white/80"}`} />
+          ))}
+        </span>
+      </div>
     </>
   );
 }

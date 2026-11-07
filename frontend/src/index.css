@@ -765,9 +765,7 @@
 .auth-btn:hover::after { transform: translateX(100%); }
 
 /* ---- Login photo slideshow: slow Ken Burns zoom + caption chip ---- */
-@keyframes loginKB { from { transform: scale(1.02) translate(0, 0); } to { transform: scale(1.12) translate(-1.5%, -1%); } }
-.login-kb { animation: loginKB 7s ease-out both; }
 @keyframes loginChip { from { opacity: 0; transform: translateY(-8px) scale(.95); } to { opacity: 1; transform: none; } }
 .login-chip { animation: loginChip .5s cubic-bezier(.2,.8,.3,1.2) both; }
-@media (prefers-reduced-motion: reduce) { .login-kb, .login-chip { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { .login-chip { animation: none !important; } }
 
