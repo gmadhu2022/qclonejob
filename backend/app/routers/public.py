@@ -375,3 +375,68 @@ def public_partners(limit: int = 24, db: Session = Depends(get_db)):
         "has_institutes": bool(institutes),
         "has_recruiters": bool(recruiters),
     }
+
+
+# ---------------- Worldwide place search (job location) ----------------
+#
+# No static list covers every city, town and village on Earth, so this asks
+# Photon — the OpenStreetMap geocoder built for search-as-you-type
+# (photon.komoot.io, free, fair-use) — and filters to the chosen country.
+# Results are cached in memory so repeated keystrokes / popular places don't
+# hit the service again, and a failure just returns an empty list (the form
+# still accepts typed text).
+import json as _json
+import time as _time
+import urllib.parse as _uparse
+import urllib.request as _ureq
+
+_PLACE_CACHE: dict = {}
+_PLACE_TTL = 24 * 3600
+_PLACE_TYPES = {"city", "town", "village", "hamlet", "suburb", "municipality", "locality",
+                "county", "district", "borough", "neighbourhood", "quarter", "state"}
+
+
+@router.get("/places")
+def search_places(q: str = "", country: str = "IN", limit: int = 12):
+    q = (q or "").strip()
+    cc = (country or "").strip().upper()[:2]
+    if len(q) < 2:
+        return {"places": []}
+    key = (q.lower(), cc)
+    hit = _PLACE_CACHE.get(key)
+    if hit and _time.time() - hit[0] < _PLACE_TTL:
+        return {"places": hit[1]}
+
+    url = "https://photon.komoot.io/api/?" + _uparse.urlencode(
+        {"q": q, "limit": 40, "lang": "en"}) + "&osm_tag=place"
+    try:
+        req = _ureq.Request(url, headers={"User-Agent": "QCloneJob/1.0 (job location search)"})
+        with _ureq.urlopen(req, timeout=6) as r:
+            data = _json.loads(r.read().decode("utf-8"))
+    except Exception:
+        return {"places": []}
+
+    out, seen = [], set()
+    for f in data.get("features", []):
+        p = f.get("properties", {})
+        if cc and (p.get("countrycode") or "").upper() != cc:
+            continue
+        kind = p.get("osm_value") or p.get("type")
+        if kind not in _PLACE_TYPES:
+            continue
+        name = p.get("name")
+        if not name:
+            continue
+        region = ", ".join(x for x in (p.get("county") or p.get("district"), p.get("state")) if x and x != name)
+        label = f"{name}, {region}" if region else name
+        if label.lower() in seen:
+            continue
+        seen.add(label.lower())
+        out.append({"name": name, "label": label, "type": kind, "state": p.get("state"),
+                    "country": p.get("country"), "countrycode": (p.get("countrycode") or "").upper()})
+        if len(out) >= max(1, min(limit, 25)):
+            break
+    if len(_PLACE_CACHE) > 5000:
+        _PLACE_CACHE.clear()
+    _PLACE_CACHE[key] = (_time.time(), out)
+    return {"places": out}

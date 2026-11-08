@@ -110,7 +110,8 @@ export function DashboardLayout({ title, menu, children }) {
         {/* shrink-0 so the header keeps its height when the content is tall.
             No longer needs `sticky` — it can't scroll away now. */}
         <header className="no-print z-20 flex shrink-0 items-center justify-between border-b border-slate-200 bg-white/80 px-6 py-3 backdrop-blur">
-          <h1 className="font-display text-xl font-bold uppercase tracking-[0.1em] [-webkit-text-stroke:0.5px_currentColor] text-slate-800">{title}</h1>
+          {/* Same type and colour as the SIGN IN / SIGN UP titles. */}
+          <h1 className="page-title !text-[20px]">{title}</h1>
           <div className="flex items-center gap-3">
             <NotificationBell />
             {/* Profile picture is a JOB SEEKER feature only. The other portals
@@ -118,7 +119,7 @@ export function DashboardLayout({ title, menu, children }) {
             {auth?.role === "jobseeker"
               ? <AccountChip />
               : <span className="hidden text-sm text-slate-500 sm:inline">{auth?.email}</span>}
-            <button className="btn-outline btn-sm" onClick={() => { logout(); navigate("/login"); }}>
+            <button className="btn-outline btn-sm" onClick={() => navigate(logout())}>
               <IconLogout size={16} /> Log out
             </button>
           </div>

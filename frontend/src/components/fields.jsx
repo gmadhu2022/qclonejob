@@ -24,10 +24,10 @@ export function Field({ label, value, onChange, type = "text", required, hint, e
              field. Once focused the label has floated up, so the real
              placeholder can show without colliding with it. */
           placeholder={focus ? (placeholder || " ") : " "}
-          className={`peer w-full rounded-xl border bg-white px-3.5 pb-2 pt-6 text-sm text-slate-800
-            transition-shadow focus:outline-none
-            ${error ? "border-red-400 focus:ring-2 focus:ring-red-500/15"
-                    : "border-slate-300 focus:border-navy focus:ring-2 focus:ring-navy/15"}`}
+          className={`peer w-full rounded-2xl border-[1.5px] px-3.5 pb-2 pt-6 text-sm text-slate-800
+            transition-colors focus:outline-none
+            ${error ? "border-red-400 bg-red-50/50 focus:ring-4 focus:ring-red-500/10"
+                    : "border-indigo-100 bg-[#f6f7ff] hover:border-indigo-200 focus:border-navy focus:bg-white focus:ring-4 focus:ring-navy/10"}`}
         />
         <label className={`pointer-events-none absolute left-3.5 transition-all duration-150
           ${focus || filled ? "top-1.5 text-[11px] font-semibold" : "top-1/2 -translate-y-1/2 text-sm"}
@@ -77,7 +77,7 @@ export function Combobox({ label, value, onChange, options = [], placeholder = "
 
   const pick = (v) => { onChange?.(v); setQuery(""); setOpen(false); };
   const [touched, setTouched] = useState(false);
-  const reg = variant === "reg";
+  const reg = variant !== "plain";
   const regError = reg && touched && !open && required && !String(value || "").trim()
     ? `${label} is required` : null;
 
@@ -199,7 +199,7 @@ export function TagInput({ label, values = [], onChange, options = [], placehold
         )}
       </div>
 
-      <div className="flex min-h-[46px] flex-wrap items-center gap-1.5 rounded-xl border border-slate-300 bg-white p-2 focus-within:border-navy focus-within:ring-2 focus-within:ring-navy/15">
+      <div className="flex min-h-[46px] flex-wrap items-center gap-1.5 rounded-2xl border-[1.5px] border-indigo-100 bg-[#f6f7ff] p-2 transition-colors hover:border-indigo-200 focus-within:border-navy focus-within:bg-white focus-within:ring-4 focus-within:ring-navy/10">
         {values.map((v) => (
           <span key={v} className="flex items-center gap-1 rounded-lg bg-navy-50 px-2 py-1 text-xs font-medium text-navy">
             {v}

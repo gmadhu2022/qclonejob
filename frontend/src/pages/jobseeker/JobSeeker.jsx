@@ -5,6 +5,7 @@ import { DashboardLayout, StatusBadge, useToast } from "../../components/ui";
 import { useDialog, useConfirm } from "../../components/Dialog";
 import Chat from "../../components/Chat";
 import BannerSlot from "../../components/BannerSlot";
+import { formatMoney } from "../../lib/currencies";
 import { SectorList, useTaxonomy } from "../../components/SectorPicker";
 import ImageUpload from "../../components/ImageUpload";
 import SkillPicker from "../../components/SkillPicker";
@@ -1144,7 +1145,7 @@ function FindJobs() {
 
             <div className="space-y-5 p-6">
               <div className="grid gap-3 sm:grid-cols-3">
-                {[["Salary", jd.salary || [jd.wage_min, jd.wage_max].filter(Boolean).join(" – ")],
+                {[["Salary", jd.salary || [jd.wage_min, jd.wage_max].filter(Boolean).map((v) => formatMoney(v, jd.salary_currency || "INR")).join(" – ")],
                   ["Positions", jd.no_of_positions],
                   ["Shift", jd.shift],
                   ["Education", jd.education_level],

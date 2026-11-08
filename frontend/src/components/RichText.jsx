@@ -117,8 +117,8 @@ export default function RichText({ label, value = "", onChange, rows = 8, hint }
   return (
     <div>
       {label && <label className="label">{label}</label>}
-      <div className="overflow-hidden rounded-xl border border-slate-300 focus-within:border-navy focus-within:ring-2 focus-within:ring-navy/15">
-        <div className="flex flex-wrap items-center gap-1 border-b border-slate-200 bg-slate-50 px-2 py-1.5">
+      <div className="overflow-hidden rounded-2xl border-[1.5px] border-indigo-100 bg-[#f6f7ff] transition-colors hover:border-indigo-200 focus-within:border-navy focus-within:bg-white focus-within:ring-4 focus-within:ring-navy/10">
+        <div className="flex flex-wrap items-center gap-1 border-b border-indigo-100 bg-white/70 px-2 py-1.5">
           {TOOLS.map((t) => (
             <button key={t.title} type="button" title={t.title} onClick={() => apply(t)}
               className={`h-7 min-w-7 rounded-md px-2 text-[12px] text-slate-600 transition-colors

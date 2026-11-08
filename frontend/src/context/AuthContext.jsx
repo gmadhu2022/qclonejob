@@ -35,11 +35,18 @@ export function AuthProvider({ children }) {
     return data;
   }, []);
 
+  /* Returns the login page for the portal that was signed in, so logging
+     out of the institute portal lands on the institute login (same for
+     recruiter and job seeker) rather than whichever tab was last used. */
   const logout = useCallback(() => {
+    const role = localStorage.getItem("hire_role");
+    const portal = ["jobseeker", "enterprise", "institute"].includes(role) ? role : null;
+    if (portal) localStorage.setItem("hire_login_role", portal);
     localStorage.removeItem("hire_token");
     localStorage.removeItem("hire_role");
     localStorage.removeItem("hire_email");
     setAuth(null);
+    return portal ? `/login?as=${portal}` : "/login";
   }, []);
 
   return (

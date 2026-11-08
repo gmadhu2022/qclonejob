@@ -99,6 +99,9 @@ def serialise(b: models.Banner) -> dict:
         "ad_format": b.ad_format or "flyer",
         "text_content": b.text_content, "media_type": b.media_type,
         "media_url": b.media_url or b.image_url, "poster_url": b.poster_url,
+        # Linked videos (YouTube / Vimeo / .mp4) — without this a link-only
+        # video ad reached the page with nothing to play.
+        "video_url": b.video_url,
         "cta_label": b.cta_label, "cta_link": b.cta_link, "theme": b.theme,
         "autoplay": b.autoplay, "muted": b.muted, "logo_url": b.logo_url,
     }

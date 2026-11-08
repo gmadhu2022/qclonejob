@@ -91,7 +91,7 @@ export default function SkillPicker({ label = "Key skills", values = [], onChang
         </div>
       </div>
 
-      <div className={variant === "reg"
+      <div className={variant !== "plain"
         ? `mt-1.5 flex min-h-[46px] flex-wrap items-center gap-1.5 rounded-2xl border-[1.5px] border-indigo-100 bg-[#f6f7ff] p-2
            transition-colors hover:border-indigo-200 focus-within:border-navy focus-within:bg-white focus-within:ring-4 focus-within:ring-navy/10`
         : `mt-1.5 flex min-h-[46px] flex-wrap items-center gap-1.5 rounded-xl border border-slate-300 bg-white p-2

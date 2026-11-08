@@ -1,5 +1,5 @@
 """AI endpoints (Groq). Every route returns 503 with a readable message when AI is off."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 
 from .. import models
@@ -324,3 +324,55 @@ def ai_suggest(body: dict, current: models.User = Depends(get_current_user)):
     if not field:
         raise HTTPException(400, "Field is required.")
     return _guard(ai.suggest_options, field, body.get("context", ""))
+
+
+
+# ---------------- Job description import (document -> form) ----------------
+@router.post("/job/import")
+def import_job_document(file: UploadFile | None = File(None), text: str = Form(""),
+                        current: models.User = Depends(get_current_user)):
+    """Upload a JD (PDF / Word / Excel / CSV / text) or paste text and get every
+    post-job field back, for the recruiter to review before posting.
+
+    Works without AI: a rule-based parser reads labelled lines and sections.
+    With AI on, the model's reading is used and the rules fill any gaps.
+    Plain `def` — FastAPI runs it in a worker thread, so a big PDF doesn't
+    block other requests.
+    """
+    from .. import jd_import
+    if current.role not in (models.ROLE_ENTERPRISE, models.ROLE_INSTITUTE):
+        raise HTTPException(403, "Only recruiters and institutes can post jobs.")
+    raw = (text or "").strip()
+    name = ""
+    if file is not None and file.filename:
+        name = file.filename
+        try:
+            raw = jd_import.extract_text(file.filename, file.file.read()).strip()
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except Exception:
+            raise HTTPException(400, "Couldn't read that file. Try PDF, Word (.docx), Excel, CSV or a text file.")
+    if len(raw) < 20:
+        raise HTTPException(400, "There isn't enough text in that document to read a job from.")
+
+    rules = jd_import.rule_parse(raw)
+    fields, source = dict(rules), "rules"
+    if ai.ai_enabled():
+        try:
+            got = ai.parse_job_description(raw) or {}
+            for k, v in got.items():
+                if v not in (None, "", [], {}):
+                    fields[k] = v
+            if got.get("responsibilities") and isinstance(got["responsibilities"], list):
+                nl = chr(10)
+                extra = nl.join(f"- {r}" for r in got["responsibilities"] if r)
+                if extra and extra not in (fields.get("description") or ""):
+                    fields["description"] = ((fields.get("description") or "") + nl + nl + "Responsibilities:" + nl + extra).strip()
+            if got.get("salary"):
+                fields.update({k: v for k, v in jd_import.parse_salary(got["salary"]).items()})
+            source = "ai"
+        except Exception:
+            pass      # AI hiccup: the rule-based result still stands
+    fields.pop("responsibilities", None)
+    return {"fields": fields, "source": source, "file": name, "chars": len(raw),
+            "preview": raw[:1200]}

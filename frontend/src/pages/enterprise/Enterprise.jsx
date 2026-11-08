@@ -31,16 +31,22 @@ const SeekerResume = ({ seeker, meta }) => {
 import {
   IconBuilding, IconSearch, IconBriefcase, IconClipboard, IconSparkle, IconChat, IconEye, IconDownload,
   IconChart, IconLayers, IconEdit, IconClose, IconRefresh, IconPrint, IconStar, IconCheck,
+  IconMapPin, IconDoc, IconChevronDown, IconSliders, IconUsers, IconHash,
+  IconGlobe, IconMail, IconPhone, IconShield,
 } from "../../components/icons";
-import { MatchBar, SwitchableChart } from "../../components/charts";
+import { MatchBar, SwitchableChart, AnalyticsPanel } from "../../components/charts";
+import { formatMoney } from "../../lib/currencies";
 import RichText, { Markdown } from "../../components/RichText";
 import ImageUpload from "../../components/ImageUpload";
+import FileDrop from "../../components/FileDrop";
 import PostJobForm from "../../components/PostJobForm";
 import PlanPanel, { PlanGate, QuotaNotice } from "../../components/PlanPanel";
 import ViewSwitcher from "../../components/ViewSwitcher";
 import FitRating, { fitBand } from "../../components/FitRating";
 import PhoneField from "../../components/PhoneField";
-import BannerSlot from "../../components/BannerSlot";
+import { FField, iconFor } from "../../components/RegistrationForm";
+import BannerSlot, { AdMedia, adHasVisual, AD_THEMES } from "../../components/BannerSlot";
+import { AdTypePicker, AdStep, AdPreview } from "../../components/AdKit";
 import BannerAnalytics from "../../components/BannerAnalytics";
 import { useTaxonomy } from "../../components/SectorPicker";
 import SkillPicker from "../../components/SkillPicker";
@@ -88,23 +94,64 @@ export default function Enterprise() {
   );
 }
 
+/* Dashboard sections the recruiter can show or hide (Customise menu). The
+   choice is remembered in this browser. */
+const DASH_WIDGETS = [
+  ["stats", "Key numbers"],
+  ["attention", "Needs your attention"],
+  ["recent", "Recent jobs"],
+  ["pipeline", "Hiring pipeline chart"],
+  ["perjob", "Applications per job chart"],
+  ["location", "Jobs by location chart"],
+  ["funnel", "Hiring funnel"],
+];
+const DASH_KEY = "qcj.recruiter.dashboard.v1";
+
+function useDashPrefs() {
+  const all = Object.fromEntries(DASH_WIDGETS.map(([k]) => [k, true]));
+  const [prefs, setPrefs] = useState(() => {
+    try { return { ...all, ...JSON.parse(localStorage.getItem(DASH_KEY) || "{}") }; }
+    catch { return all; }
+  });
+  const save = (next) => { setPrefs(next); try { localStorage.setItem(DASH_KEY, JSON.stringify(next)); } catch { /* private mode */ } };
+  return [prefs, (k) => save({ ...prefs, [k]: !prefs[k] }), () => save(all)];
+}
+
 function Overview() {
   const [d, setD] = useState(null);
   const [jobs, setJobs] = useState([]);
+  const [company, setCompany] = useState("");
+  const [prefs, toggle, resetPrefs] = useDashPrefs();
+  const [menu, setMenu] = useState(false);
+  const menuRef = useRef(null);
+  // Ticks every minute so the greeting changes without a reload.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 60000); return () => clearInterval(t); }, []);
+
   useEffect(() => {
     const load = () => {
       api.get("/api/enterprise/dashboard").then(setD).catch(() => {});
       api.get("/api/enterprise/jobs").then(setJobs).catch(() => {});
     };
-    load(); const id = setInterval(load, 10000); return () => clearInterval(id);
+    load(); const id = setInterval(load, 10000);
+    api.get("/api/enterprise/profile").then((p) => setCompany(p?.name || "")).catch(() => {});
+    return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!menu) return;
+    const h = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenu(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [menu]);
+
   if (!d) return <Loading />;
 
   /* Stage colours run grey -> amber -> navy -> blue -> violet -> green, so the
      pipeline reads as progress at a glance rather than as unrelated buckets.
      Rejected is the only red. */
   const STATUS_COLOR = {
-    Applied: "#94a3b8", "Under Review": "#f59e0b", Shortlisted: "#10256b",
+    Applied: "#94a3b8", "Under Review": "#f59e0b", Shortlisted: "#4f46e5",
     "Interview - Phase 1": "#60a5fa", "Interview - Phase 2": "#3b82f6",
     "Interview - Phase 3": "#2563eb", "Managerial Round": "#8b5cf6",
     Offered: "#4ade80", Hired: "#4faa38", "On Hold": "#cbd5e1",
@@ -113,8 +160,6 @@ function Overview() {
   const pipeline = Object.entries(d.by_status || {}).filter(([, v]) => v > 0)
     .map(([label, value]) => ({ label: label.replace("Interview - ", ""), value, color: STATUS_COLOR[label] }));
 
-  // Left uncoloured on purpose: withColors() then gives each job its own hue,
-  // which is the point of a per-job breakdown.
   const byJob = jobs.filter((j) => j.applicants > 0)
     .sort((a2, b2) => b2.applicants - a2.applicants).slice(0, 8)
     .map((j) => ({ label: j.title, value: j.applicants }));
@@ -128,74 +173,231 @@ function Overview() {
   const shortlisted = (d.by_status?.Shortlisted || 0) + (d.by_status?.Offered || 0) + hired;
   const conversion = d.applications ? Math.round((shortlisted / d.applications) * 100) : 0;
 
+  // Things that need a recruiter's action, built from data already loaded.
+  const expiring = jobs.filter((j) => j.status === "active" && j.expires_at
+    && new Date(j.expires_at) - now > 0 && new Date(j.expires_at) - now < 3 * 86400000);
+  const expired = jobs.filter((j) => j.status === "active" && j.expires_at && new Date(j.expires_at) - now <= 0);
+  const pending = jobs.filter((j) => j.approval_status === "pending");
+  const rejected = jobs.filter((j) => j.approval_status === "rejected");
+  const attention = [
+    applied > 0 && { tone: "amber", text: `${applied} new application${applied === 1 ? "" : "s"} waiting for review`, to: "/enterprise/applications", cta: "Review" },
+    expiring.length > 0 && { tone: "amber", text: `${expiring.length} job${expiring.length === 1 ? "" : "s"} expiring within 3 days`, to: "/enterprise/manage-jobs", cta: "Manage" },
+    expired.length > 0 && { tone: "red", text: `${expired.length} job${expired.length === 1 ? " has" : "s have"} expired and no longer show in search`, to: "/enterprise/manage-jobs", cta: "Repost" },
+    pending.length > 0 && { tone: "blue", text: `${pending.length} job${pending.length === 1 ? " is" : "s are"} awaiting approval`, to: "/enterprise/manage-jobs", cta: "View" },
+    rejected.length > 0 && { tone: "red", text: `${rejected.length} job${rejected.length === 1 ? " was" : "s were"} not approved`, to: "/enterprise/manage-jobs", cta: "Fix" },
+    d.jobs_total === 0 && { tone: "blue", text: "Post your first job to start receiving applications", to: "/enterprise/post-job", cta: "Post a job" },
+  ].filter(Boolean);
+  const recent = [...jobs].sort((a2, b2) => (b2.id || 0) - (a2.id || 0)).slice(0, 5);
+
+  const tod = timeOfDay(now, d);
+  const today = new Date(now).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
+  const show = (k) => prefs[k] !== false;
+  const anyChart = show("pipeline") || show("perjob") || show("location");
+
   return (
     <div className="space-y-6">
       <BannerSlot audience="recruiters" compact />
 
-      {/* The four blocks the requirement names, on the Dashboard itself and
-          not only in the sidebar. The secondary row keeps Manage jobs,
-          Applications, Post an Ad and Messages reachable: they came off the
-          menu, but jobs already posted and application notifications still
-          have to lead somewhere. */}
-      <div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Block to="/enterprise/profile" icon={IconBuilding} title="Profile"
-                 body="Your logo, website and the description candidates see." />
-          <Block to="/enterprise/resumes" icon={IconSearch} title="Search candidates"
-                 body="Find people by skill and location across every registered profile." />
-          <Block to="/enterprise/post-job" icon={IconBriefcase} title="Post a Job"
-                 body="Publish a role and start collecting applications." />
-          <Block to="/enterprise/billing" icon={IconStar} title="Subscribe"
-                 body="Your plan, quotas and invoices." />
+      {/* ---- greeting hero: time-of-day greeting, summary, actions ---- */}
+      <div className="relative rounded-2xl border border-slate-200 bg-white p-6">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+          <div className={`absolute -right-20 -top-24 h-64 w-64 rounded-full blur-3xl ${tod.glow}`} />
+        </div>
+        <div className="relative flex flex-wrap items-start justify-between gap-5">
+          <div className="flex min-w-0 items-start gap-4">
+            <span className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${tod.tile}`}>
+              <TimeOfDayIcon period={tod.key} />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">{today}</p>
+              <h2 className="mt-1 font-heading text-[26px] font-bold leading-tight text-slate-900">
+                {tod.greet}{company ? <>, <span className="text-navy">{company}</span></> : ""}
+              </h2>
+              <p className="mt-1 text-[13.5px] text-slate-500">{tod.line}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link to="/enterprise/resumes" className="btn-outline !rounded-full !px-4">
+              <IconSearch size={15} /> Search candidates
+            </Link>
+            <Link to="/enterprise/post-job" className="btn !rounded-full !px-5 shadow-[0_8px_20px_-8px_rgba(79,70,229,.7)]">
+              <span className="text-base leading-none">+</span> Post a job
+            </Link>
+            <div className="relative" ref={menuRef}>
+              <button type="button" onClick={() => setMenu((m) => !m)} aria-expanded={menu} title="Choose what the dashboard shows"
+                      className={`inline-flex items-center gap-1.5 rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold transition-colors
+                        ${menu ? "border-navy bg-navy-50 text-navy" : "border-slate-200 bg-white text-slate-600 hover:border-navy-200 hover:text-navy"}`}>
+                <IconSliders size={15} /> Customise
+              </button>
+              {menu && (
+                <div className="absolute right-0 z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-2 shadow-cardhover">
+                  <p className="px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">Show on dashboard</p>
+                  {DASH_WIDGETS.map(([k, label]) => (
+                    <label key={k} className="flex cursor-pointer items-center justify-between rounded-xl px-3 py-2 text-[13px] text-slate-700 hover:bg-slate-50">
+                      {label}
+                      <span className={`relative h-5 w-9 rounded-full transition-colors ${show(k) ? "bg-navy" : "bg-slate-200"}`}>
+                        <input type="checkbox" className="sr-only" checked={show(k)} onChange={() => toggle(k)} />
+                        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${show(k) ? "left-[18px]" : "left-0.5"}`} />
+                      </span>
+                    </label>
+                  ))}
+                  <button type="button" onClick={resetPrefs}
+                          className="mt-1 w-full rounded-xl px-3 py-2 text-left text-[12px] font-semibold text-navy hover:bg-navy-50">
+                    Show everything
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          {[["/enterprise/manage-jobs", "Manage jobs", d.jobs_total],
-            ["/enterprise/applications", "Applications", d.applications],
-            ["/enterprise/ads", "Post an Ad", null],
-            ["/enterprise/messages", "Messages", null]].map(([to, label, count]) => (
-            <Link key={to} to={to}
-                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white
-                             px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors
-                             hover:border-navy-200 hover:bg-navy-50 hover:text-navy">
-              {label}
-              {count != null && count > 0 && (
-                <span className="rounded-full bg-slate-100 px-1.5 text-[10px] font-bold text-slate-500">
-                  {count}
-                </span>
-              )}
-            </Link>
+        {/* today at a glance */}
+        <div className="relative mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-slate-100 bg-slate-100 sm:grid-cols-4">
+          {[["Live jobs", d.jobs_active, "bg-brandgreen"],
+            ["New applications", applied, "bg-amber-400"],
+            ["Shortlisted", shortlisted, "bg-navy"],
+            ["Hired", hired, "bg-violet-500"]].map(([l, v, dot]) => (
+            <div key={l} className="bg-white px-4 py-3">
+              <p className="flex items-center gap-1.5 text-[11.5px] font-medium text-slate-500">
+                <span className={`h-1.5 w-1.5 rounded-full ${dot}`} /> {l}
+              </p>
+              <p className="mt-1 font-heading text-[20px] font-bold leading-none text-slate-900 tabular-nums">{v}</p>
+            </div>
           ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-        <Stat label="Jobs posted" value={d.jobs_total} tone="navy" icon={IconBriefcase} />
-        <Stat label="Active jobs" value={d.jobs_active} tone="green" icon={IconCheck} />
-        <Stat label="Applications" value={d.applications} tone="blue" icon={IconClipboard} />
-        <Stat label="Resumes viewed" value={d.resumes_viewed} tone="violet" icon={IconEye} />
-        <Stat label="Shortlist rate" value={`${conversion}%`} tone="amber" icon={IconChart}
-              hint={`${shortlisted} of ${d.applications || 0}`} />
+      {/* ---- quick links ---- */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Block to="/enterprise/profile" icon={IconBuilding} title="Company profile"
+               body="Logo, website and the description candidates see." tone="navy" />
+        <Block to="/enterprise/manage-jobs" icon={IconLayers} title="Manage jobs"
+               body="Edit, close or reopen your postings." tone="green" count={d.jobs_total} />
+        <Block to="/enterprise/applications" icon={IconClipboard} title="Applications"
+               body="Move candidates through your hiring stages." tone="amber" count={d.applications} />
+        <Block to="/enterprise/billing" icon={IconStar} title="Subscription"
+               body="Your plan, quotas and upgrades." tone="violet" />
+      </div>
+      <div className="-mt-2 flex flex-wrap gap-2">
+        {[["/enterprise/ads", "Post an Ad"], ["/enterprise/messages", "Messages"]].map(([to, label]) => (
+          <Link key={to} to={to}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[12px] font-semibold text-slate-600 transition-colors hover:border-navy-200 hover:bg-navy-50 hover:text-navy">
+            {label} →
+          </Link>
+        ))}
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-2">
-        <SwitchableChart title="Hiring pipeline" subtitle="Where every applicant currently sits"
-                         data={pipeline} types={["bar", "hbar", "stacked", "donut", "pie", "radial"]} height={220} />
-        <SwitchableChart title="Applications per job" subtitle="Your eight busiest postings"
-                         data={byJob} types={["hbar", "bar", "donut", "radial", "area"]} height={220} />
-        <SwitchableChart title="Jobs by location" subtitle="Where you're hiring"
-                         data={byLocation} types={["hbar", "bar", "donut", "pie"]} height={220} />
-        {/* "Posting status" removed: Manage Job Posting now shows the same
-            split as tab counts you can actually click through to, so a chart
-            of two numbers on the dashboard was duplication. */}
-      </div>
+      {/* ---- key numbers ---- */}
+      {show("stats") && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <Stat label="Jobs posted" value={d.jobs_total} tone="navy" icon={IconBriefcase} />
+          <Stat label="Active jobs" value={d.jobs_active} tone="green" icon={IconCheck} />
+          <Stat label="Applications" value={d.applications} tone="blue" icon={IconClipboard} />
+          <Stat label="Resumes viewed" value={d.resumes_viewed} tone="violet" icon={IconEye} />
+          <Stat label="Shortlist rate" value={`${conversion}%`} tone="amber" icon={IconChart}
+                hint={`${shortlisted} of ${d.applications || 0} applications`} />
+        </div>
+      )}
 
-      {d.applications > 0 && (
-        <div className="card">
-          <h3 className="mb-3 font-bold text-slate-800">Funnel</h3>
-          <div className="space-y-2">
+      {/* ---- attention + recent jobs ---- */}
+      {(show("attention") || show("recent")) && (
+        <div className={`grid gap-5 ${show("attention") && show("recent") ? "xl:grid-cols-2" : ""}`}>
+          {show("attention") && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="font-heading text-[15px] font-bold text-slate-900">Needs your attention</h3>
+                {attention.length > 0 && (
+                  <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-700">{attention.length}</span>
+                )}
+              </div>
+              {attention.length ? (
+                <ul className="space-y-2">
+                  {attention.map((a) => (
+                    <li key={a.text} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2.5">
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${a.tone === "red" ? "bg-red-500" : a.tone === "amber" ? "bg-amber-400" : "bg-navy"}`} />
+                      <span className="min-w-0 flex-1 text-[13px] text-slate-700">{a.text}</span>
+                      <Link to={a.to} className="shrink-0 text-[12px] font-semibold text-navy hover:underline">{a.cta} →</Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="flex items-center gap-3 rounded-xl bg-brandgreen-50/60 px-4 py-4">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brandgreen text-white"><IconCheck size={16} /></span>
+                  <div>
+                    <p className="text-[13px] font-semibold text-slate-800">You're all caught up</p>
+                    <p className="text-[12px] text-slate-500">No applications or jobs need action right now.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {show("recent") && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="font-heading text-[15px] font-bold text-slate-900">Recent jobs</h3>
+                <Link to="/enterprise/manage-jobs" className="text-[12px] font-semibold text-navy hover:underline">View all →</Link>
+              </div>
+              {recent.length ? (
+                <ul className="divide-y divide-slate-100">
+                  {recent.map((j) => (
+                    <li key={j.id} className="flex items-center gap-3 py-2.5">
+                      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl font-heading text-[13px] font-bold
+                                        ${j.status === "active" ? "bg-navy-50 text-navy" : "bg-slate-100 text-slate-400"}`}>
+                        {(j.title || "?")[0].toUpperCase()}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13.5px] font-semibold text-slate-800">{j.title}</p>
+                        <p className="truncate text-[11.5px] text-slate-400">{[j.location, j.job_code].filter(Boolean).join(" · ") || "—"}</p>
+                      </div>
+                      <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase ${j.status === "active" ? "bg-brandgreen-50 text-brandgreen-600" : "bg-slate-100 text-slate-500"}`}>
+                        {j.status === "active" ? "Live" : "Closed"}
+                      </span>
+                      <span className="w-14 text-right">
+                        <b className="font-heading text-[15px] text-slate-900 tabular-nums">{j.applicants || 0}</b>
+                        <span className="block text-[10px] text-slate-400">applied</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="flex flex-col items-center py-6 text-center">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-navy-50 text-navy"><IconBriefcase size={20} /></span>
+                  <p className="mt-3 text-[13px] font-semibold text-slate-700">No jobs yet</p>
+                  <Link to="/enterprise/post-job" className="mt-2 text-[12.5px] font-semibold text-navy hover:underline">+ Post your first job</Link>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ---- charts ---- */}
+      {anyChart && (
+        <AnalyticsPanel>
+        <div className="grid gap-5 xl:grid-cols-2">
+          {show("pipeline") && (
+            <SwitchableChart title="Hiring pipeline" subtitle="Where every applicant currently sits"
+                             data={pipeline} types={["funnel", "bar", "donut"]} height={220} />
+          )}
+          {show("perjob") && (
+            <SwitchableChart title="Applications per job" subtitle="Your eight busiest postings"
+                             data={byJob} types={["hbar", "treemap", "lollipop"]} height={220} />
+          )}
+          {show("location") && (
+            <SwitchableChart title="Jobs by location" subtitle="Where you're hiring"
+                             data={byLocation} types={["donut", "treemap", "hbar"]} height={220} />
+          )}
+        </div>
+        </AnalyticsPanel>
+      )}
+
+      {show("funnel") && d.applications > 0 && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+          <h3 className="mb-3 font-heading text-[15px] font-bold text-slate-900">Hiring funnel</h3>
+          <div className="space-y-3">
             {[["Applications received", d.applications, "#94a3b8"],
-              ["Shortlisted or better", shortlisted, "#10256b"],
+              ["Shortlisted or better", shortlisted, "#4f46e5"],
               ["Hired", hired, "#4faa38"]].map(([label, value, hex]) => {
               const pct = d.applications ? Math.round((value / d.applications) * 100) : 0;
               return (
@@ -212,40 +414,77 @@ function Overview() {
               );
             })}
           </div>
-          {applied > 0 && (
-            <p className="mt-3 text-xs text-slate-400">
-              {applied} application(s) still sitting at &ldquo;Applied&rdquo; — move them along from the
-              Applications tab.
-            </p>
-          )}
+        </div>
+      )}
+
+      {!Object.values(prefs).some(Boolean) && (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-[13px] text-slate-500">
+          Every section is hidden. Use <b>Customise</b> to bring them back.
         </div>
       )}
     </div>
   );
 }
 
+/* Greeting by the user's local time:
+   5-12 morning, 12-17 afternoon, 17-21 evening, 21-5 night. */
+function timeOfDay(now, d) {
+  const h = new Date(now).getHours();
+  const key = h >= 5 && h < 12 ? "morning" : h >= 12 && h < 17 ? "afternoon" : h >= 17 && h < 21 ? "evening" : "night";
+  const pending = d.by_status?.Applied || 0;
+  const line = pending
+    ? `${pending} application${pending === 1 ? " is" : "s are"} waiting for your review.`
+    : d.jobs_active
+      ? `${d.jobs_active} job${d.jobs_active === 1 ? " is" : "s are"} live and collecting applications.`
+      : "Post a job to start receiving applications.";
+  return {
+    key, line,
+    greet: { morning: "Good morning", afternoon: "Good afternoon", evening: "Good evening", night: "Good night" }[key],
+    tile: { morning: "bg-amber-50 text-amber-500", afternoon: "bg-orange-50 text-orange-500",
+            evening: "bg-rose-50 text-rose-500", night: "bg-indigo-50 text-indigo-500" }[key],
+    glow: { morning: "bg-amber-100/70", afternoon: "bg-orange-100/60",
+            evening: "bg-rose-100/60", night: "bg-indigo-100/70" }[key],
+  };
+}
+
+function TimeOfDayIcon({ period }) {
+  const p = { width: 26, height: 26, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor",
+              strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
+  if (period === "night") {
+    return <svg {...p}><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>;
+  }
+  if (period === "evening") {
+    return <svg {...p}><path d="M17 18a5 5 0 0 0-10 0" /><path d="M12 9V2M4.2 10.2l1.4 1.4M1 18h2M21 18h2M18.4 11.6l1.4-1.4M23 22H1M16 5l-4 4-4-4" /></svg>;
+  }
+  return <svg {...p}><circle cx="12" cy="12" r="4.5" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>;
+}
+
 const STAT_TONES = {
-  navy:   { ring: "bg-navy-50 text-navy",                 text: "text-navy" },
-  green:  { ring: "bg-brandgreen-50 text-brandgreen-600",  text: "text-brandgreen-600" },
-  blue:   { ring: "bg-blue-50 text-blue-600",              text: "text-blue-600" },
-  violet: { ring: "bg-violet-50 text-violet-600",          text: "text-violet-600" },
-  amber:  { ring: "bg-amber-50 text-amber-600",            text: "text-amber-600" },
+  navy:   { ring: "bg-navy-50 text-navy",                 text: "text-navy",           bar: "bg-navy",       from: "to-indigo-50/70" },
+  green:  { ring: "bg-brandgreen-50 text-brandgreen-600",  text: "text-brandgreen-600", bar: "bg-brandgreen", from: "to-emerald-50/70" },
+  blue:   { ring: "bg-blue-50 text-blue-600",              text: "text-blue-600",       bar: "bg-blue-500",   from: "to-sky-50/80" },
+  violet: { ring: "bg-violet-50 text-violet-600",          text: "text-violet-600",     bar: "bg-violet-500", from: "to-violet-50/70" },
+  amber:  { ring: "bg-amber-50 text-amber-600",            text: "text-amber-600",      bar: "bg-amber-400",  from: "to-amber-50/70" },
 };
 
-/* A Dashboard block: one destination, named, with a line saying what it's for.
-   Four bare links would have been shorter, but this is the first screen a new
-   recruiter sees and "Subscribe" on its own doesn't tell anyone what it does. */
-function Block({ to, icon: Icon, title, body }) {
+/* A Dashboard block: one destination, named, with a line saying what it's for. */
+function Block({ to, icon: Icon, title, body, tone = "navy", count }) {
+  const t = STAT_TONES[tone] || STAT_TONES.navy;
   return (
     <Link to={to}
-          className="group flex flex-col rounded-xl border border-slate-200 bg-white p-4
-                     transition-all hover:-translate-y-0.5 hover:border-navy-200 hover:shadow-md">
-      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-navy-50 text-navy
-                       transition-colors group-hover:bg-navy group-hover:text-white">
-        {Icon && <Icon size={17} />}
+          className="group flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4
+                     transition-all hover:-translate-y-0.5 hover:border-navy-200 hover:shadow-card">
+      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${t.ring}`}>
+        {Icon && <Icon size={18} />}
       </span>
-      <span className="mt-3 font-bold text-slate-700 group-hover:text-navy">{title}</span>
-      <span className="mt-1 text-xs leading-relaxed text-slate-400">{body}</span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2">
+          <span className="font-semibold text-slate-800 group-hover:text-navy">{title}</span>
+          {count > 0 && <span className="rounded-full bg-slate-100 px-1.5 text-[10.5px] font-bold text-slate-500">{count}</span>}
+        </span>
+        <span className="mt-0.5 block text-[12px] leading-snug text-slate-500">{body}</span>
+      </span>
+      <span className="mt-1 text-slate-300 transition-all group-hover:translate-x-0.5 group-hover:text-navy">→</span>
     </Link>
   );
 }
@@ -253,17 +492,23 @@ function Block({ to, icon: Icon, title, body }) {
 function Stat({ label, value, tone = "navy", icon: Icon, hint }) {
   const t = STAT_TONES[tone] || STAT_TONES.navy;
   return (
-    <div className="card-hover flex items-center gap-3 !p-4">
+    <div className={`group relative overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-white ${t.from} p-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_36px_-22px_rgba(15,23,42,.35)]`}>
+      <span aria-hidden="true" className={`absolute inset-x-0 top-0 h-[3px] ${t.bar}`} />
       {Icon && (
-        <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${t.ring}`}>
-          <Icon size={20} />
+        <span aria-hidden="true" className={`pointer-events-none absolute -bottom-4 -right-3 opacity-[0.07] transition-transform duration-500 group-hover:scale-110 group-hover:-rotate-6 ${t.text}`}>
+          <Icon size={84} />
         </span>
       )}
-      <div className="min-w-0">
-        <div className={`text-2xl font-extrabold leading-tight ${t.text}`}>{value}</div>
-        <div className="truncate text-[11px] font-medium uppercase tracking-wide text-slate-400">{label}</div>
-        {hint && <div className="text-[10px] text-slate-400">{hint}</div>}
+      <div className="relative flex items-center justify-between gap-2">
+        <span className="text-[11.5px] font-semibold text-slate-500">{label}</span>
+        {Icon && (
+          <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${t.ring} shadow-sm`}>
+            <Icon size={17} />
+          </span>
+        )}
       </div>
+      <div className="relative mt-2 font-heading text-[28px] font-bold leading-none text-slate-900 tabular-nums">{value ?? 0}</div>
+      {hint && <div className="relative mt-1.5 text-[11px] text-slate-500">{hint}</div>}
     </div>
   );
 }
@@ -664,30 +909,65 @@ function ManageJobs() {
   const TAB_LIMIT = 10;
   const filtered = matching.slice(0, TAB_LIMIT);
   const hiddenCount = Math.max(0, matching.length - TAB_LIMIT);
+  const totalResponses = jobs.reduce((a, j) => a + (j.applicants || 0), 0);
+  const totalShortlisted = jobs.reduce((a, j) => a + (j.shortlisted || 0), 0);
+  const totalHired = jobs.reduce((a, j) => a + (j.hired || 0), 0);
   const counts = { all: jobs.length,
                    active: jobs.filter((j) => j.status === "active").length,
                    closed: jobs.filter((j) => j.status === "closed").length };
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+      {/* ---- header: plain white — title, search, post button ---- */}
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-navy">Manage jobs</h2>
-          <p className="text-sm text-slate-500">
-            {jobs.reduce((a, j) => a + j.applicants, 0)} responses across {jobs.length} jobs
+          <h2 className="font-heading text-[24px] font-bold leading-tight text-slate-900">Manage jobs</h2>
+          <p className="mt-0.5 text-[13px] text-slate-500">
+            {totalResponses} response{totalResponses === 1 ? "" : "s"} across {jobs.length} job{jobs.length === 1 ? "" : "s"}
           </p>
         </div>
-        {view !== "close" && (
-          <input className="input max-w-xs" placeholder="Search jobs, location or skill…"
-                 value={q} onChange={(e) => setQ(e.target.value)} />
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {view !== "close" && (
+            <label className="flex w-72 max-w-full items-center gap-2 rounded-full border-[1.5px] border-slate-200 bg-white px-4 py-2 text-slate-400 transition focus-within:border-navy focus-within:text-navy focus-within:ring-4 focus-within:ring-navy/10">
+              <IconSearch size={15} className="shrink-0" />
+              <input className="min-w-0 flex-1 bg-transparent text-[13px] text-slate-800 outline-none placeholder:text-slate-400"
+                     placeholder="Search jobs, location or skill…" value={q} onChange={(e) => setQ(e.target.value)} />
+              {q && <button type="button" onClick={() => setQ("")} aria-label="Clear search" className="hover:text-slate-700"><IconClose size={13} /></button>}
+            </label>
+          )}
+          <Link to="/enterprise/post-job" className="btn !rounded-full !px-5">
+            <span className="text-base leading-none">+</span> Post a job
+          </Link>
+        </div>
       </div>
 
-      <div className="mb-4 flex gap-1.5 rounded-xl bg-slate-100 p-1.5">
-        {[["jobs", "Manage jobs"], ["close", "Close the job"], ["responses", "Job responses"]].map(([k, label]) => (
+      {/* ---- stats: white tiles with a coloured icon and accent line ---- */}
+      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+        {[["Active jobs", counts.active, IconBriefcase, "text-brandgreen-600 bg-brandgreen-50", "bg-brandgreen"],
+          ["Responses", totalResponses, IconClipboard, "text-navy bg-navy-50", "bg-navy"],
+          ["Shortlisted", totalShortlisted, IconStar, "text-amber-600 bg-amber-50", "bg-amber-400"],
+          ["Hired", totalHired, IconCheck, "text-violet-600 bg-violet-50", "bg-violet-500"]].map(([label, val, Ic, chip, bar]) => (
+          <div key={label} className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white px-4 py-4 transition-all hover:-translate-y-0.5 hover:shadow-card">
+            <span aria-hidden="true" className={`absolute inset-x-0 top-0 h-[3px] ${bar} opacity-80`} />
+            <div className="flex items-center gap-3">
+              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${chip}`}><Ic size={18} /></span>
+              <div>
+                <p className="font-heading text-[22px] font-bold leading-none text-slate-900 tabular-nums">{val}</p>
+                <p className="mt-1 text-[11.5px] font-medium text-slate-500">{label}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ---- sub-navigation: underline tabs with icons ---- */}
+      <div className="mb-5 flex gap-1 border-b border-slate-200">
+        {[["jobs", "Manage jobs", IconLayers], ["close", "Close the job", IconClose], ["responses", "Job responses", IconClipboard]].map(([k, label, Ic]) => (
           <button key={k} onClick={() => setView(k)}
-            className={`flex-1 rounded-lg px-3 py-2 text-[13px] font-semibold transition-all ${
-              view === k ? "bg-white text-navy shadow-sm" : "text-slate-500 hover:text-navy"}`}>{label}</button>
+            className={`relative -mb-px flex items-center gap-2 border-b-[2.5px] px-4 pb-3 pt-1 text-[13.5px] font-semibold transition-colors ${
+              view === k ? "border-navy text-navy" : "border-transparent text-slate-500 hover:text-navy"}`}>
+            <Ic size={15} /> {label}
+          </button>
         ))}
       </div>
 
@@ -728,24 +1008,19 @@ function ManageJobs() {
           <div className="mb-4 flex flex-wrap items-center gap-2">
           {/* Two states, not three. A job is either open or it isn't, and the
               count sits in a pill so the label stays readable at a glance. */}
-          <div className="flex gap-2">
-            {[["all", "All jobs", "bg-navy-50 text-navy", "bg-navy text-white"],
-              ["active", "Active", "bg-brandgreen-50 text-brandgreen-600", "bg-brandgreen text-white"],
-              ["closed", "Closed", "bg-slate-100 text-slate-500", "bg-slate-500 text-white"]].map(
-              ([k, label, idleChip, activeChip]) => {
-                const on = tab === k;
-                return (
-                  <button key={k} onClick={() => setTab(k)}
-                    className={`flex items-center gap-2 rounded-xl border px-4 py-2 text-[13px] font-bold transition-all
-                      ${on ? "border-navy bg-navy-50 text-navy shadow-sm"
-                           : "border-slate-200 bg-white text-slate-500 hover:border-navy-200 hover:text-navy"}`}>
-                    {label}
-                    <span className={`rounded-md px-1.5 py-0.5 text-[11px] tabular-nums ${on ? activeChip : idleChip}`}>
-                      {counts[k]}
-                    </span>
-                  </button>
-                );
-              })}
+          <div className="inline-flex rounded-full bg-slate-100 p-1 ring-1 ring-inset ring-slate-200/70">
+            {[["all", "All jobs", "bg-navy"], ["active", "Active", "bg-brandgreen"], ["closed", "Closed", "bg-slate-400"]].map(([k, label, dot]) => {
+              const on = tab === k;
+              return (
+                <button key={k} onClick={() => setTab(k)}
+                  className={`flex items-center gap-2 rounded-full px-4 py-1.5 text-[13px] font-semibold transition-all
+                    ${on ? "bg-white text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,.08),0_4px_10px_-4px_rgba(15,23,42,.2)]" : "text-slate-500 hover:text-slate-800"}`}>
+                  <span className={`h-2 w-2 rounded-full ${dot} ${on ? "" : "opacity-50"}`} />
+                  {label}
+                  <span className={`rounded-full px-1.5 text-[11px] font-bold tabular-nums ${on ? "bg-navy-50 text-navy" : "text-slate-400"}`}>{counts[k]}</span>
+                </button>
+              );
+            })}
           </div>
             <div className="flex-1" />
             <ViewSwitcher value={jobView} onChange={setJobView} />
@@ -811,73 +1086,12 @@ function ManageJobs() {
           ) : (
           <div className={jobView === "list"
             ? "grid max-w-lg gap-4"                   /* one grid-sized card per row */
-            : "grid gap-4 lg:grid-cols-2"}>
+            : "grid gap-4 lg:grid-cols-2 2xl:grid-cols-3"}>
             {filtered.map((j) => (
-              <div key={j.id}
-                   className="group overflow-hidden rounded-xl border border-slate-200 bg-white transition-all duration-200
-                              hover:-translate-y-1 hover:border-navy-200 hover:shadow-cardhover">
-                <div className="p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="font-bold text-slate-800">{j.title}</h3>
-                        <button onClick={() => openEdit(j.id)} title="Modify this job"
-                                className="rounded-md p-1 text-slate-300 transition-colors hover:bg-navy-50 hover:text-navy">
-                          <IconEdit size={14} />
-                        </button>
-                        {j.is_urgent && <span className="badge bg-red-100 text-red-700">Urgent</span>}
-                        <span className={`badge ${j.status === "active" ? "bg-brandgreen-50 text-brandgreen-600" : "bg-slate-100 text-slate-500"}`}>
-                          {j.status}
-                        </span>
-                      </div>
-                      <p className="mt-0.5 text-[13px] text-slate-500">
-                        {[j.job_code, j.location, j.experience].filter(Boolean).join(" · ")}
-                      </p>
-                      <p className="text-[12px] text-slate-400">
-                        {j.no_of_positions} position(s)
-                        {(j.wage_min || j.salary) && ` · ${j.salary || `${j.wage_min}${j.wage_max ? " – " + j.wage_max : ""}`}`}
-                      </p>
-                      {/* Expiry is why an active job can stop attracting
-                          applicants, so it belongs on the card rather than
-                          only in the post confirmation. */}
-                      <ExpiryNote expiresAt={j.expires_at} status={j.status} />
-                    </div>
-                    <button onClick={() => { setView("responses"); openResponses(j.id); }} className="shrink-0 text-center">
-                      <div className="text-2xl font-extrabold text-navy hover:underline">{j.applicants}</div>
-                      <div className="text-[10px] uppercase tracking-wide text-slate-400">responses</div>
-                    </button>
-                  </div>
-
-                  {(j.key_skills || []).length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {j.key_skills.slice(0, 6).map((k) => (
-                        <span key={k} className="badge bg-slate-100 text-slate-600">{k}</span>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="mt-3 grid grid-cols-3 gap-2">
-                    {[["New", j.new_applicants, "text-slate-600"],
-                      ["Shortlisted", j.shortlisted, "text-navy"],
-                      ["Hired", j.hired, "text-brandgreen-600"]].map(([label, val, cls]) => (
-                      <div key={label} className="rounded-lg bg-slate-50 py-1.5 text-center transition-colors group-hover:bg-navy-50/60">
-                        <div className={`text-sm font-bold ${cls}`}>{val}</div>
-                        <div className="text-[10px] text-slate-400">{label}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex gap-2 border-t border-slate-100 bg-slate-50/60 px-5 py-3">
-                  <button className="btn-outline btn-sm flex-1" onClick={() => openEdit(j.id)}>
-                    <IconEdit size={13} /> Modify
-                  </button>
-                  <button className="btn-outline btn-sm flex-1" onClick={() => openResponses(j.id)}>Responses</button>
-                  <button className="btn-outline btn-sm" onClick={() => closeJob(j)}>
-                    {j.status === "active" ? <><IconClose size={13} /> Close</> : <><IconRefresh size={13} /> Reopen</>}
-                  </button>
-                </div>
-              </div>
+              <JobCard key={j.id} j={j} sector={sectorName(tax, j.sector)}
+                       onEdit={() => openEdit(j.id)}
+                       onResponses={() => openResponses(j.id)}
+                       onToggle={() => closeJob(j)} />
             ))}
             {hiddenCount > 0 && (
               <p className="pt-1 text-center text-xs text-slate-400">
@@ -886,17 +1100,137 @@ function ManageJobs() {
               </p>
             )}
             {filtered.length === 0 && (
-              <div className="card col-span-full text-center text-slate-400">
-                {q ? "No jobs match your search."
-                   : tab === "all" ? "No jobs yet. Post your first one."
-                   : tab === "active" ? "No active jobs. Post one, or check the Closed tab."
-                   : "No closed jobs."}
+              <div className="col-span-full flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
+                <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-navy-50 to-violet-100 text-navy">
+                  <IconBriefcase size={24} />
+                </span>
+                <p className="mt-4 font-heading text-[16px] font-bold text-slate-800">
+                  {q ? "No jobs match your search"
+                     : tab === "closed" ? "No closed jobs"
+                     : tab === "active" ? "No active jobs right now"
+                     : "You haven't posted a job yet"}
+                </p>
+                <p className="mt-1 max-w-sm text-[13px] text-slate-500">
+                  {q ? "Try a different title, city or skill."
+                     : tab === "closed" ? "Jobs you close will be listed here, ready to reopen."
+                     : "Post a job and candidates who match will start applying."}
+                </p>
+                {!q && tab !== "closed" && (
+                  <Link to="/enterprise/post-job" className="btn mt-5 !rounded-full !px-6">+ Post a job</Link>
+                )}
               </div>
             )}
           </div>
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/* One job in Manage jobs: status stripe, title + meta with icons, a pipeline
+   bar (new / shortlisted / hired) and the actions. */
+function JobCard({ j, sector, onEdit, onResponses, onToggle }) {
+  const active = j.status === "active";
+  const total = j.applicants || 0;
+  const seg = (n) => (total ? `${Math.max(0, (n || 0) / total) * 100}%` : "0%");
+  const wage = j.salary || (j.wage_min || j.wage_max
+    ? [j.wage_min, j.wage_max].filter((v) => v !== "" && v != null).map((v) => formatMoney(v, j.salary_currency || "INR")).join(" – ")
+    : null);
+  const meta = [
+    [IconMapPin, j.location],
+    [IconBriefcase, j.experience],
+    [IconUsers, j.no_of_positions ? `${j.no_of_positions} position${j.no_of_positions === 1 ? "" : "s"}` : null],
+    [IconHash, wage],
+  ].filter(([, v]) => v);
+  return (
+    <div className={`group relative flex flex-col overflow-hidden rounded-2xl border bg-white shadow-card transition-all duration-300
+                     hover:-translate-y-1 hover:shadow-[0_18px_40px_-16px_rgba(79,70,229,.35)]
+                     ${active ? "border-slate-200 hover:border-navy-200" : "border-slate-200 opacity-90"}`}>
+      <span aria-hidden="true" className={`absolute inset-y-0 left-0 w-1 ${active ? "bg-gradient-to-b from-brandgreen to-emerald-300" : "bg-slate-300"}`} />
+
+      <div className="flex-1 p-5 pl-6">
+        <div className="flex items-start gap-3">
+          <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl font-heading text-[15px] font-bold
+                            ${active ? "bg-gradient-to-br from-navy-50 to-violet-100 text-navy" : "bg-slate-100 text-slate-400"}`}>
+            {(j.title || "?").slice(0, 1).toUpperCase()}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide
+                                ${active ? "bg-brandgreen-50 text-brandgreen-600" : "bg-slate-100 text-slate-500"}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${active ? "animate-pulse bg-brandgreen" : "bg-slate-400"}`} />
+                {active ? "Live" : "Closed"}
+              </span>
+              {j.is_urgent && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-red-600">Urgent</span>}
+              {j.approval_status === "pending" && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10.5px] font-bold text-amber-700">Awaiting approval</span>}
+              {j.approval_status === "rejected" && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10.5px] font-bold text-red-700">Not approved</span>}
+              {j.job_code && <span className="text-[11px] font-medium text-slate-400">#{j.job_code}</span>}
+            </div>
+            <button onClick={onEdit} className="mt-1 block max-w-full truncate text-left font-heading text-[16px] font-bold text-slate-900 hover:text-navy">
+              {j.title}
+            </button>
+            {sector && <p className="truncate text-[12px] text-slate-400">{sector}</p>}
+          </div>
+          <button onClick={onResponses} title="See responses"
+                  className="shrink-0 rounded-xl bg-navy-50/70 px-3 py-2 text-center transition hover:bg-navy hover:text-white">
+            <div className="font-heading text-[22px] font-bold leading-none text-navy group-hover:text-inherit tabular-nums">{total}</div>
+            <div className="mt-0.5 text-[9.5px] font-bold uppercase tracking-wider text-slate-400">responses</div>
+          </button>
+        </div>
+
+        {meta.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 text-[12.5px] text-slate-600">
+            {meta.map(([Ic, v]) => (
+              <span key={v} className="inline-flex items-center gap-1.5"><Ic size={13} className="text-navy/70" />{v}</span>
+            ))}
+          </div>
+        )}
+        {j.approval_status === "rejected" && j.approval_note && (
+          <p className="mt-2 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs text-red-600">{j.approval_note}</p>
+        )}
+        <ExpiryNote expiresAt={j.expires_at} status={j.status} />
+
+        {(j.key_skills || []).length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {j.key_skills.slice(0, 5).map((k) => (
+              <span key={k} className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600">{k}</span>
+            ))}
+            {j.key_skills.length > 5 && <span className="rounded-full px-1.5 py-0.5 text-[11px] font-semibold text-slate-400">+{j.key_skills.length - 5}</span>}
+          </div>
+        )}
+
+        {/* hiring pipeline */}
+        <div className="mt-4">
+          <div className="flex h-2 overflow-hidden rounded-full bg-slate-100">
+            <span className="bg-slate-400 transition-all duration-700" style={{ width: seg(j.new_applicants) }} />
+            <span className="bg-navy transition-all duration-700" style={{ width: seg(j.shortlisted) }} />
+            <span className="bg-brandgreen transition-all duration-700" style={{ width: seg(j.hired) }} />
+          </div>
+          <div className="mt-2 flex gap-4 text-[11.5px] text-slate-500">
+            {[["New", j.new_applicants, "bg-slate-400"], ["Shortlisted", j.shortlisted, "bg-navy"], ["Hired", j.hired, "bg-brandgreen"]].map(([l, v, c]) => (
+              <span key={l} className="inline-flex items-center gap-1.5">
+                <span className={`h-2 w-2 rounded-full ${c}`} /> {l} <b className="tabular-nums text-slate-800">{v || 0}</b>
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50/70 px-5 py-3 pl-6">
+        <button className="btn btn-sm !rounded-full !px-4" onClick={onResponses}>
+          <IconClipboard size={13} /> Responses
+        </button>
+        <button className="btn-outline btn-sm !rounded-full" onClick={onEdit}>
+          <IconEdit size={13} /> Modify
+        </button>
+        <div className="flex-1" />
+        <button onClick={onToggle}
+                className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors
+                  ${active ? "text-slate-500 hover:bg-red-50 hover:text-red-600" : "text-navy hover:bg-navy-50"}`}>
+          {active ? <><IconClose size={13} /> Close job</> : <><IconRefresh size={13} /> Reopen</>}
+        </button>
+      </div>
     </div>
   );
 }
@@ -1072,49 +1406,75 @@ function Profile() {
   const isDirty = dirtyFields.length > 0;
 
   return (
-    <div className="max-w-5xl space-y-5">
-      {/* ---------------- banner ---------------- */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-navy to-navy-600 p-6 text-white">
-        <div className="flex flex-wrap items-center gap-5">
-          <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white p-1.5 ring-2 ring-white/25">
-            {view.logo_url
-              ? <img src={mediaUrl(view.logo_url)} alt="" className="h-full w-full object-contain" />
-              : <span className="text-2xl font-extrabold text-navy">{(view.name || "?")[0]}</span>}
-          </div>
-          <div className="min-w-0 flex-1">
-            {/* While editing, the name lives in the Company name field below.
-                Showing it here as well meant two copies on screen, one of them
-                not editable — confusing about which one is real. */}
-            {edit ? (
-              <>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Editing profile</p>
-                <p className="text-sm text-navy-100">Changes apply when you press Save profile.</p>
-              </>
-            ) : (
-              <h2 className="truncate text-2xl font-extrabold">{view.name}</h2>
-            )}
-            {!edit && location && <p className="text-sm text-navy-100">{location}</p>}
-            {!edit && view.authorised_person_name && (
-              <p className="text-xs text-white/60">
-                {[view.authorised_person_name, view.designation].filter(Boolean).join(" · ")}
-              </p>
-            )}
-          </div>
-          {edit ? (
-            <div className="flex shrink-0 gap-2">
-              <button className="rounded-lg bg-white px-4 py-2 text-sm font-bold text-navy hover:bg-white/90 disabled:opacity-60"
-                      onClick={save} disabled={saving || !isDirty}
-                      title={isDirty ? "Save your changes" : "Nothing has changed yet"}>
-                {saving ? "Saving…" : isDirty ? "Save changes" : "Saved"}</button>
-              <button className="rounded-lg border border-white/25 px-4 py-2 text-sm font-semibold hover:bg-white/10"
-                      onClick={cancelEdit} disabled={saving}>Cancel</button>
+    <div className="max-w-6xl space-y-5">
+      {/* ---------------- header: cover, logo, name, actions ---------------- */}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        <div aria-hidden="true" className="relative h-24 overflow-hidden bg-gradient-to-r from-indigo-50 via-violet-50 to-emerald-50">
+          <svg className="absolute inset-0 h-full w-full text-navy/[0.07]" aria-hidden="true">
+            <defs>
+              <pattern id="prof-dots" width="18" height="18" patternUnits="userSpaceOnUse">
+                <circle cx="2" cy="2" r="1.4" fill="currentColor" />
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#prof-dots)" />
+          </svg>
+          <div className="absolute -right-10 -top-16 h-48 w-48 rounded-full bg-navy/10 blur-2xl" />
+        </div>
+
+        <div className="relative z-10 px-6 pb-6">
+          <div className="flex flex-wrap items-start gap-5">
+            <div className="-mt-12 flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-white bg-white shadow-md">
+              {view.logo_url
+                ? <img src={mediaUrl(view.logo_url)} alt="" className="h-full w-full object-contain p-1.5" />
+                : <span className="flex h-full w-full items-center justify-center bg-gradient-to-br from-navy to-violet-500 font-heading text-3xl font-bold text-white">
+                    {(view.name || "?")[0].toUpperCase()}
+                  </span>}
             </div>
-          ) : (
-            <button className="shrink-0 rounded-lg border border-white/25 px-4 py-2 text-sm font-semibold hover:bg-white/10"
-                    onClick={startEdit}>
-              <IconEdit size={14} /> Edit profile
-            </button>
-          )}
+            <div className="min-w-0 flex-1 pt-4">
+              {edit ? (
+                <>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-navy">Editing profile</p>
+                  <p className="text-[13px] text-slate-500">Changes apply when you press Save.</p>
+                </>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="truncate font-heading text-[24px] font-bold leading-tight text-slate-900">{view.name}</h2>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-brandgreen-50 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-brandgreen-600">
+                      <IconBriefcase size={11} /> Employer
+                    </span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-slate-500">
+                    {location && <span className="inline-flex items-center gap-1.5"><IconMapPin size={13} className="text-navy" />{location}</span>}
+                    {view.website && (
+                      <a href={/^https?:/.test(view.website) ? view.website : `https://${view.website}`} target="_blank" rel="noopener noreferrer"
+                         className="inline-flex items-center gap-1.5 text-navy hover:underline">
+                        <IconGlobe size={13} />{view.website.replace(/^https?:\/\//, "")}
+                      </a>
+                    )}
+                    {view.authorised_person_name && (
+                      <span className="inline-flex items-center gap-1.5"><IconUsers size={13} className="text-navy" />
+                        {[view.authorised_person_name, view.designation].filter(Boolean).join(" · ")}
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+            {edit ? (
+              <div className="flex shrink-0 gap-2 pt-4">
+                <button className="btn-outline !rounded-full" onClick={cancelEdit} disabled={saving}>Cancel</button>
+                <button className="btn !rounded-full !px-5" onClick={save} disabled={saving || !isDirty}
+                        title={isDirty ? "Save your changes" : "Nothing has changed yet"}>
+                  {saving ? "Saving…" : isDirty ? "Save changes" : "Saved"}
+                </button>
+              </div>
+            ) : (
+              <button className="btn mt-4 !rounded-full !px-5 shrink-0" onClick={startEdit}>
+                <IconEdit size={14} /> Edit profile
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1153,7 +1513,7 @@ function Profile() {
           <FormCard title="Address">
             <F2 label="Address line 1" value={draft.address1} onChange={set("address1")} span />
             <F2 label="Address line 2" value={draft.address2} onChange={set("address2")} span />
-            <Combobox label="City" value={draft.city} options={CITIES} onChange={set("city")} />
+            <Combobox label="City" icon={iconFor("City")} value={draft.city} options={CITIES} onChange={set("city")} />
             <F2 label="District" value={draft.district} onChange={set("district")} />
             <F2 label="State" value={draft.state} onChange={set("state")} />
             <F2 label="Country" value={draft.country} onChange={set("country")} />
@@ -1193,34 +1553,135 @@ function Profile() {
           </div>
         </>
       ) : (
-        <>
-          <div className="card">
-            <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">About us</h3>
-            <Markdown text={p.about} />
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+          {/* ---- main column ---- */}
+          <div className="min-w-0 space-y-5">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6">
+              <ProfHead icon={IconDoc} title="About the company" />
+              {p.about
+                ? <div className="mt-3 text-[14px] leading-relaxed text-slate-700"><Markdown text={p.about} /></div>
+                : <EmptyLine onAdd={startEdit} text="Tell candidates who you are, your culture and what you hire for." />}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-6">
+              <ProfHead icon={IconMapPin} title="Address" />
+              <dl className="mt-4 grid gap-x-8 gap-y-4 sm:grid-cols-2">
+                <Row k="Street address" v={[p.address1, p.address2].filter(Boolean).join(", ")} />
+                <Row k="City" v={p.city} />
+                <Row k="District" v={p.district} />
+                <Row k="State" v={p.state} />
+                <Row k="Country" v={p.country} />
+              </dl>
+            </div>
+
+            <div className="grid gap-5 md:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-white p-6">
+                <ProfHead icon={IconUsers} title="People" />
+                <dl className="mt-4 space-y-4">
+                  <Row k="Authorised person" v={p.authorised_person_name} />
+                  <Row k="Designation" v={p.designation} />
+                  <Row k="Promoter" v={p.promoter_name} />
+                </dl>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-6">
+                <ProfHead icon={IconShield} title="Statutory" />
+                <dl className="mt-4 space-y-4">
+                  <Row k="GST No." v={p.gst_no} />
+                  <Row k="PAN No." v={p.pan_no} />
+                </dl>
+              </div>
+            </div>
           </div>
 
-          {/* Details reflow 1 -> 2 -> 3 columns; label sits above the value so
-              nothing is stranded at opposite edges of a wide card. */}
-          <div className="card">
-            <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-500">Company details</h3>
-            <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
-              <Row k="Email" v={p.email} />
-              <Row k="Phone" v={p.phone} />
-              <Row k="Website" v={p.website} link={p.website} />
-              <Row k="City" v={p.city} />
-              <Row k="District" v={p.district} />
-              <Row k="State" v={p.state} />
-              <Row k="Country" v={p.country} />
-              <Row k="Address" v={[p.address1, p.address2].filter(Boolean).join(", ")} />
-              <Row k="Authorised person" v={p.authorised_person_name} />
-              <Row k="Designation" v={p.designation} />
-              <Row k="Promoter" v={p.promoter_name} />
-              <Row k="GST No." v={p.gst_no} />
-              <Row k="PAN No." v={p.pan_no} />
-            </dl>
-          </div>
-        </>
+          {/* ---- side column ---- */}
+          <aside className="space-y-5 lg:sticky lg:top-4">
+            {(() => {
+              const checks = [
+                ["Logo", p.logo_url], ["About", p.about], ["Website", p.website], ["Phone", p.phone],
+                ["Address", p.address1], ["City", p.city], ["Contact person", p.authorised_person_name],
+                ["GST No.", p.gst_no], ["PAN No.", p.pan_no],
+              ];
+              const done = checks.filter(([, v]) => String(v || "").trim()).length;
+              const pct = Math.round((done / checks.length) * 100);
+              const missing = checks.filter(([, v]) => !String(v || "").trim()).map(([k]) => k);
+              const R = 30, C = 2 * Math.PI * R;
+              return (
+                <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <div className="flex items-center gap-4">
+                    <svg width="76" height="76" viewBox="0 0 76 76" className="shrink-0 -rotate-90">
+                      <circle cx="38" cy="38" r={R} fill="none" stroke="#eef2ff" strokeWidth="8" />
+                      <circle cx="38" cy="38" r={R} fill="none" strokeWidth="8" strokeLinecap="round"
+                              stroke={pct === 100 ? "#4faa38" : "#4f46e5"}
+                              strokeDasharray={C} strokeDashoffset={C * (1 - pct / 100)}
+                              style={{ transition: "stroke-dashoffset .8s ease" }} />
+                      <text x="38" y="38" textAnchor="middle" dominantBaseline="central" transform="rotate(90 38 38)"
+                            className="fill-slate-900 font-heading text-[16px] font-bold">{pct}%</text>
+                    </svg>
+                    <div>
+                      <p className="font-heading text-[15px] font-bold text-slate-900">Profile strength</p>
+                      <p className="text-[12px] leading-snug text-slate-500">
+                        {pct === 100 ? "Complete — candidates see everything." : "Complete profiles get more applicants."}
+                      </p>
+                    </div>
+                  </div>
+                  {missing.length > 0 && (
+                    <>
+                      <p className="mt-4 text-[11px] font-bold uppercase tracking-wider text-slate-400">Add next</p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {missing.map((m) => (
+                          <button key={m} type="button" onClick={startEdit}
+                                  className="rounded-full border border-dashed border-navy-200 px-2.5 py-1 text-[11.5px] font-semibold text-navy hover:bg-navy-50">
+                            + {m}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <p className="font-heading text-[15px] font-bold text-slate-900">Contact</p>
+              <ul className="mt-3 space-y-3">
+                {[[IconMail, "Email", p.email, p.email && `mailto:${p.email}`],
+                  [IconPhone, "Phone", p.phone, p.phone && `tel:${String(p.phone).replace(/\s/g, "")}`],
+                  [IconGlobe, "Website", p.website, p.website && (/^https?:/.test(p.website) ? p.website : `https://${p.website}`)]].map(([Ic, k, v, href]) => (
+                  <li key={k} className="flex items-center gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-navy-50 text-navy"><Ic size={15} /></span>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-medium text-slate-400">{k}</p>
+                      {v
+                        ? <a href={href} target={k === "Website" ? "_blank" : undefined} rel="noopener noreferrer"
+                             className="block truncate text-[13px] font-semibold text-slate-800 hover:text-navy">{v}</a>
+                        : <button type="button" onClick={startEdit} className="text-[13px] font-semibold text-navy hover:underline">+ Add</button>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </aside>
+        </div>
       )}
+    </div>
+  );
+}
+
+/* Profile section heading with an icon tile. */
+function ProfHead({ icon: Icon, title }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-navy-50 text-navy"><Icon size={15} /></span>
+      <h3 className="font-heading text-[15px] font-bold text-slate-900">{title}</h3>
+    </div>
+  );
+}
+
+function EmptyLine({ text, onAdd }) {
+  return (
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50/60 px-4 py-3">
+      <p className="text-[13px] text-slate-500">{text}</p>
+      <button type="button" onClick={onAdd} className="text-[12.5px] font-semibold text-navy hover:underline">+ Add</button>
     </div>
   );
 }
@@ -1240,9 +1701,8 @@ function FormCard({ title, children }) {
 function F2({ label, value, onChange, span, placeholder }) {
   return (
     <div className={span ? "sm:col-span-2 xl:col-span-3" : ""}>
-      <label className="label">{label}</label>
-      <input className="input" value={value || ""} placeholder={placeholder}
-             onChange={(e) => onChange(e.target.value)} />
+      {/* Same field as the registration page: icon tile, clear (×), validation. */}
+      <FField label={label} value={value || ""} placeholder={placeholder} onChange={onChange} />
     </div>
   );
 }
@@ -1282,7 +1742,15 @@ function ResumeSearch() {
   const [brief, setBrief] = useState(null);
   const [busy, setBusy] = useState(false);
 
+  /* No profiles are listed until the recruiter actually searches: an empty
+     search (no skill, location or filter) shows the "start searching" panel
+     instead of every candidate on the platform. */
+  const [searched, setSearched] = useState(false);
+  const hasCriteria = () => [q, location, instituteId, education, branch, yearFrom, yearTo, minPct]
+    .some((v) => String(v || "").trim());
   const search = async () => {
+    if (!hasCriteria()) { setRows([]); setSearched(false); return; }
+    setSearched(true);
     setBusy(true);
     const p = new URLSearchParams();
     if (q) p.set("q", q);
@@ -1312,7 +1780,6 @@ function ResumeSearch() {
   }, [locOpen]);
 
   useEffect(() => {
-    search();
     // Only institutes that actually have students, so the dropdown can't offer
     // a filter that returns nothing.
     api.get("/api/enterprise/institutes").then(setInstitutes).catch(() => {});
@@ -1431,8 +1898,26 @@ function ResumeSearch() {
     );
   }
 
-  const activeFilters = [location, instituteId, education, branch, yearFrom, yearTo, minPct]
+  // A year range (from + to) counts as one filter.
+  const activeFilters = [location, instituteId, education, branch, yearFrom || yearTo, minPct]
     .filter(Boolean).length;
+  // Applied filters as removable chips, shown next to the Advanced button.
+  const instName = institutes.find((x) => String(x.id) === String(instituteId))?.name;
+  const filterChips = [
+    location && ["loc", location, () => setLocation("")],
+    instituteId && ["inst", instName || "Institute", () => setInstituteId("")],
+    education && ["edu", education, () => setEducation("")],
+    branch && ["br", branch, () => setBranch("")],
+    (yearFrom || yearTo) && ["yr", `Passed ${yearFrom || "…"}–${yearTo || "…"}`, () => { setYearFrom(""); setYearTo(""); }],
+    minPct && ["pct", `${minPct}%+`, () => setMinPct("")],
+  ].filter(Boolean);
+  const thisYear = new Date().getFullYear();
+  const yearPresets = [
+    ["This year", String(thisYear), String(thisYear)],
+    ["Last 2 years", String(thisYear - 1), String(thisYear)],
+    ["Last 5 years", String(thisYear - 4), String(thisYear)],
+    ["Earlier", "", String(thisYear - 5)],
+  ];
 
   return (
     <div>
@@ -1556,74 +2041,180 @@ function ResumeSearch() {
         </div>
       )}
 
+      {/* ---- toolbar: advanced toggle, applied filters, count, view ---- */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => setAdvanced((a) => !a)}
-                className="text-sm font-semibold text-navy hover:underline">
-          {advanced ? "− Hide advanced search" : "⚙ Advanced search"}
+        <button type="button" onClick={() => setAdvanced((a) => !a)} aria-expanded={advanced}
+                className={`inline-flex items-center gap-2 rounded-full border-[1.5px] px-3.5 py-1.5 text-[13px] font-semibold transition-all
+                  ${advanced || activeFilters > 0
+                    ? "border-navy bg-navy text-white shadow-[0_6px_16px_-6px_rgba(79,70,229,.6)]"
+                    : "border-indigo-100 bg-white text-navy hover:border-navy-200 hover:bg-navy-50"}`}>
+          <IconSliders size={15} /> Advanced search
+          {activeFilters > 0 && (
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1 text-[11px] font-bold text-navy">
+              {activeFilters}
+            </span>
+          )}
+          <IconChevronDown size={14} className={`transition-transform duration-300 ${advanced ? "rotate-180" : ""}`} />
         </button>
-        {activeFilters > 0 && (
-          <>
-            <span className="badge bg-navy-50 text-navy">{activeFilters} filter(s) applied</span>
-            <button type="button" onClick={() => { clearFilters(); }}
-                    className="text-xs font-semibold text-slate-400 hover:text-navy">Clear</button>
-          </>
+
+        {/* applied filters as removable chips */}
+        {filterChips.map(([k, label, clear]) => (
+          <span key={k} className="inline-flex items-center gap-1 rounded-full bg-navy-50 py-1 pl-2.5 pr-1 text-[12px] font-semibold text-navy ring-1 ring-inset ring-navy-100">
+            {label}
+            <button type="button" onClick={clear} aria-label={`Remove ${label}`}
+                    className="flex h-4 w-4 items-center justify-center rounded-full text-navy/60 hover:bg-navy hover:text-white">
+              <IconClose size={10} strokeWidth={3} />
+            </button>
+          </span>
+        ))}
+        {activeFilters > 1 && (
+          <button type="button" onClick={clearFilters}
+                  className="text-xs font-semibold text-slate-400 hover:text-red-500">Clear all</button>
         )}
+
         <div className="flex-1" />
-        <span className="text-xs text-slate-400">{rows.length} candidate(s)</span>
+        {searched && <span className="text-xs text-slate-400">{rows.length} candidate(s)</span>}
         <ViewSwitcher value={view} onChange={setView} />
       </div>
 
-      {advanced && (
-        <div className="card mb-5">
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            <div>
-              <label className="label">Institute</label>
-              <select className="input" value={instituteId}
-                      onChange={(e) => setInstituteId(e.target.value)}>
-                <option value="">Any institute</option>
-                {institutes.map((i) => (
-                  <option key={i.id} value={i.id}>{i.name} ({i.students})</option>
-                ))}
-              </select>
-              <p className="mt-1 text-xs text-slate-400">
-                Candidates registered by that institute.
-              </p>
-            </div>
-            <Combobox label="Education" value={education} options={QUALIFICATIONS}
-                      onChange={setEducation} placeholder="e.g. B.Tech" />
-            <div>
-              <label className="label">Branch</label>
-              <input className="input" value={branch} onChange={(e) => setBranch(e.target.value)}
-                     placeholder="e.g. Mechanical" />
-            </div>
-            <div>
-              <label className="label">Year of passing</label>
-              <div className="flex items-center gap-2">
-                <input className="input" value={yearFrom} inputMode="numeric"
-                       onChange={(e) => setYearFrom(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                       placeholder="From" />
-                <span className="text-xs text-slate-400">to</span>
-                <input className="input" value={yearTo} inputMode="numeric"
-                       onChange={(e) => setYearTo(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                       placeholder="To" />
+      {/* ---- advanced panel: slides open/closed ---- */}
+      <div className={`grid transition-all duration-300 ease-out ${advanced ? "mb-5 grid-rows-[1fr] opacity-100" : "pointer-events-none grid-rows-[0fr] opacity-0"}`}
+           aria-hidden={!advanced}>
+        <div className={advanced ? "overflow-visible" : "overflow-hidden"}>
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-card">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-4">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-navy to-violet-500 text-white shadow-md">
+                <IconSliders size={18} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-heading text-[15px] font-bold text-slate-900">Advanced search</p>
+                <p className="text-[12px] text-slate-500">Narrow down by education, institute, year and score. Results update as you choose.</p>
               </div>
+              <button type="button" onClick={clearFilters} disabled={!activeFilters}
+                      className="btn-outline btn-sm !rounded-full disabled:opacity-40">
+                <IconRefresh size={13} /> Reset
+              </button>
+              <button type="button" onClick={() => setAdvanced(false)} aria-label="Close advanced search"
+                      className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+                <IconClose size={15} />
+              </button>
             </div>
-            <div>
-              <label className="label">Minimum percentage</label>
-              <input className="input" value={minPct} inputMode="decimal"
-                     onChange={(e) => setMinPct(e.target.value.replace(/[^\d.]/g, ""))}
-                     placeholder="e.g. 60" />
+
+            <div className="grid gap-4 p-5 lg:grid-cols-2">
+              {/* Education */}
+              <fieldset className="space-y-3 rounded-xl bg-slate-50/70 p-4 ring-1 ring-inset ring-slate-100">
+                <legend className="sr-only">Education</legend>
+                <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <IconDoc size={13} className="text-navy" /> Education
+                </p>
+                <Combobox label="Qualification" icon={IconDoc} value={education} options={QUALIFICATIONS}
+                          onChange={setEducation} placeholder="e.g. B.Tech, ITI, Diploma" />
+                <FField label="Branch / specialisation" value={branch} onChange={setBranch}
+                        placeholder="e.g. Mechanical" validate={() => null} />
+              </fieldset>
+
+              {/* Institute */}
+              <fieldset className="space-y-3 rounded-xl bg-slate-50/70 p-4 ring-1 ring-inset ring-slate-100">
+                <legend className="sr-only">Institute</legend>
+                <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <IconBuilding size={13} className="text-navy" /> Institute
+                </p>
+                <div>
+                  <label className="label">Registered by</label>
+                  <select className="input" value={instituteId} onChange={(e) => setInstituteId(e.target.value)}>
+                    <option value="">Any institute</option>
+                    {institutes.map((i) => (
+                      <option key={i.id} value={i.id}>{i.name} ({i.students})</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {institutes.slice(0, 4).map((i) => {
+                    const on = String(instituteId) === String(i.id);
+                    return (
+                      <button key={i.id} type="button" onClick={() => setInstituteId(on ? "" : String(i.id))}
+                              className={`max-w-[220px] truncate rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition-colors
+                                ${on ? "bg-navy text-white" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:ring-navy-200"}`}>
+                        {i.name} · {i.students}
+                      </button>
+                    );
+                  })}
+                  {!institutes.length && <p className="text-[12px] text-slate-400">No institute has registered students yet.</p>}
+                </div>
+              </fieldset>
+
+              {/* Year of passing */}
+              <fieldset className="space-y-3 rounded-xl bg-slate-50/70 p-4 ring-1 ring-inset ring-slate-100">
+                <legend className="sr-only">Year of passing</legend>
+                <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <IconChart size={13} className="text-navy" /> Year of passing
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {yearPresets.map(([label, from, to]) => {
+                    const on = yearFrom === from && yearTo === to;
+                    return (
+                      <button key={label} type="button"
+                              onClick={() => { if (on) { setYearFrom(""); setYearTo(""); } else { setYearFrom(from); setYearTo(to); } }}
+                              className={`rounded-full px-3 py-1 text-[12px] font-semibold transition-colors
+                                ${on ? "bg-navy text-white" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:ring-navy-200"}`}>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex items-end gap-2">
+                  <div className="min-w-0 flex-1">
+                    <FField label="From" value={yearFrom} inputMode="numeric" placeholder="2020" clearable={false}
+                            onChange={(v) => setYearFrom(v.replace(/\D/g, "").slice(0, 4))} validate={() => null} />
+                  </div>
+                  <span className="pb-3.5 text-xs font-semibold text-slate-400">to</span>
+                  <div className="min-w-0 flex-1">
+                    <FField label="To" value={yearTo} inputMode="numeric" placeholder={String(thisYear)} clearable={false}
+                            onChange={(v) => setYearTo(v.replace(/\D/g, "").slice(0, 4))} validate={() => null} />
+                  </div>
+                </div>
+              </fieldset>
+
+              {/* Minimum score */}
+              <fieldset className="space-y-3 rounded-xl bg-slate-50/70 p-4 ring-1 ring-inset ring-slate-100">
+                <legend className="sr-only">Minimum percentage</legend>
+                <div className="flex items-center justify-between">
+                  <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    <IconStar size={13} className="text-navy" /> Minimum percentage
+                  </p>
+                  <span className="rounded-full bg-white px-2.5 py-0.5 font-heading text-[13px] font-bold text-navy ring-1 ring-navy-100">
+                    {minPct ? `${minPct}%+` : "Any"}
+                  </span>
+                </div>
+                <input type="range" min="0" max="95" step="5" value={Number(minPct) || 0}
+                       onChange={(e) => setMinPct(e.target.value === "0" ? "" : e.target.value)}
+                       aria-label="Minimum percentage" className="w-full cursor-pointer accent-navy" />
+                <div className="flex flex-wrap gap-1.5">
+                  {["", "50", "60", "70", "80", "90"].map((v) => (
+                    <button key={v || "any"} type="button" onClick={() => setMinPct(v)}
+                            className={`rounded-full px-3 py-1 text-[12px] font-semibold transition-colors
+                              ${minPct === v ? "bg-navy text-white" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:ring-navy-200"}`}>
+                      {v ? `${v}%+` : "Any"}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
             </div>
-          </div>
-          <div className="mt-4 flex items-center gap-2">
-            <p className="text-xs text-slate-400">
-              Results update as you choose — no need to press anything.
-            </p>
-            <div className="flex-1" />
-            <button className="btn-outline btn-sm" onClick={clearFilters}>Reset filters</button>
+
+            <div className="flex flex-wrap items-center gap-3 rounded-b-2xl border-t border-slate-100 bg-slate-50/60 px-5 py-3">
+              <span className="flex items-center gap-1.5 text-[12px] text-slate-500">
+                <span className={`h-2 w-2 rounded-full ${activeFilters ? "animate-pulse bg-brandgreen" : "bg-slate-300"}`} />
+                {activeFilters ? `${activeFilters} filter${activeFilters === 1 ? "" : "s"} applied` : "No filters yet"}
+                {searched && <> · <b className="text-slate-700">{rows.length}</b> match{rows.length === 1 ? "" : "es"}</>}
+              </span>
+              <div className="flex-1" />
+              <button type="button" className="btn btn-sm !rounded-full !px-5" onClick={() => { search(); setAdvanced(false); }}>
+                <IconSearch size={14} /> Show results
+              </button>
+            </div>
           </div>
         </div>
-      )}
+      </div>
 
       {brief && (
         <AIResult title={`Candidate brief — ${brief.name}`} onClose={() => setBrief(null)}>
@@ -1636,9 +2227,19 @@ function ResumeSearch() {
 
       {busy && <p className="text-sm text-slate-400">Searching…</p>}
 
-      {/* Compact is a table, so it renders separately; grid and list share the
-          same card and differ only in how many fit per row. */}
-      {view === "compact" ? (
+      {!searched ? (
+        <div className="flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-navy-50 text-navy">
+            <IconSearch size={24} />
+          </span>
+          <p className="mt-4 font-heading text-[16px] font-bold text-slate-800">Search to see candidates</p>
+          <p className="mt-1 max-w-sm text-[13px] text-slate-500">
+            Type a skill or role, pick a location, or use Advanced search — matching profiles will appear here.
+          </p>
+        </div>
+      ) : view === "compact" ? (
+        /* Compact is a table, so it renders separately; grid and list share
+           the same card and differ only in how many fit per row. */
         <div className="card overflow-hidden !p-0">
           <table className="table">
             <thead><tr><th>Candidate</th><th>Location</th><th>Skills</th><th className="text-right">Actions</th></tr></thead>
@@ -1677,68 +2278,89 @@ function ResumeSearch() {
            3-up at xl, so a single card is ~517px then ~339px. Without the xl
            step the list card would stay wider than the grid card on exactly
            the screens most recruiters use. */
-        ? "grid max-w-lg gap-4 xl:max-w-xs"
-        : "grid gap-4 md:grid-cols-2 xl:grid-cols-3"}>
-        {rows.map((s) => (
-          <div key={s.id} className="card-hover flex flex-col">
-            <div className="flex items-center gap-3">
-              {s.profile_picture_url
-                ? <img src={mediaUrl(s.profile_picture_url)} alt=""
-                       className="h-12 w-12 shrink-0 rounded-full object-cover ring-1 ring-slate-200" />
-                : <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-navy-50 font-bold text-navy">
-                    {(s.first_name || s.email || "?")[0].toUpperCase()}</div>}
-              <div className="min-w-0">
-                <p className="truncate font-bold text-slate-800">
-                  {`${s.first_name || ""} ${s.last_name || ""}`.trim() || s.email}
-                </p>
-                {/* Location is a required tile detail, so it gets its own
-                    line. It used to share one line with the headline via
-                    `headline || location`, which meant every candidate who
-                    had written a headline showed no location at all. */}
-                <p className="truncate text-xs text-slate-500">{s.headline || "—"}</p>
-                <p className="truncate text-[11px] text-slate-400">
-                  {[s.city, s.state].filter(Boolean).join(", ") || s.location || "Location not given"}
-                </p>
-              </div>
-            </div>
+        ? "grid max-w-[231px] gap-3"
+        : "grid grid-cols-[repeat(auto-fill,minmax(198px,1fr))] gap-3.5 xl:grid-cols-[repeat(auto-fill,minmax(209px,231px))]"}>
+        {rows.map((s) => {
+          const name = `${s.first_name || ""} ${s.last_name || ""}`.trim() || s.email;
+          const initials = name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "?";
+          const place = [s.city, s.state].filter(Boolean).join(", ") || s.location;
+          const degrees = (s.education || []).map((e) => e.degree).filter(Boolean);
+          const skills = s.key_skills || [];
+          // "0" / "0 years" means no experience yet — show it as Fresher, not a bare 0.
+          const rawExp = String(s.total_experience ?? "").trim();
+          const exp = /^0*(\.0+)?(\s*(yrs?|years?))?$/i.test(rawExp)
+            ? (rawExp || s.profile_type === "fresher" ? "Fresher" : null)
+            : (/^\d+(\.\d+)?$/.test(rawExp) ? `${rawExp} yrs` : rawExp);
+          return (
+          <div key={s.id}
+               className="group relative flex flex-col items-center rounded-xl border border-slate-200 bg-white px-3.5 pb-3.5 pt-[18px]
+                          text-center shadow-card transition-[transform,box-shadow,border-color] duration-300 ease-[cubic-bezier(.2,.8,.3,1.15)]
+                          will-change-transform hover:z-10 hover:-translate-y-1 hover:scale-[1.06] hover:border-navy-200
+                          hover:shadow-[0_18px_40px_-12px_rgba(79,70,229,.35)]">
             {/* Requirement: some identification for already-viewed profiles.
                 A quiet badge, not a dimmed card — a recruiter often revisits a
-                shortlisted candidate on purpose, and greying those out would
-                read as "dismissed". */}
+                shortlisted candidate on purpose. */}
             {viewedIds.has(s.id) && (
-              <span className="mt-2 inline-flex w-fit items-center gap-1 rounded-full
-                               bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-600">
-                <IconEye size={11} /> Viewed
+              <span className="absolute right-2.5 top-2.5 inline-flex items-center gap-1 rounded-full bg-violet-50
+                               px-1.5 py-0.5 text-[9.5px] font-bold text-violet-600">
+                <IconEye size={10} /> Viewed
               </span>
             )}
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {(s.key_skills || []).slice(0, 5).map((k) => (
-                <span key={k} className="badge bg-slate-100 text-slate-600">{k}</span>
-              ))}
-            </div>
-            <p className="mt-2 flex-1 text-xs text-slate-400">
-              {(s.education || []).map((e) => e.degree).filter(Boolean).join(", ") || "No education listed"}
+
+            {/* round photo, or initials */}
+            {s.profile_picture_url
+              ? <img src={mediaUrl(s.profile_picture_url)} alt=""
+                     className="h-12 w-12 rounded-full object-cover ring-[3px] ring-navy-50" />
+              : <div className="flex h-12 w-12 items-center justify-center rounded-full bg-navy-50 font-heading
+                                text-[16.5px] font-bold text-navy ring-[3px] ring-navy-50/50">
+                  {initials}</div>}
+
+            <button onClick={() => open(s.id, "Viewed")}
+                    className="mt-2 max-w-full truncate font-heading text-[15px] font-bold text-slate-900 hover:text-navy">
+              {name}
+            </button>
+            <p className="max-w-full truncate text-[12px] font-medium text-slate-500">{s.headline || "Open to opportunities"}</p>
+
+            <p className="mt-1 flex max-w-full items-center justify-center gap-1 text-[12px] text-slate-500">
+              <IconMapPin size={12} className="shrink-0 text-navy" />
+              <span className="truncate">{place || "Location not given"}</span>
+              {exp && <><span className="text-slate-300">·</span><span className="shrink-0">{exp}</span></>}
             </p>
-            <div className="mt-3 flex gap-2">
-              <button className="btn-outline btn-sm flex-1" onClick={() => open(s.id, "Viewed")}>
-                <IconEye size={14} /> View resume
-              </button>
+            <p className="max-w-full truncate text-[12px] text-slate-400">
+              {degrees.join(", ") || "No education listed"}
+            </p>
+
+            <div className="mt-2 flex flex-1 flex-wrap content-start justify-center gap-1">
+              {skills.slice(0, 3).map((k) => (
+                <span key={k} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{k}</span>
+              ))}
+              {skills.length > 3 && (
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-400">+{skills.length - 3}</span>
+              )}
+            </div>
+
+            <button className="btn mt-2.5 !gap-1 !rounded-full !px-3.5 !py-1.5 !text-[12px]" onClick={() => open(s.id, "Viewed")}>
+              <IconEye size={13} /> View resume
+            </button>
+            <div className="mt-1.5 flex items-center justify-center gap-3 text-[12px] font-semibold">
               {brief?.id === s.id ? (
-                <button className="btn-outline btn-sm !border-navy !text-navy"
-                        onClick={() => setBrief(null)} title="Hide brief">
-                  Hide brief
-                </button>
+                <button className="text-navy hover:underline" onClick={() => setBrief(null)} title="Hide brief">Hide brief</button>
               ) : (
-                <AIButton path={`/api/ai/candidate/${s.id}/summary`} className="btn-outline btn-sm"
+                <AIButton path={`/api/ai/candidate/${s.id}/summary`}
+                          className="inline-flex items-center gap-1 text-slate-500 hover:text-navy"
                           title="AI brief about this candidate"
-                          onResult={(r) => setBrief({ id: s.id, name: `${s.first_name || ""} ${s.last_name || ""}`.trim() || s.email, data: r })}>
+                          onResult={(r) => setBrief({ id: s.id, name, data: r })}>
                   Brief
                 </AIButton>
               )}
-              <button className="btn-outline btn-sm" onClick={() => message(s.id)}><IconChat size={14} /></button>
+              <button className="inline-flex items-center gap-1 text-slate-500 hover:text-navy"
+                      aria-label={`Message ${name}`} onClick={() => message(s.id)}>
+                <IconChat size={12} /> Message
+              </button>
             </div>
           </div>
-        ))}
+          );
+        })}
         {!busy && rows.length === 0 && <div className="card col-span-full text-center text-slate-400">No matching candidates.</div>}
       </div>
       )}
@@ -2042,6 +2664,7 @@ function PostBanner() {
   const [form, setForm] = useState({ audience: "jobseekers", theme: "navy", autoplay: true, muted: true, priority: 0 });
   const [mine, setMine] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [mediaFile, setMediaFile] = useState(null);
   const [copy, setCopy] = useState(null);
   const [view, setView] = useState("create");
   const [myJobs, setMyJobs] = useState([]);
@@ -2090,7 +2713,8 @@ function PostBanner() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Upload failed");
-      setForm((f) => ({ ...f, media_url: data.url, media_type: data.media_type }));
+      setForm((f) => ({ ...f, media_url: data.url, media_type: data.media_type, video_url: "", _kind: data.media_type }));
+      setMediaFile(file);
       toast(data.message);
     } catch (err) { toast(err.message, "error"); }
     finally { setUploading(false); }
@@ -2148,201 +2772,222 @@ function PostBanner() {
     );
   }
 
+  const kind = form.video_url && !form.media_url ? "link" : (form._kind || form.media_type || "image");
+  const setKind = (k) => setForm((f) => ({ ...f, _kind: k, media_type: k === "link" ? "video" : k === "text" ? "none" : k,
+                                            media_url: "", video_url: k === "link" ? (f.video_url || "") : "" }));
+  const ACCEPT = { image: "image/png,image/jpeg,image/webp", gif: "image/gif", video: "video/mp4,video/webm,video/quicktime,video/*" };
+  const linkOk = !!toEmbedUrl(form.video_url);
+  const previewBanner = {
+    ...form,
+    ad_format: "flyer",
+    company_name: form.company_name,
+    title: form.title || "", text_content: form.text_content || "",
+    media_type: kind === "link" ? "video" : kind === "text" ? "none" : form.media_type,
+    media_url: kind === "link" || kind === "text" ? "" : form.media_url,
+    video_url: kind === "link" && linkOk ? form.video_url : "",
+  };
+
   return (
-    <div className="max-w-5xl">
+    <div className="max-w-6xl">
       <AdTabs view={view} setView={setView} />
-      <h2 className="mb-1 text-xl font-bold text-navy">{form.id ? "Modify the ad" : "Post an ad"}</h2>
-      <p className="mb-5 text-sm text-slate-500">
-        One banner shows per page, chosen so different pages feature different advertisers.
-      </p>
+      <QuotaNotice kind="ads" />
 
-      {/* ---- media picker ---- */}
-      <div className="card mb-4">
-        <h3 className="font-semibold text-slate-700">1. Choose your media</h3>
-        <p className="mt-0.5 text-xs text-slate-400">
-          Upload an image, GIF or video — or paste a video link. Images are optimised to 1080p automatically.
-        </p>
-
-        {/* Audio removed: a banner slot has no audible surface, so an audio ad
-            could never actually play anywhere it is shown. */}
-        <div className="mt-3 grid gap-2 sm:grid-cols-3">
-          {[["image", "🖼️", "Image", "JPG/PNG/WEBP · 8 MB"],
-            ["gif", "🎞️", "GIF", "Animated · 12 MB"],
-            ["video", "🎬", "Video", "MP4/WEBM/MOV · 50 MB"]].map(([k, icon, label, hint]) => (
-            <label key={k}
-              className={`cursor-pointer rounded-xl border-2 p-3 text-center transition-all hover:-translate-y-0.5 ${
-                form.media_type === k ? "border-navy bg-navy-50" : "border-slate-200 hover:border-navy-200"}`}>
-              <input type="file" className="hidden"
-                     accept={k === "image" ? "image/png,image/jpeg,image/webp"
-                             : k === "gif" ? "image/gif"
-                             : "video/mp4,video/webm,video/quicktime,video/*"}
-                     onChange={(e) => uploadMedia(e.target.files?.[0])} />
-              <span className="text-2xl">{icon}</span>
-              <p className={`mt-1 text-[12.5px] font-bold ${form.media_type === k ? "text-navy" : "text-slate-700"}`}>{label}</p>
-              <p className="text-[10px] leading-tight text-slate-400">{hint}</p>
-            </label>
-          ))}
-        </div>
-
-        {/* ---- video by URL ----
-            Hosting a 50 MB MP4 is the expensive way to run a video ad. A link
-            to a video the company already has on YouTube or Vimeo costs
-            nothing and is what most recruiters actually have to hand. */}
-        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
-          <label className="label">…or paste a video link</label>
-          <div className="flex flex-wrap gap-2">
-            <input className="input flex-1" value={form.video_url || ""}
-                   placeholder="YouTube, Vimeo or a direct .mp4 link"
-                   onChange={(e) => setForm({ ...form, video_url: e.target.value })} />
-            <button type="button" className="btn-outline shrink-0"
-                    onClick={() => {
-                      const embed = toEmbedUrl(form.video_url);
-                      if (!embed) return toast("That doesn't look like a YouTube, Vimeo or .mp4 link.", "error");
-                      setForm((f) => ({ ...f, media_type: "video", media_url: "", video_url: f.video_url }));
-                      toast("Video link added — see the preview below.");
-                    }}>
-              Use link
-            </button>
-          </div>
-          <p className="mt-1 text-xs text-slate-400">
-            Nothing is uploaded — the ad embeds the video from where it already lives.
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-navy">Promote</p>
+          <h2 className="mt-1 font-heading text-[26px] font-bold leading-tight text-slate-900">{form.id ? "Modify the ad" : "Post an ad"}</h2>
+          <p className="mt-1 text-[13.5px] text-slate-500">
+            One banner shows per page, chosen so different pages feature different advertisers.
           </p>
         </div>
-
-        {uploading && <p className="mt-2 text-sm text-slate-400">Uploading…</p>}
-
-        {(form.media_url || form.video_url) && (
-          <div className="mt-3 overflow-hidden rounded-xl border border-slate-200">
-            {form.video_url && toEmbedUrl(form.video_url) ? (
-              toEmbedUrl(form.video_url).direct
-                ? <video src={form.video_url} className="h-48 w-full object-cover" controls muted />
-                : <iframe src={toEmbedUrl(form.video_url).src} title="Ad video preview"
-                          className="h-48 w-full" allowFullScreen />
-            ) : form.media_type === "video"
-              ? <video src={mediaUrl(form.media_url)} className="h-48 w-full object-cover" muted autoPlay loop />
-              : <img src={mediaUrl(form.media_url)} alt="" className="h-48 w-full object-cover" />}
-          </div>
+        {form.id && (
+          <button className="btn-outline !rounded-full" onClick={() => { setForm({ audience: "jobseekers", theme: "navy", autoplay: true, muted: true, priority: 0 }); setCopy(null); }}>
+            <IconClose size={14} /> Cancel editing
+          </button>
         )}
       </div>
 
-      {/* ---- copy ---- */}
-      <div className="card mb-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="font-semibold text-slate-700">2. Write your message</h3>
-          {aiOn && (
-            <button className="btn-outline btn-sm" onClick={writeCopy} disabled={aiBusy}>
-              <IconSparkle size={14} /> {aiBusy ? "Writing…" : "Write with AI"}
-            </button>
-          )}
-        </div>
-        <div className="mt-3 grid gap-4 sm:grid-cols-2">
-          {myJobs.length > 0 && (
-            <div className="sm:col-span-2 2xl:col-span-3">
-              <label className="label">Advertise one of your live jobs (optional)</label>
-              <select className="input" value={form.job_id || ""}
-                      onChange={(e) => useJob(e.target.value)}>
-                <option value="">Choose a job — fills the title, message and apply link</option>
-                {myJobs.map((j) => (
-                  <option key={j.id} value={j.id}>
-                    {j.title}{j.location ? ` — ${j.location}` : ""}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-xs text-slate-400">
-                Everything below stays editable; the apply link points at that job.
-              </p>
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="min-w-0 space-y-5">
+          {/* ---- 1. media ---- */}
+          <AdStep n={1} title="Choose your ad type" sub="Images are optimised to 1080p; GIFs and videos keep their animation. Everything fits the slot.">
+            {/* Audio removed: a banner slot has no audible surface. */}
+            <AdTypePicker value={kind} onChange={setKind} types={[
+              ["image", "Image", "JPG, PNG or WEBP · 8 MB"],
+              ["gif", "GIF / animation", "Animated .gif · 12 MB"],
+              ["video", "Video", "MP4, WEBM or MOV · 50 MB"],
+              ["link", "Video link", "YouTube, Vimeo or .mp4"],
+              ["text", "Text banner", "Headline + button, no media"],
+            ]} />
+
+            <div className="mt-5">
+              {kind === "link" ? (
+                <div>
+                  <label className="label">Video link</label>
+                  <input className="input" value={form.video_url || ""} placeholder="YouTube, Vimeo or a direct .mp4 link"
+                         onChange={(e) => setForm({ ...form, video_url: e.target.value, media_url: "", media_type: "video", _kind: "link" })} />
+                  <p className={`mt-1.5 text-xs ${form.video_url && !linkOk ? "font-semibold text-red-500" : linkOk ? "font-semibold text-brandgreen-600" : "text-slate-400"}`}>
+                    {form.video_url && !linkOk ? "That doesn't look like a YouTube, Vimeo or .mp4 link."
+                      : linkOk ? "Link recognised — it plays muted and loops in the ad slot."
+                      : "Nothing is uploaded — the ad embeds the video from where it already lives."}
+                  </p>
+                </div>
+              ) : kind === "text" ? (
+                <p className="rounded-xl bg-slate-50 px-4 py-3 text-[12.5px] text-slate-500">
+                  A text banner uses your colour theme, title, message and button — fill them in below.
+                </p>
+              ) : (
+                <FileDrop
+                  compact
+                  accept={ACCEPT[kind]}
+                  file={form.media_url ? (mediaFile || { name: "Current media", size: 0 }) : null}
+                  busy={uploading}
+                  busyLabel="Uploading…"
+                  onPick={(f) => uploadMedia(f)}
+                  onClear={() => setForm((f) => ({ ...f, media_url: "" }))}
+                  title={kind === "image" ? "Drop your image here, or click to browse"
+                    : kind === "gif" ? "Drop your GIF here, or click to browse"
+                    : "Drop your video here, or click to browse"}
+                  hint={kind === "image" ? "JPG, PNG or WEBP up to 8 MB" : kind === "gif" ? "Animated .gif up to 12 MB" : "MP4, WEBM or MOV up to 50 MB — plays muted on loop"} />
+              )}
             </div>
-          )}
-          <div className="sm:col-span-2 2xl:col-span-3"><label className="label">Banner title</label>
-            <input className="input" value={form.title || ""} onChange={set("title")} placeholder="e.g. Walk-in drive this Sunday" /></div>
-          <div className="sm:col-span-2 2xl:col-span-3"><label className="label">Message</label>
-            <textarea className="input" rows={2} value={form.text_content || ""} onChange={set("text_content")} /></div>
-          <div><label className="label">Button label</label>
-            <input className="input" value={form.cta_label || ""} onChange={set("cta_label")} placeholder="View jobs" /></div>
-          <div><label className="label">Button link</label>
-            <input className="input" value={form.cta_link || ""} onChange={set("cta_link")} placeholder="https://…" /></div>
-        </div>
-        {copy && (
-          <AIResult title="AI copy" onClose={() => setCopy(null)}>
-            <p className="font-semibold text-slate-800">{copy.title}</p>
-            <p className="mt-0.5">{copy.text_content}</p>
-            <button className="btn-green btn-sm mt-3"
-                    onClick={() => { setForm({ ...form, title: copy.title, text_content: copy.text_content, cta_label: copy.cta_label || form.cta_label }); setCopy(null); }}>
-              Use this
-            </button>
-            {(copy.alternatives || []).map((alt, i) => (
-              <div key={i} className="mt-3 border-t border-brandgreen-100 pt-2">
-                <p className="text-[13px] font-semibold text-slate-700">{alt.title}</p>
-                <p className="text-[12.5px] text-slate-600">{alt.text_content}</p>
-                <button className="mt-1 text-xs font-semibold text-navy hover:underline"
-                        onClick={() => setForm({ ...form, title: alt.title, text_content: alt.text_content })}>Use this instead</button>
-              </div>
-            ))}
-          </AIResult>
-        )}
-      </div>
+          </AdStep>
 
-      {/* ---- audience + style ---- */}
-      <div className="card mb-4">
-        <h3 className="font-semibold text-slate-700">3. Audience & style</h3>
-        <div className="mt-3 grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="label">Who sees this?</label>
-            <div className="grid grid-cols-3 gap-2">
-              {[["jobseekers", "Job seekers"], ["recruiters", "Recruiters"], ["all", "Everyone"]].map(([k, l]) => (
-                <button key={k} type="button" onClick={() => setForm({ ...form, audience: k })}
-                  className={`rounded-lg border-2 px-2 py-2 text-[12px] font-semibold transition-all ${
-                    form.audience === k ? "border-navy bg-navy-50 text-navy" : "border-slate-200 text-slate-600 hover:border-navy-200"}`}>
-                  {l}
+          {/* ---- 2. copy ---- */}
+          <AdStep n={2} title="Write your message" sub="Shown over the media at the bottom of the ad."
+                  action={aiOn && (
+                    <button className="btn-outline btn-sm !rounded-full" onClick={writeCopy} disabled={aiBusy}>
+                      <IconSparkle size={14} /> {aiBusy ? "Writing…" : "Write with AI"}
+                    </button>
+                  )}>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {myJobs.length > 0 && (
+                <div className="sm:col-span-2">
+                  <label className="label">Advertise one of your live jobs (optional)</label>
+                  <select className="input" value={form.job_id || ""} onChange={(e) => useJob(e.target.value)}>
+                    <option value="">Choose a job — fills the title, message and apply link</option>
+                    {myJobs.map((j) => (
+                      <option key={j.id} value={j.id}>{j.title}{j.location ? ` — ${j.location}` : ""}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-slate-400">Everything below stays editable; the apply link points at that job.</p>
+                </div>
+              )}
+              <div className="sm:col-span-2"><label className="label">Banner title <span className="text-red-400">*</span></label>
+                <input className="input" value={form.title || ""} onChange={set("title")} placeholder="e.g. Walk-in drive this Sunday" /></div>
+              <div className="sm:col-span-2"><label className="label">Message</label>
+                <textarea className="input" rows={2} value={form.text_content || ""} onChange={set("text_content")}
+                          placeholder="e.g. 50 openings for delivery partners in Hyderabad" /></div>
+              <div><label className="label">Button label</label>
+                <input className="input" value={form.cta_label || ""} onChange={set("cta_label")} placeholder="Apply now" /></div>
+              <div><label className="label">Button link</label>
+                <input className="input" value={form.cta_link || ""} onChange={set("cta_link")} placeholder="https://…" /></div>
+            </div>
+            {copy && (
+              <AIResult title="AI copy" onClose={() => setCopy(null)}>
+                <p className="font-semibold text-slate-800">{copy.title}</p>
+                <p className="mt-0.5">{copy.text_content}</p>
+                <button className="btn-green btn-sm mt-3"
+                        onClick={() => { setForm({ ...form, title: copy.title, text_content: copy.text_content, cta_label: copy.cta_label || form.cta_label }); setCopy(null); }}>
+                  Use this
                 </button>
-              ))}
-            </div>
-            {form.audience !== "recruiters" && (
-              <p className="mt-1.5 text-xs text-brandgreen-600">Shows on every job-seeker page.</p>
+                {(copy.alternatives || []).map((alt, i) => (
+                  <div key={i} className="mt-3 border-t border-brandgreen-100 pt-2">
+                    <p className="text-[13px] font-semibold text-slate-700">{alt.title}</p>
+                    <p className="text-[12.5px] text-slate-600">{alt.text_content}</p>
+                    <button className="mt-1 text-xs font-semibold text-navy hover:underline"
+                            onClick={() => setForm({ ...form, title: alt.title, text_content: alt.text_content })}>Use this instead</button>
+                  </div>
+                ))}
+              </AIResult>
             )}
-          </div>
-          <div>
-            <label className="label">Colour theme</label>
-            <div className="flex gap-2">
-              {Object.keys(THEME_SWATCH).map((t) => (
-                <button key={t} type="button" onClick={() => setForm({ ...form, theme: t })}
-                  className={`h-9 w-9 rounded-lg ${THEME_SWATCH[t]} ring-offset-2 transition-all ${
-                    form.theme === t ? "ring-2 ring-navy" : ""}`} aria-label={t} />
-              ))}
+          </AdStep>
+
+          {/* ---- 3. audience + style ---- */}
+          <AdStep n={3} title="Audience, style & schedule">
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div>
+                <label className="label">Who sees this?</label>
+                <div className="inline-flex w-full rounded-full bg-slate-100 p-1 ring-1 ring-inset ring-slate-200/70">
+                  {[["jobseekers", "Job seekers"], ["recruiters", "Recruiters"], ["all", "Everyone"]].map(([k, l]) => (
+                    <button key={k} type="button" onClick={() => setForm({ ...form, audience: k })}
+                      className={`flex-1 rounded-full px-2 py-1.5 text-[12.5px] font-semibold transition-all focus:outline-none ${
+                        form.audience === k ? "bg-white text-navy shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+                {form.audience !== "recruiters" && (
+                  <p className="mt-1.5 text-xs text-brandgreen-600">Shows on every job-seeker page.</p>
+                )}
+              </div>
+              <div>
+                <label className="label">Colour theme</label>
+                <div className="flex gap-2">
+                  {Object.keys(THEME_SWATCH).map((t) => (
+                    <button key={t} type="button" onClick={() => setForm({ ...form, theme: t })}
+                      className={`h-9 w-9 rounded-full ${THEME_SWATCH[t]} ring-offset-2 transition-all hover:scale-110 ${
+                        form.theme === t ? "ring-2 ring-navy" : ""}`} aria-label={t} />
+                  ))}
+                </div>
+              </div>
+              <div><label className="label">Start date</label><input className="input" type="date" value={form.start_date || ""} onChange={set("start_date")} /></div>
+              <div><label className="label">End date</label><input className="input" type="date" value={form.end_date || ""} onChange={set("end_date")} /></div>
+              {(kind === "video" || kind === "link") && (
+                <div className="flex gap-5 sm:col-span-2">
+                  <label className="flex items-center gap-2 text-sm text-slate-600">
+                    <input type="checkbox" className="accent-navy" checked={!!form.autoplay} onChange={(e) => setForm({ ...form, autoplay: e.target.checked })} /> Autoplay
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-600">
+                    <input type="checkbox" className="accent-navy" checked={!!form.muted} onChange={(e) => setForm({ ...form, muted: e.target.checked })} /> Start muted
+                  </label>
+                </div>
+              )}
             </div>
-          </div>
-          <div><label className="label">Start date</label><input className="input" type="date" value={form.start_date || ""} onChange={set("start_date")} /></div>
-          <div><label className="label">End date</label><input className="input" type="date" value={form.end_date || ""} onChange={set("end_date")} /></div>
-          {form.media_type === "video" && (
-            <div className="flex gap-4 sm:col-span-2">
-              <label className="flex items-center gap-2 text-sm text-slate-600">
-                <input type="checkbox" checked={!!form.autoplay} onChange={(e) => setForm({ ...form, autoplay: e.target.checked })} /> Autoplay
-              </label>
-              <label className="flex items-center gap-2 text-sm text-slate-600">
-                <input type="checkbox" checked={!!form.muted} onChange={(e) => setForm({ ...form, muted: e.target.checked })} /> Start muted
-              </label>
+            <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-5">
+              <button className="btn !rounded-full !px-7 shadow-[0_8px_20px_-8px_rgba(79,70,229,.7)]" onClick={submit}>
+                <IconSparkle size={15} /> {form.id ? "Save changes" : "Publish banner"}
+              </button>
+              <span className="text-[12px] text-slate-400">
+                {!form.title?.trim() ? "Add a banner title to publish." : "Ready to publish."}
+              </span>
             </div>
-          )}
+          </AdStep>
         </div>
-        <button className="btn mt-4 w-full" onClick={submit}>Publish banner</button>
+
+        <aside className="xl:sticky xl:top-4">
+          <AdPreview banner={previewBanner}
+                     where={form.audience === "recruiters" ? ["Recruiter dashboard"]
+                       : form.audience === "all" ? ["Job seeker pages", "Recruiter dashboard", "Mobile app"]
+                       : ["Job seeker pages", "Mobile app"]}
+                     note="Images, GIFs and videos fill the frame edge to edge on every screen — anything outside it is trimmed evenly." />
+        </aside>
       </div>
 
       {/* ---- live banners ---- */}
       {mine.length > 0 && (
-        <div className="card">
-          <h3 className="mb-3 font-semibold text-slate-700">Your banners</h3>
-          <div className="space-y-2">
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="font-heading text-[16px] font-bold text-slate-900">Your banners</h3>
+            <button className="text-[12.5px] font-semibold text-navy hover:underline" onClick={() => setView("manage")}>Manage all →</button>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {mine.map((b) => (
-              <div key={b.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
-                <div className="min-w-0">
-                  <p className="truncate text-[13.5px] font-semibold text-slate-800">{b.title}</p>
-                  <p className="text-xs text-slate-400">
-                    {b.media_type} · {b.audience} · {b.impressions} views · {b.clicks} clicks
-                  </p>
+              <div key={b.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white transition-all hover:-translate-y-0.5 hover:shadow-card">
+                <div className={`relative ${adHasVisual(b) ? "bg-slate-900" : `bg-gradient-to-br ${AD_THEMES[b.theme]?.grad || AD_THEMES.navy.grad}`}`} style={{ aspectRatio: "3 / 1" }}>
+                  {adHasVisual(b) ? <AdMedia banner={b} /> : (
+                    <div className="flex h-full items-center px-3 text-[12px] font-bold text-white">{b.title}</div>
+                  )}
+                  <span className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${b.status === "active" ? "bg-brandgreen text-white" : "bg-white/90 text-slate-500"}`}>
+                    {b.status === "active" ? "Live" : "Paused"}
+                  </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className={`badge ${b.status === "active" ? "bg-brandgreen-50 text-brandgreen-600" : "bg-slate-100 text-slate-500"}`}>{b.status}</span>
-                  <button className="btn-outline btn-sm" onClick={() => toggleStatus(b)}>
+                <div className="flex items-center gap-3 p-3.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13.5px] font-semibold text-slate-800">{b.title}</p>
+                    <p className="text-[11.5px] capitalize text-slate-400">{b.video_url ? "video link" : b.media_type} · {b.audience} · {b.impressions} views · {b.clicks} clicks</p>
+                  </div>
+                  <button className="btn-outline btn-sm !rounded-full" onClick={() => toggleStatus(b)}>
                     {b.status === "active" ? "Pause" : "Resume"}
                   </button>
                 </div>
@@ -2356,15 +3001,15 @@ function PostBanner() {
 }
 
 const Row = ({ k, v, link }) => (
-  <div className="min-w-0 border-b border-slate-100 pb-2 last:border-0">
-    <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{k}</dt>
-    <dd className="mt-0.5 truncate text-sm text-slate-700" title={v || undefined}>
+  <div className="min-w-0">
+    <dt className="text-[11.5px] font-medium text-slate-400">{k}</dt>
+    <dd className="mt-0.5 truncate text-[14px] font-semibold text-slate-800" title={v || undefined}>
       {v
         ? (link
             ? <a href={/^https?:/.test(link) ? link : `https://${link}`} target="_blank" rel="noopener noreferrer"
                  className="text-navy hover:underline">{v}</a>
             : v)
-        : <span className="text-slate-300">—</span>}
+        : <span className="font-normal text-slate-300">Not added</span>}
     </dd>
   </div>
 );
@@ -2374,11 +3019,13 @@ const Loading = () => <p className="text-slate-400">Loading…</p>;
 
 function AdTabs({ view, setView }) {
   return (
-    <div className="mb-4 flex gap-1.5 rounded-xl bg-slate-100 p-1.5">
-      {[["create", "Post an ad"], ["manage", "Manage ads"], ["performance", "Performance"]].map(([k, l]) => (
+    <div className="mb-6 flex gap-1 border-b border-slate-200">
+      {[["create", "Post an ad", IconSparkle], ["manage", "Manage ads", IconLayers], ["performance", "Performance", IconChart]].map(([k, l, Ic]) => (
         <button key={k} onClick={() => setView(k)}
-          className={`flex-1 rounded-lg px-3 py-2 text-[13px] font-semibold transition-all ${
-            view === k ? "bg-white text-navy shadow-sm" : "text-slate-500 hover:text-navy"}`}>{l}</button>
+          className={`-mb-px flex items-center gap-2 border-b-[2.5px] px-4 pb-3 pt-1 text-[13.5px] font-semibold transition-colors focus:outline-none ${
+            view === k ? "border-navy text-navy" : "border-transparent text-slate-500 hover:text-navy"}`}>
+          <Ic size={15} /> {l}
+        </button>
       ))}
     </div>
   );
@@ -2440,8 +3087,10 @@ function ManageAds({ onEdit }) {
                         hover:-translate-y-0.5 hover:border-navy-200 hover:shadow-cardhover">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex min-w-0 gap-3">
-              {b.media_url && b.media_type !== "audio" && (
-                <img src={mediaUrl(b.media_url)} alt="" className="h-14 w-20 shrink-0 rounded-lg object-cover ring-1 ring-slate-200" />
+              {adHasVisual(b) && (
+                <div className="h-14 w-[168px] shrink-0 overflow-hidden rounded-lg bg-slate-900 ring-1 ring-slate-200">
+                  <AdMedia banner={b} />
+                </div>
               )}
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">

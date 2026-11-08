@@ -50,7 +50,7 @@ export function ChangePassword() {
     try {
       await api.post("/api/auth/change-password", { old_password: oldPw || null, new_password: newPw });
       confirm("Password changed successfully", { message: "Please sign in again with your new password." });
-      logout(); navigate("/login");
+      navigate(logout());
     } catch (err) { toast(err.message, "error"); }
   };
 

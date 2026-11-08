@@ -35,15 +35,15 @@ const WEBSITE_RE = /^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}(\/\S*)?$/i;
 const GST_RE = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/i;
 const PAN_RE = /^[A-Z]{5}\d{4}[A-Z]$/i;
 
-function iconFor(label = "") {
+export function iconFor(label = "") {
   const l = label.toLowerCase();
   if (/mail/.test(l)) return IconMail;
   if (/land line|phone|mobile/.test(l)) return IconPhone;
   if (/website/.test(l)) return IconGlobe;
-  if (/institute name/.test(l)) return IconBuilding;
+  if (/institute name|campus/.test(l)) return IconBuilding;
   if (/organisation/.test(l)) return IconBriefcase;
   // Numbers first: "capacity" contains "city".
-  if (/pincode|capacity|strength/.test(l)) return IconHash;
+  if (/pincode|capacity|strength|seats/.test(l)) return IconHash;
   if (/address|district|city|state|country/.test(l)) return IconMapPin;
   if (/gst|pan/.test(l)) return IconShield;
   if (/designation/.test(l)) return IconBriefcase;
@@ -64,7 +64,7 @@ function validatorFor(label = "") {
   return null;
 }
 
-function FField({ label, validate, ...rest }) {
+export function FField({ label, validate, ...rest }) {
   return <RegInput label={label} icon={iconFor(label)} validate={validate || validatorFor(label)} {...rest} />;
 }
 const Combobox = (p) => <BaseCombobox variant="reg" icon={IconMapPin} {...p} />;

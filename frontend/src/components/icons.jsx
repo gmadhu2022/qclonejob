@@ -43,3 +43,4 @@ export const IconHash = (p) => <S {...p}><path d="M5 9h14M5 15h14M10 3L8 21M16 3
 export const IconUsers = (p) => <S {...p}><circle cx="9" cy="8" r="3.5" /><path d="M2 20c0-3.5 3-5.5 7-5.5s7 2 7 5.5" /><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.8c2 .7 3.5 2.4 3.5 5.2" /></S>;
 export const IconEyeOff = (p) => <S {...p}><path d="M3 3l18 18" /><path d="M10.6 5.1A10.7 10.7 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7a9.9 9.9 0 0 0 5.4-1.6" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></S>;
 export const IconChevronDown = (p) => <S {...p}><path d="M6 9l6 6 6-6" /></S>;
+export const IconSliders = (p) => <S {...p}><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0" /><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12" r="2" /><circle cx="18" cy="18" r="2" /></S>;

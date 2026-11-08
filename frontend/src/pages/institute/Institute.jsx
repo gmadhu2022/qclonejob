@@ -5,14 +5,20 @@ import { DashboardLayout, useToast } from "../../components/ui";
 import { useDialog, useConfirm } from "../../components/Dialog";
 import { useAuth } from "../../context/AuthContext";
 import { IconBuilding, IconUpload, IconChart, IconSparkle, IconEdit, IconClose,
-         IconCheck, IconDownload, IconLayers, IconUser, IconTrend } from "../../components/icons";
+         IconCheck, IconDownload, IconLayers, IconUser, IconTrend, IconMapPin, IconGlobe,
+         IconUsers, IconMail, IconPhone, IconDoc, IconChat } from "../../components/icons";
+import { AdTypePicker, AdStep, AdPreview } from "../../components/AdKit";
+import { AdMedia, adHasVisual, toEmbedUrl } from "../../components/BannerSlot";
+import { GreetingHero, CustomiseMenu, useDashPrefs, StatTile, TONES, ProfHead,
+         ProfileStrength, ProfileCover } from "../../components/DashboardKit";
 import Chat from "../../components/Chat";
 import ImageUpload from "../../components/ImageUpload";
 import FileDrop from "../../components/FileDrop";
 import RichText, { Markdown } from "../../components/RichText";
 import PhoneField from "../../components/PhoneField";
+import { FField, iconFor } from "../../components/RegistrationForm";
 import PostJobForm from "../../components/PostJobForm";
-import { SwitchableChart, NoData } from "../../components/charts";
+import { SwitchableChart, NoData, AnalyticsPanel } from "../../components/charts";
 import { Combobox } from "../../components/fields";
 import { CITIES, STATES, COURSES } from "../../lib/options";
 
@@ -55,9 +61,18 @@ export default function Institute() {
    Dashboard — course-wise capacity and strength, placements, and the
    year / course / gender split of the students actually uploaded.
    ===================================================================== */
+const INST_WIDGETS = [
+  ["kpis", "Key numbers"],
+  ["courses", "Courses — seats and strength"],
+  ["utilisation", "Seat utilisation & placements"],
+  ["students", "Students online charts"],
+  ["upload", "Last data upload"],
+];
+
 function Dashboard() {
   const [d, setD] = useState(null);
   const [openCourse, setOpenCourse] = useState(null);
+  const [prefs, toggle, resetPrefs] = useDashPrefs("qcj.institute.dashboard.v1", INST_WIDGETS);
 
   useEffect(() => { api.get("/api/institute/summary").then(setD).catch(() => {}); }, []);
   if (!d) return <DashboardSkeleton />;
@@ -76,193 +91,240 @@ function Dashboard() {
     { label: "Yet to apply", value: Math.max(0, d.students_total - d.applications) },
   ];
 
+  const show = (k) => prefs[k] !== false;
+  const pendingCourses = (d.courses_incomplete || []).length;
+  const line = pendingCourses
+    ? `${pendingCourses} course${pendingCourses === 1 ? " needs" : "s need"} a student strength — fill it in to keep totals right.`
+    : d.students_total
+      ? `${d.students_total} student${d.students_total === 1 ? " is" : "s are"} online · ${d.placement_rate}% placed so far.`
+      : "Upload your student sheet to put every student in front of employers.";
+
   return (
     <div className="max-w-6xl space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-            Dashboard
-          </p>
-          <h2 className="mt-0.5 truncate text-2xl font-extrabold text-navy">{i.name}</h2>
-          <p className="text-sm text-slate-500">
-            {[i.city, i.state, i.pincode].filter(Boolean).join(", ") || "Location not set"}
-          </p>
-        </div>
-        {/* Only render the status chip when there IS a status. It used to fall
-            through to the red style with empty text, painting a stray pink
-            dash in the corner of every admin-created institute's dashboard. */}
-        {i.approval_status && (
-          <span className={`badge capitalize ${
+      {/* ---- greeting hero ---- */}
+      <GreetingHero
+        name={i.name}
+        line={line}
+        badge={i.approval_status && (
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
             i.approval_status === "approved" ? "bg-brandgreen-50 text-brandgreen-600"
-            : i.approval_status === "pending" ? "bg-amber-100 text-amber-700"
-            : "bg-red-100 text-red-700"}`}>
+            : i.approval_status === "pending" ? "bg-amber-50 text-amber-700"
+            : "bg-red-50 text-red-700"}`}>
             {i.approval_status}
           </span>
         )}
+        actions={<>
+          <Link to="/institute/profile" className="btn-outline !rounded-full !px-4">
+            <IconBuilding size={15} /> Profile
+          </Link>
+          <Link to="/institute/upload" className="btn !rounded-full !px-5 shadow-[0_8px_20px_-8px_rgba(79,70,229,.7)]">
+            <IconUpload size={15} /> Upload students
+          </Link>
+          <CustomiseMenu widgets={INST_WIDGETS} prefs={prefs} toggle={toggle} reset={resetPrefs} />
+        </>}
+        strip={[
+          ["Courses", d.courses_count ?? 0, "bg-navy"],
+          ["Students online", d.students_total ?? 0, "bg-blue-500"],
+          ["Placed", d.placed ?? 0, "bg-brandgreen"],
+          ["Location", [i.city, i.state].filter(Boolean).join(", ") || "Not set", "bg-violet-500"],
+        ]}
+      />
+
+      {/* ---- quick links ---- */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {[["/institute/profile", IconBuilding, "Institute profile", "Logo, address, courses and campuses.", "navy"],
+          ["/institute/upload", IconUpload, "Data upload", "Add students from one sheet — each gets a login.", "green"],
+          ["/institute/post-ad", IconSparkle, "Post a Ad", "Promote admissions or a placement drive.", "amber"],
+          ["/institute/messages", IconChat, "Messages", "Conversations with recruiters.", "violet"]].map(([to, Ic, t, b, tone]) => (
+          <Link key={to} to={to}
+                className="group flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 transition-all hover:-translate-y-0.5 hover:border-navy-200 hover:shadow-card">
+            <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${TONES[tone].ring}`}><Ic size={18} /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold text-slate-800 group-hover:text-navy">{t}</span>
+              <span className="mt-0.5 block text-[12px] leading-snug text-slate-500">{b}</span>
+            </span>
+            <span className="mt-1 text-slate-300 transition-all group-hover:translate-x-0.5 group-hover:text-navy">→</span>
+          </Link>
+        ))}
       </div>
 
       {/* Requirement 43 surfaced where the wrong number is actually read.
           A blank strength makes the totals below quietly too low, so say so
           here rather than leaving the institute to work it out. */}
-      {(d.courses_incomplete || []).length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-200
-                        bg-amber-50/60 p-4">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full
-                           bg-amber-100 text-sm font-extrabold text-amber-700">
-            !
-          </span>
+      {pendingCourses > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 font-heading text-base font-bold text-amber-700">!</span>
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-bold text-amber-900">
-              {d.courses_incomplete.length} course(s) have no student strength yet
+            <h3 className="font-heading text-[14px] font-bold text-amber-900">
+              {pendingCourses} course(s) have no student strength yet
             </h3>
-            <p className="mt-0.5 text-sm text-amber-700">
+            <p className="mt-0.5 text-[13px] text-amber-700">
               {d.courses_incomplete.slice(0, 3).map((c) => `${c.course} (${c.location})`).join(", ")}
-              {d.courses_incomplete.length > 3 && ` and ${d.courses_incomplete.length - 3} more`}.
+              {pendingCourses > 3 && ` and ${pendingCourses - 3} more`}.
               Current strength below is lower than your real figure until these are filled in.
             </p>
           </div>
-          <Link to="/institute/profile" className="btn-outline btn-sm shrink-0">Fill them in</Link>
+          <Link to="/institute/profile" className="btn btn-sm !rounded-full !px-4 shrink-0">Fill them in</Link>
         </div>
       )}
 
       {/* Requirements 21-24 as headline numbers. */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Kpi label="Courses" value={d.courses_count} icon={IconLayers} />
-        <Kpi label="Seats capacity" value={d.seats_total} icon={IconChart} />
-        <Kpi label="Current strength" value={d.strength_total} icon={IconUser}
-             sub={d.seats_total ? `${Math.round(100 * d.strength_total / d.seats_total)}% of capacity` : null} />
-        <Kpi label="Students uploaded" value={d.students_total} icon={IconUpload} />
-        <Kpi label="Students placed" value={d.placed} icon={IconCheck} tone="green" />
-        <Kpi label="Placement rate" value={`${d.placement_rate}%`} icon={IconTrend} tone="green" />
-      </div>
-
-      {/* Requirements 21-23 — course wise seats capacity and current strength. */}
-      <div className="card">
-        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="font-bold text-slate-700">Courses — seats and strength</h3>
-          <span className="text-xs text-slate-400">
-            Click a course to see it split by campus
-          </span>
-        </div>
-        {courses.length === 0 ? (
-          <EmptyState
-            icon={IconLayers}
-            title="No courses yet"
-            body="Add your courses with their seat counts, and this table fills in with capacity and strength for each one."
-            action={{ to: "/institute/profile", label: "Add courses" }} />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Course</th>
-                  <th className="w-28 whitespace-nowrap text-right">Seats</th>
-                  <th className="w-28 whitespace-nowrap text-right">Strength</th>
-                  <th className="w-24 whitespace-nowrap text-right">Vacant</th>
-                  <th className="w-44">Filled</th>
-                </tr>
-              </thead>
-              <tbody>
-                {courses.map((c) => (
-                  /* Fragment needs the key: the course row and its per-campus
-                     rows are siblings in one list, so React has to be told
-                     which pair belongs to which course. */
-                  <Fragment key={c.label}>
-                    <tr className="cursor-pointer hover:bg-slate-50"
-                        onClick={() => setOpenCourse(openCourse === c.label ? null : c.label)}>
-                      <td className="font-semibold text-slate-700">{c.label}</td>
-                      <td className="text-right">{c.seats}</td>
-                      <td className="text-right text-navy">{c.strength}</td>
-                      <td className="text-right text-amber-600">{c.vacant}</td>
-                      <td>
-                        <div className="flex items-center gap-2">
-                          <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
-                            <div className="h-full rounded-full bg-brandgreen"
-                                 style={{ width: `${Math.min(100, c.fill_rate)}%` }} />
-                          </div>
-                          <span className="w-11 text-right text-[11px] font-semibold text-slate-500">
-                            {c.fill_rate}%
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
-                    {openCourse === c.label && (c.locations || []).map((l, n) => (
-                      <tr key={`${c.label}-${n}`} className="bg-slate-50/70 text-[13px]">
-                        <td className="pl-8 text-slate-500">
-                          {l.location}{l.pincode ? ` · ${l.pincode}` : ""}
-                        </td>
-                        <td className="text-right text-slate-500">{l.seats}</td>
-                        <td className="text-right text-slate-500">{l.strength}</td>
-                        <td className="text-right text-slate-400">
-                          {Math.max(0, l.seats - l.strength)}
-                        </td>
-                        <td />
-                      </tr>
-                    ))}
-                  </Fragment>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-slate-200 font-bold text-navy">
-                  <td>Total</td>
-                  <td className="text-right">{d.seats_total}</td>
-                  <td className="text-right">{d.strength_total}</td>
-                  <td className="text-right">{vacant}</td>
-                  <td />
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
-      </div>
-
-      <div className="grid gap-5 lg:grid-cols-2">
-        <SwitchableChart title="Seat utilisation"
-                         subtitle="Across every course and campus"
-                         data={capacitySplit} />
-        <SwitchableChart title="Placement breakdown"
-                         subtitle="Where your students are in the process"
-                         data={placementSplit} />
-      </div>
-
-      {/* Requirement 25 — students on the platform, by year, course and gender. */}
-      <div className="card">
-        <h3 className="font-bold text-slate-700">Students online</h3>
-        <p className="mt-1 text-sm text-slate-500">
-          The {d.students_total} student record(s) uploaded from your sheets, grouped three
-          ways. Blank cells in a sheet show as “Not given”.
-        </p>
-      </div>
-
-      {d.students_total === 0 ? (
-        <div className="card">
-          <EmptyState
-            icon={IconUpload}
-            title="No student data yet"
-            body="Upload a sheet of your students and these charts break them down by year of passing, course and gender."
-            action={{ to: "/institute/upload", label: "Go to Data upload" }} />
-        </div>
-      ) : (
-        <div className="grid gap-5 lg:grid-cols-3">
-          <SwitchableChart title="Year wise" subtitle="By year of passing"
-                           data={d.by_year || []}
-                           types={["bar", "hbar", "stacked", "pie", "donut"]} />
-          <SwitchableChart title="Course wise" subtitle="From the uploaded records"
-                           data={d.by_course || []}
-                           types={["hbar", "bar", "pie", "donut"]} />
-          <SwitchableChart title="Gender wise" subtitle="From the uploaded records"
-                           data={d.by_gender || []}
-                           types={["donut", "pie", "bar", "radial"]} />
+      {show("kpis") && (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <StatTile label="Courses" value={d.courses_count} icon={IconLayers} tone="navy" />
+          <StatTile label="Seats capacity" value={d.seats_total} icon={IconChart} tone="blue" />
+          <StatTile label="Current strength" value={d.strength_total} icon={IconUser} tone="violet"
+                    hint={d.seats_total ? `${Math.round(100 * d.strength_total / d.seats_total)}% of capacity` : null} />
+          <StatTile label="Students uploaded" value={d.students_total} icon={IconUpload} tone="amber" />
+          <StatTile label="Students placed" value={d.placed} icon={IconCheck} tone="green" />
+          <StatTile label="Placement rate" value={`${d.placement_rate}%`} icon={IconTrend} tone="green" />
         </div>
       )}
 
-      {d.last_upload && (
-        <div className="card">
-          <h3 className="font-semibold text-slate-700">Last data upload</h3>
-          <p className="mt-1 text-sm text-slate-600">
-            <b>{d.last_upload.filename}</b> · {d.last_upload.created} student(s) created ·{" "}
-            {new Date(d.last_upload.uploaded_at).toLocaleString()}
-          </p>
+      {/* Requirements 21-23 — course wise seats capacity and current strength. */}
+      {show("courses") && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+          <ProfHead icon={IconLayers} title="Courses — seats and strength"
+                    action={<span className="text-[12px] text-slate-400">Click a course to see it split by campus</span>} />
+          <div className="mt-4">
+            {courses.length === 0 ? (
+              <EmptyState
+                icon={IconLayers}
+                title="No courses yet"
+                body="Add your courses with their seat counts, and this table fills in with capacity and strength for each one."
+                action={{ to: "/institute/profile", label: "Add courses" }} />
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-slate-100">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Course</th>
+                      <th className="w-28 whitespace-nowrap text-right">Seats</th>
+                      <th className="w-28 whitespace-nowrap text-right">Strength</th>
+                      <th className="w-24 whitespace-nowrap text-right">Vacant</th>
+                      <th className="w-44">Filled</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {courses.map((c) => (
+                      /* Fragment needs the key: the course row and its per-campus
+                         rows are siblings in one list. */
+                      <Fragment key={c.label}>
+                        <tr className="cursor-pointer hover:bg-navy-50/40"
+                            onClick={() => setOpenCourse(openCourse === c.label ? null : c.label)}>
+                          <td className="font-semibold text-slate-800">
+                            <span className={`mr-1.5 inline-block text-[10px] text-slate-400 transition-transform ${openCourse === c.label ? "rotate-90" : ""}`}>▶</span>
+                            {c.label}
+                          </td>
+                          <td className="text-right tabular-nums">{c.seats}</td>
+                          <td className="text-right font-semibold tabular-nums text-navy">{c.strength}</td>
+                          <td className="text-right tabular-nums text-amber-600">{c.vacant}</td>
+                          <td>
+                            <div className="flex items-center gap-2">
+                              <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+                                <div className="h-full rounded-full bg-gradient-to-r from-brandgreen to-emerald-400"
+                                     style={{ width: `${Math.min(100, c.fill_rate)}%` }} />
+                              </div>
+                              <span className="w-11 text-right text-[11px] font-semibold text-slate-500">{c.fill_rate}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                        {openCourse === c.label && (c.locations || []).map((l, n) => (
+                          <tr key={`${c.label}-${n}`} className="bg-slate-50/70 text-[13px]">
+                            <td className="pl-9 text-slate-500">{l.location}{l.pincode ? ` · ${l.pincode}` : ""}</td>
+                            <td className="text-right text-slate-500">{l.seats}</td>
+                            <td className="text-right text-slate-500">{l.strength}</td>
+                            <td className="text-right text-slate-400">{Math.max(0, l.seats - l.strength)}</td>
+                            <td />
+                          </tr>
+                        ))}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-slate-200 font-bold text-slate-900">
+                      <td>Total</td>
+                      <td className="text-right tabular-nums">{d.seats_total}</td>
+                      <td className="text-right tabular-nums text-navy">{d.strength_total}</td>
+                      <td className="text-right tabular-nums">{vacant}</td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {(show("utilisation") || show("students")) && (
+      <AnalyticsPanel>
+      {show("utilisation") && (
+        <div className="grid gap-5 lg:grid-cols-2">
+          <SwitchableChart title="Seat utilisation" subtitle="Across every course and campus" data={capacitySplit}
+                           types={["donut", "stacked", "bar"]} />
+          <SwitchableChart title="Placement breakdown" subtitle="Where your students are in the process" data={placementSplit}
+                           types={["semi", "funnel", "donut"]} />
+        </div>
+      )}
+
+      {/* Requirement 25 — students on the platform, by year, course and gender. */}
+      {show("students") && (
+        <div className="space-y-4">
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-navy via-indigo-500 to-violet-500 p-5 text-white shadow-[0_18px_40px_-24px_rgba(79,70,229,.8)]">
+            <div aria-hidden="true" className="pointer-events-none absolute -right-10 -top-16 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
+            <div aria-hidden="true" className="pointer-events-none absolute bottom-0 right-6 flex items-end gap-1.5 opacity-25">
+              {[22, 38, 30, 52, 44, 64].map((h, i) => <span key={i} className="w-2.5 rounded-t bg-white" style={{ height: h }} />)}
+            </div>
+            <div className="relative flex items-center gap-2.5">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/25"><IconUser size={16} /></span>
+              <h3 className="font-heading text-[16px] font-bold">Students online</h3>
+            </div>
+            <p className="relative mt-2 max-w-2xl text-[13px] text-white/80">
+              The {d.students_total} student record(s) uploaded from your sheets, grouped three
+              ways. Blank cells in a sheet show as “Not given”.
+            </p>
+          </div>
+          {d.students_total === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <EmptyState
+                icon={IconUpload}
+                title="No student data yet"
+                body="Upload a sheet of your students and these charts break them down by year of passing, course and gender."
+                action={{ to: "/institute/upload", label: "Go to Data upload" }} />
+            </div>
+          ) : (
+            <div className="grid gap-5 lg:grid-cols-3">
+              <SwitchableChart title="Year wise" subtitle="By year of passing" data={d.by_year || []}
+                               types={["bar", "area", "line"]} />
+              <SwitchableChart title="Course wise" subtitle="From the uploaded records" data={d.by_course || []}
+                               types={["hbar", "treemap", "donut"]} />
+              <SwitchableChart title="Gender wise" subtitle="From the uploaded records" data={d.by_gender || []}
+                               types={["donut", "waffle", "pie"]} />
+            </div>
+          )}
+        </div>
+      )}
+      </AnalyticsPanel>
+      )}
+
+      {show("upload") && d.last_upload && (
+        <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brandgreen-50 text-brandgreen-600"><IconUpload size={18} /></span>
+          <div className="min-w-0 flex-1">
+            <p className="font-heading text-[14px] font-bold text-slate-900">Last data upload</p>
+            <p className="mt-0.5 truncate text-[13px] text-slate-600">
+              <b>{d.last_upload.filename}</b> · {d.last_upload.created} student(s) created ·{" "}
+              {new Date(d.last_upload.uploaded_at).toLocaleString()}
+            </p>
+          </div>
+          <Link to="/institute/upload" className="btn-outline btn-sm !rounded-full">Upload again</Link>
+        </div>
+      )}
+
+      {!Object.values(prefs).some(Boolean) && (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-[13px] text-slate-500">
+          Every section is hidden. Use <b>Customise</b> to bring them back.
         </div>
       )}
     </div>
@@ -391,135 +453,182 @@ function Profile() {
   if (!p) return <ProfileSkeleton />;
 
   const location = [p.city, p.state, p.pincode].filter(Boolean).join(", ");
+  const goTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const SECTION_OF = { Logo: "sec-logo", About: "sec-about", Website: "sec-details", "Mobile No": "sec-details",
+                       Designation: "sec-details", Address: "sec-address", Pincode: "sec-address",
+                       Courses: "sec-courses" };
 
   return (
-    <div className="max-w-5xl space-y-5">
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-navy to-navy-600 p-6 text-white">
-        <div className="flex flex-wrap items-center gap-5">
-          <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white p-1.5 ring-2 ring-white/25">
-            {p.logo_url
-              ? <img src={mediaUrl(p.logo_url)} alt="" className="h-full w-full object-contain" />
-              : <span className="text-2xl font-extrabold text-navy">{(p.name || "?")[0]}</span>}
+    <div className="max-w-6xl space-y-5">
+      {/* ---------------- header: cover, logo, name ---------------- */}
+      <ProfileCover logo={p.logo_url ? mediaUrl(p.logo_url) : null} initial={p.name}
+                    actions={<button className="btn-outline !rounded-full" onClick={() => goTo("sec-logo")}>
+                      <IconEdit size={14} /> Change logo
+                    </button>}>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="truncate font-heading text-[24px] font-bold leading-tight text-slate-900">{p.name}</h2>
+          <span className="inline-flex items-center gap-1 rounded-full bg-brandgreen-50 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-brandgreen-600">
+            <IconBuilding size={11} /> Institute
+          </span>
+          {p.approval_status && (
+            <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide ${
+              p.approval_status === "approved" ? "bg-navy-50 text-navy"
+              : p.approval_status === "pending" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>
+              {p.approval_status}
+            </span>
+          )}
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-slate-500">
+          {location && <span className="inline-flex items-center gap-1.5"><IconMapPin size={13} className="text-navy" />{location}</span>}
+          {p.website && (
+            <a href={/^https?:/.test(p.website) ? p.website : `https://${p.website}`} target="_blank" rel="noopener noreferrer"
+               className="inline-flex items-center gap-1.5 text-navy hover:underline">
+              <IconGlobe size={13} />{p.website.replace(/^https?:\/\//, "")}
+            </a>
+          )}
+          {p.authorised_person_name && (
+            <span className="inline-flex items-center gap-1.5"><IconUsers size={13} className="text-navy" />
+              {[p.authorised_person_name, p.designation].filter(Boolean).join(" · ")}
+            </span>
+          )}
+        </div>
+      </ProfileCover>
+
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="min-w-0 space-y-5">
+          {/* --- Identity and contact (requirements 28-32) --- */}
+          <div id="sec-details" className="scroll-mt-4">
+            <EditableSection
+              title="Institute details" icon={IconBuilding}
+              fields={p}
+              onSave={(draft) => save(draft, "Institute details updated.")}
+              validate={(d) => {
+                if (!(d.name || "").trim()) return "Name of the Institute is required.";
+                if (!(d.authorised_person_name || "").trim()) return "Contact Person Name is required.";
+                if (!(d.phone || "").trim()) return "Mobile No is required.";
+                if (d.total_capacity && d.current_strength
+                    && Number(d.current_strength) > Number(d.total_capacity)) {
+                  return "Current strength can't be more than total capacity.";
+                }
+                return null;
+              }}
+              render={(draft, set, editing) => (
+                <>
+                  <Item label="Name of the Institute" required value={draft.name}
+                        editing={editing} onChange={set("name")} placeholder="e.g. Coco Soft Institute" />
+                  <Item label="Contact Person Name" required value={draft.authorised_person_name}
+                        editing={editing} onChange={set("authorised_person_name")}
+                        placeholder="e.g. Priya Sharma" />
+                  {editing ? (
+                    <div className="sm:col-span-2">
+                      <PhoneField label="Mobile No" required value={draft.phone} onChange={set("phone")} />
+                    </div>
+                  ) : (
+                    <Item label="Mobile No" required value={draft.phone} editing={false} />
+                  )}
+                  {/* The email is the User ID, so it is deliberately read-only here —
+                      changing it would change the login and silently lock the
+                      institute out of its own account. */}
+                  <Item label="Email (User ID)" required value={draft.email} editing={false}
+                        note="This is your login. Contact support to change it." />
+                  <Item label="Website" value={draft.website} editing={editing}
+                        onChange={set("website")} placeholder="www.yourinstitute.edu" link />
+                  <Item label="Designation" value={draft.designation} editing={editing}
+                        onChange={set("designation")} placeholder="e.g. Placement Officer" />
+                  <Item label="Total capacity" value={draft.total_capacity} editing={editing}
+                        onChange={set("total_capacity")} numeric placeholder="e.g. 1200" />
+                  <Item label="Current strength" value={draft.current_strength} editing={editing}
+                        onChange={set("current_strength")} numeric placeholder="e.g. 840" />
+                </>
+              )}
+            />
           </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-2xl font-extrabold">{p.name}</h2>
-            {location && <p className="text-sm text-navy-100">{location}</p>}
-            {p.authorised_person_name && (
-              <p className="text-xs text-white/60">
-                {[p.authorised_person_name, p.designation].filter(Boolean).join(" · ")}
-              </p>
-            )}
+
+          {/* --- Address (requirements 33-35) --- */}
+          <div id="sec-address" className="scroll-mt-4">
+            <EditableSection
+              title="Address" icon={IconMapPin}
+              fields={p}
+              onSave={(draft) => save(draft, "Address updated.")}
+              validate={(d) => (d.pincode && !/^\d{6}$/.test(d.pincode)
+                ? "Pincode must be 6 digits." : null)}
+              render={(draft, set, editing) => (
+                <>
+                  <Item label="Address line 1" value={draft.address1} editing={editing}
+                        onChange={set("address1")} span placeholder="e.g. Plot 42, Kukatpally" />
+                  <Item label="Address line 2" value={draft.address2} editing={editing}
+                        onChange={set("address2")} span placeholder="Optional" />
+                  {editing ? (
+                    <Combobox label="City" icon={iconFor("City")} value={draft.city} options={CITIES}
+                              onChange={set("city")} placeholder="e.g. Hyderabad" />
+                  ) : <Item label="City" value={draft.city} editing={false} />}
+                  <Item label="Pincode" value={draft.pincode} editing={editing}
+                        onChange={set("pincode")} numeric maxLength={6} placeholder="e.g. 500072" />
+                  <Item label="District" value={draft.district} editing={editing}
+                        onChange={set("district")} placeholder="e.g. Medchal-Malkajgiri" />
+                  {editing ? (
+                    <Combobox label="State" icon={iconFor("State")} value={draft.state} options={STATES}
+                              onChange={set("state")} placeholder="e.g. Telangana" />
+                  ) : <Item label="State" value={draft.state} editing={false} />}
+                  <Item label="Country" value={draft.country} editing={editing}
+                        onChange={set("country")} placeholder="e.g. INDIA" />
+                </>
+              )}
+            />
+          </div>
+
+          {/* --- About (requirement 36) --- */}
+          <div id="sec-about" className="scroll-mt-4">
+            <AboutSection value={p.about} onSave={(about) => save({ about }, "About updated.")} />
           </div>
         </div>
+
+        {/* ---- side column ---- */}
+        <aside className="space-y-5 lg:sticky lg:top-4">
+          <ProfileStrength
+            checks={[["Logo", p.logo_url], ["About", p.about], ["Website", p.website], ["Mobile No", p.phone],
+                     ["Designation", p.designation], ["Address", p.address1], ["Pincode", p.pincode],
+                     ["Courses", locations.some((l) => (l.courses || []).length) ? "yes" : ""]]}
+            onAdd={(k) => goTo(SECTION_OF[k] || "sec-details")} />
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5">
+            <p className="font-heading text-[15px] font-bold text-slate-900">Contact</p>
+            <ul className="mt-3 space-y-3">
+              {[[IconMail, "Email", p.email, p.email && `mailto:${p.email}`],
+                [IconPhone, "Mobile", p.phone, p.phone && `tel:${String(p.phone).replace(/\s/g, "")}`],
+                [IconGlobe, "Website", p.website, p.website && (/^https?:/.test(p.website) ? p.website : `https://${p.website}`)]].map(([Ic, k, v, href]) => (
+                <li key={k} className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-navy-50 text-navy"><Ic size={15} /></span>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-medium text-slate-400">{k}</p>
+                    {v
+                      ? <a href={href} target={k === "Website" ? "_blank" : undefined} rel="noopener noreferrer"
+                           className="block truncate text-[13px] font-semibold text-slate-800 hover:text-navy">{v}</a>
+                      : <button type="button" onClick={() => goTo("sec-details")} className="text-[13px] font-semibold text-navy hover:underline">+ Add</button>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* --- Logo (requirement 27) --- */}
+          <div id="sec-logo" className="scroll-mt-4 rounded-2xl border border-slate-200 bg-white p-5">
+            <ProfHead icon={IconSparkle} title="Logo" />
+            <p className="mb-3 mt-2 text-[12px] leading-snug text-slate-500">
+              Shown on your dashboard, every job you post and any ad you run. Square works best — you can
+              crop it after choosing. It saves as soon as it uploads.
+            </p>
+            <ImageUpload kind="logo" round={false} currentUrl={p.logo_url}
+                         doneText="Logo saved."
+                         onUploaded={(u) => setP((old) => ({ ...old, logo_url: u }))} />
+          </div>
+        </aside>
       </div>
-
-      {/* --- Logo (requirement 27) --- */}
-      <div className="card">
-        <SectionHead title="Logo" />
-        {/* The uploader was boxed into a 220px column, which squeezed its own
-            help text into an eight-line ribbon down the side while the panel
-            next to it sat empty. The control gets the room now, and the
-            explanation sits above it as one readable line. */}
-        <p className="mb-4 max-w-2xl text-sm text-slate-500">
-          Shown on your dashboard, on every job you post and on any ad you run. Square works
-          best — you'll be able to crop it after choosing. It saves as soon as it finishes
-          uploading, so there's no separate Save here.
-        </p>
-        <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-5">
-          <ImageUpload kind="logo" round={false} currentUrl={p.logo_url}
-                       doneText="Logo saved."
-                       onUploaded={(u) => setP((old) => ({ ...old, logo_url: u }))} />
-        </div>
-      </div>
-
-      {/* --- Identity and contact (requirements 28-32) --- */}
-      <EditableSection
-        title="Institute details"
-        fields={p}
-        onSave={(draft) => save(draft, "Institute details updated.")}
-        validate={(d) => {
-          if (!(d.name || "").trim()) return "Name of the Institute is required.";
-          if (!(d.authorised_person_name || "").trim()) return "Contact Person Name is required.";
-          if (!(d.phone || "").trim()) return "Mobile No is required.";
-          if (d.total_capacity && d.current_strength
-              && Number(d.current_strength) > Number(d.total_capacity)) {
-            return "Current strength can't be more than total capacity.";
-          }
-          return null;
-        }}
-        render={(draft, set, editing) => (
-          <>
-            <Item label="Name of the Institute" required value={draft.name}
-                  editing={editing} onChange={set("name")} placeholder="e.g. Coco Soft Institute" />
-            <Item label="Contact Person Name" required value={draft.authorised_person_name}
-                  editing={editing} onChange={set("authorised_person_name")}
-                  placeholder="e.g. Priya Sharma" />
-            {editing ? (
-              <div className="sm:col-span-2">
-                <PhoneField label="Mobile No" required value={draft.phone} onChange={set("phone")} />
-              </div>
-            ) : (
-              <Item label="Mobile No" required value={draft.phone} editing={false} />
-            )}
-            {/* The email is the User ID, so it is deliberately read-only here —
-                changing it would change the login and silently lock the
-                institute out of its own account. */}
-            <Item label="Email (User ID)" required value={draft.email} editing={false}
-                  note="This is your login. Contact support to change it." />
-            <Item label="Website" value={draft.website} editing={editing}
-                  onChange={set("website")} placeholder="www.yourinstitute.edu" link />
-            <Item label="Designation" value={draft.designation} editing={editing}
-                  onChange={set("designation")} placeholder="e.g. Placement Officer" />
-            <Item label="Total capacity" value={draft.total_capacity} editing={editing}
-                  onChange={set("total_capacity")} numeric placeholder="e.g. 1200" />
-            <Item label="Current strength" value={draft.current_strength} editing={editing}
-                  onChange={set("current_strength")} numeric placeholder="e.g. 840" />
-          </>
-        )}
-      />
-
-      {/* --- Address (requirements 33-35) --- */}
-      <EditableSection
-        title="Address"
-        fields={p}
-        onSave={(draft) => save(draft, "Address updated.")}
-        validate={(d) => (d.pincode && !/^\d{6}$/.test(d.pincode)
-          ? "Pincode must be 6 digits." : null)}
-        render={(draft, set, editing) => (
-          <>
-            <Item label="Address line 1" value={draft.address1} editing={editing}
-                  onChange={set("address1")} span placeholder="e.g. Plot 42, Kukatpally" />
-            <Item label="Address line 2" value={draft.address2} editing={editing}
-                  onChange={set("address2")} span placeholder="Optional" />
-            {editing ? (
-              <div>
-                <label className="label">City</label>
-                <Combobox value={draft.city} options={CITIES} onChange={set("city")}
-                          placeholder="e.g. Hyderabad" />
-              </div>
-            ) : <Item label="City" value={draft.city} editing={false} />}
-            <Item label="Pincode" value={draft.pincode} editing={editing}
-                  onChange={set("pincode")} numeric maxLength={6} placeholder="e.g. 500072" />
-            <Item label="District" value={draft.district} editing={editing}
-                  onChange={set("district")} placeholder="e.g. Medchal-Malkajgiri" />
-            {editing ? (
-              <div>
-                <label className="label">State</label>
-                <Combobox value={draft.state} options={STATES} onChange={set("state")}
-                          placeholder="e.g. Telangana" />
-              </div>
-            ) : <Item label="State" value={draft.state} editing={false} />}
-            <Item label="Country" value={draft.country} editing={editing}
-                  onChange={set("country")} placeholder="e.g. INDIA" />
-          </>
-        )}
-      />
-
-      {/* --- About (requirement 36) --- */}
-      <AboutSection value={p.about} onSave={(about) => save({ about }, "About updated.")} />
 
       {/* --- Courses and max seats (requirements 37-38) --- */}
-      <CoursesSection locations={locations} reload={loadLocations} />
+      <div id="sec-courses" className="scroll-mt-4">
+        <CoursesSection locations={locations} reload={loadLocations} />
+      </div>
 
       {/* --- Locations (requirements 39-43) --- */}
       <LocationsSection locations={locations} reload={loadLocations} confirm={confirm} />
@@ -527,17 +636,16 @@ function Profile() {
   );
 }
 
-function SectionHead({ title, action }) {
+function SectionHead({ title, action, icon }) {
   return (
-    <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-2">
-      <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">{title}</h3>
-      {action}
+    <div className="mb-5">
+      <ProfHead icon={icon || IconLayers} title={title} action={action} />
     </div>
   );
 }
 
 /** A profile block that flips between read and edit in place. */
-function EditableSection({ title, fields, render, onSave, validate }) {
+function EditableSection({ title, icon, fields, render, onSave, validate }) {
   const toast = useToast();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(fields);
@@ -557,22 +665,22 @@ function EditableSection({ title, fields, render, onSave, validate }) {
   };
 
   return (
-    <div className="card">
-      <SectionHead title={title} action={
+    <div className="rounded-2xl border border-slate-200 bg-white p-6">
+      <SectionHead title={title} icon={icon} action={
         editing ? (
           <div className="flex gap-2">
-            <button className="btn btn-sm" onClick={commit} disabled={saving}>
+            <button className="btn-outline btn-sm !rounded-full" onClick={cancel} disabled={saving}>Cancel</button>
+            <button className="btn btn-sm !rounded-full !px-4" onClick={commit} disabled={saving}>
               {saving ? "Saving…" : "Save"}
             </button>
-            <button className="btn-outline btn-sm" onClick={cancel} disabled={saving}>Cancel</button>
           </div>
         ) : (
-          <button className="btn-outline btn-sm flex items-center gap-1.5" onClick={start}>
+          <button className="btn-outline btn-sm !rounded-full flex items-center gap-1.5" onClick={start}>
             <IconEdit size={13} /> Edit
           </button>
         )
       } />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
         {render(editing ? draft : fields, set, editing)}
       </div>
     </div>
@@ -582,33 +690,29 @@ function EditableSection({ title, fields, render, onSave, validate }) {
 /** One field: an input while editing, a labelled value when not. */
 function Item({ label, value, editing, onChange, placeholder, span, numeric,
                 maxLength, required, note, link }) {
-  const cls = span ? "sm:col-span-2 xl:col-span-3" : "";
+  const cls = span ? "sm:col-span-2" : "";
   if (editing && onChange) {
     return (
       <div className={cls}>
-        <label className="label">
-          {label} {required && <span className="font-semibold text-red-400">*</span>}
-        </label>
-        <input className="input" value={value ?? ""} placeholder={placeholder}
-               inputMode={numeric ? "numeric" : undefined} maxLength={maxLength}
-               onChange={(e) => onChange(numeric
-                 ? e.target.value.replace(/\D/g, "").slice(0, maxLength || 12)
-                 : e.target.value)} />
+        {/* Same field as the registration page: icon tile, clear (×), validation. */}
+        <FField label={label} required={required} value={value ?? ""} placeholder={placeholder}
+                inputMode={numeric ? "numeric" : undefined} maxLength={maxLength}
+                onChange={(v) => onChange(numeric ? v.replace(/\D/g, "").slice(0, maxLength || 12) : v)} />
       </div>
     );
   }
   return (
-    <div className={`min-w-0 border-b border-slate-100 pb-2 last:border-0 ${cls}`}>
-      <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+    <div className={`min-w-0 ${cls}`}>
+      <dt className="text-[11.5px] font-medium text-slate-400">
         {label} {required && <span className="text-red-400">*</span>}
       </dt>
-      <dd className="mt-0.5 truncate text-sm text-slate-700" title={value || undefined}>
+      <dd className="mt-0.5 truncate text-[14px] font-semibold text-slate-800" title={value || undefined}>
         {value
           ? (link
               ? <a href={/^https?:/.test(value) ? value : `https://${value}`} target="_blank"
                    rel="noopener noreferrer" className="text-navy hover:underline">{value}</a>
               : value)
-          : <span className="text-slate-300">—</span>}
+          : <span className="font-normal text-slate-300">Not added</span>}
       </dd>
       {note && <p className="mt-0.5 text-[11px] text-slate-400">{note}</p>}
     </div>
@@ -631,18 +735,18 @@ function AboutSection({ value, onSave }) {
   };
 
   return (
-    <div className="card">
-      <SectionHead title="About the institute" action={
+    <div className="rounded-2xl border border-slate-200 bg-white p-6">
+      <SectionHead title="About the institute" icon={IconDoc} action={
         editing ? (
           <div className="flex gap-2">
-            <button className="btn btn-sm" onClick={commit} disabled={saving}>
+            <button className="btn-outline btn-sm !rounded-full"
+                    onClick={() => { setDraft(value || ""); setEditing(false); }}>Cancel</button>
+            <button className="btn btn-sm !rounded-full !px-4" onClick={commit} disabled={saving}>
               {saving ? "Saving…" : "Save"}
             </button>
-            <button className="btn-outline btn-sm"
-                    onClick={() => { setDraft(value || ""); setEditing(false); }}>Cancel</button>
           </div>
         ) : (
-          <button className="btn-outline btn-sm flex items-center gap-1.5"
+          <button className="btn-outline btn-sm !rounded-full flex items-center gap-1.5"
                   onClick={() => setEditing(true)}>
             <IconEdit size={13} /> Edit
           </button>
@@ -652,8 +756,11 @@ function AboutSection({ value, onSave }) {
         <RichText value={draft} onChange={setDraft} rows={10}
                   hint="Facilities, placement record, accreditations. **bold**, ## heading, - lists work." />
       ) : (
-        value ? <Markdown text={value} />
-              : <p className="text-sm text-slate-400">Nothing written yet.</p>
+        value ? <div className="text-[14px] leading-relaxed text-slate-700"><Markdown text={value} /></div>
+              : <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50/60 px-4 py-3">
+                  <p className="text-[13px] text-slate-500">Facilities, placement record, accreditations — tell employers about your institute.</p>
+                  <button type="button" onClick={() => setEditing(true)} className="text-[12.5px] font-semibold text-navy hover:underline">+ Add</button>
+                </div>
       )}
     </div>
   );
@@ -718,7 +825,7 @@ function CoursesSection({ locations, reload }) {
   const rows = active?.courses || [];
 
   return (
-    <div className="card">
+    <div className="rounded-2xl border border-slate-200 bg-white p-6">
       <SectionHead title="Courses and max seats" />
 
       {locations.length > 1 && (
@@ -811,20 +918,13 @@ function CoursesSection({ locations, reload }) {
       <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
         <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Add course</p>
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_130px_150px_auto]">
+          <Combobox label="Course name" icon={iconFor("Course name")} value={name} options={COURSES}
+                    onChange={setName} placeholder="e.g. B.Tech Mechanical" />
           <div>
-            <label className="label">Course name</label>
-            <Combobox value={name} options={COURSES} onChange={setName}
-                      placeholder="e.g. B.Tech Mechanical" />
+            <FField label="No of seats" clearable={false} inputMode="numeric" value={seats} placeholder="60" onChange={(v) => setSeats(v.replace(/\D/g, ""))} />
           </div>
           <div>
-            <label className="label">No of seats</label>
-            <input className="input" inputMode="numeric" value={seats} placeholder="60"
-                   onChange={(e) => setSeats(e.target.value.replace(/\D/g, ""))} />
-          </div>
-          <div>
-            <label className="label">Current strength</label>
-            <input className="input" inputMode="numeric" value={strength} placeholder="48"
-                   onChange={(e) => setStrength(e.target.value.replace(/\D/g, ""))} />
+            <FField label="Current strength" clearable={false} inputMode="numeric" value={strength} placeholder="48" onChange={(v) => setStrength(v.replace(/\D/g, ""))} />
           </div>
           <div className="flex items-end">
             <button className="btn w-full" onClick={add} disabled={busy}>
@@ -879,8 +979,8 @@ function LocationsSection({ locations, reload, confirm }) {
   });
 
   return (
-    <div className="card">
-      <SectionHead title="Locations" action={
+    <div className="rounded-2xl border border-slate-200 bg-white p-6">
+      <SectionHead title="Locations" icon={IconMapPin} action={
         <button className="btn-outline btn-sm" onClick={() => setAdding((v) => !v)}>
           {adding ? "Cancel" : "Add new location"}
         </button>
@@ -895,41 +995,24 @@ function LocationsSection({ locations, reload, confirm }) {
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="label">Campus name</label>
-              <input className="input" value={form.name || ""} onChange={set("name")}
-                     placeholder="e.g. Secunderabad campus" />
+              <FField label="Campus name" value={form.name || ""} onChange={set("name")} placeholder="e.g. Secunderabad campus" />
             </div>
             <div>
-              <label className="label">Pincode <span className="text-red-400">*</span></label>
-              <input className="input" inputMode="numeric" maxLength={6} value={form.pincode || ""}
-                     onChange={(e) => set("pincode")(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                     placeholder="e.g. 500003" />
+              <FField label="Pincode" required inputMode="numeric" maxLength={6} value={form.pincode || ""} onChange={(v) => set("pincode")(v.replace(/\D/g, "").slice(0, 6))} placeholder="e.g. 500003" />
             </div>
             <div className="sm:col-span-2">
-              <label className="label">Address</label>
-              <input className="input" value={form.address1 || ""} onChange={set("address1")}
-                     placeholder="e.g. 5-9-22, SP Road" />
+              <FField label="Address" value={form.address1 || ""} onChange={set("address1")} placeholder="e.g. 5-9-22, SP Road" />
             </div>
-            <div>
-              <label className="label">City</label>
-              <Combobox value={form.city} options={CITIES} onChange={set("city")}
-                        placeholder="e.g. Hyderabad" />
-            </div>
-            <div>
-              <label className="label">State</label>
-              <Combobox value={form.state} options={STATES} onChange={set("state")}
-                        placeholder="e.g. Telangana" />
-            </div>
+            <Combobox label="City" icon={iconFor("City")} value={form.city} options={CITIES}
+                      onChange={set("city")} placeholder="e.g. Hyderabad" />
+            <Combobox label="State" icon={iconFor("State")} value={form.state} options={STATES}
+                      onChange={set("state")} placeholder="e.g. Telangana" />
             {/* Requirement 41 — a new location gets its OWN contact person. */}
             <div>
-              <label className="label">Contact Person <span className="text-red-400">*</span></label>
-              <input className="input" value={form.contact_person || ""} onChange={set("contact_person")}
-                     placeholder="e.g. Anil Reddy" />
+              <FField label="Contact Person" required value={form.contact_person || ""} onChange={set("contact_person")} placeholder="e.g. Anil Reddy" />
             </div>
             <div>
-              <label className="label">Email</label>
-              <input className="input" type="email" value={form.contact_email || ""}
-                     onChange={set("contact_email")} placeholder="e.g. anil@institute.edu" />
+              <FField label="Email" type="email" value={form.contact_email || ""} onChange={set("contact_email")} placeholder="e.g. anil@institute.edu" />
             </div>
             <div className="sm:col-span-2">
               <PhoneField label="Mobile No" required value={form.contact_phone}
@@ -1044,30 +1127,19 @@ function LocationCard({ loc, open, onToggle, reload, onRemove }) {
       {editing && (
         <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2">
           <div>
-            <label className="label">Campus name</label>
-            <input className="input" value={draft.name || ""}
-                   onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} />
+            <FField label="Campus name" value={draft.name || ""} onChange={(v) => setDraft((d) => ({ ...d, name: v }))} />
           </div>
           <div>
-            <label className="label">Pincode</label>
-            <input className="input" inputMode="numeric" maxLength={6} value={draft.pincode || ""}
-                   onChange={(e) => setDraft((d) => ({
-                     ...d, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) }))} />
+            <FField label="Pincode" inputMode="numeric" maxLength={6} value={draft.pincode || ""} onChange={(v) => setDraft((d) => ({ ...d, pincode: v.replace(/\D/g, "").slice(0, 6) }))} />
           </div>
           <div className="sm:col-span-2">
-            <label className="label">Address</label>
-            <input className="input" value={draft.address1 || ""}
-                   onChange={(e) => setDraft((d) => ({ ...d, address1: e.target.value }))} />
+            <FField label="Address" value={draft.address1 || ""} onChange={(v) => setDraft((d) => ({ ...d, address1: v }))} />
           </div>
           <div>
-            <label className="label">Contact Person</label>
-            <input className="input" value={draft.contact_person || ""}
-                   onChange={(e) => setDraft((d) => ({ ...d, contact_person: e.target.value }))} />
+            <FField label="Contact Person" value={draft.contact_person || ""} onChange={(v) => setDraft((d) => ({ ...d, contact_person: v }))} />
           </div>
           <div>
-            <label className="label">Email</label>
-            <input className="input" value={draft.contact_email || ""}
-                   onChange={(e) => setDraft((d) => ({ ...d, contact_email: e.target.value }))} />
+            <FField label="Email" value={draft.contact_email || ""} onChange={(v) => setDraft((d) => ({ ...d, contact_email: v }))} />
           </div>
           <div className="sm:col-span-2">
             <PhoneField label="Mobile No" value={draft.contact_phone}
@@ -1521,184 +1593,298 @@ function DataUpload() {
     </div>
   );
 
+  const histCount = tab === "uploads" ? history.length : downloads.length;
+  const totalCreated = history.reduce((a, h) => a + (h.created || 0), 0);
+  const totalDup = history.reduce((a, h) => a + (h.duplicates || 0), 0);
+  const dlTemplateXlsx = () => download("/api/institute/upload-template", "qclonejob_student_upload_template.xlsx", XLSX_TYPE);
+  const dlTemplateCsv = () => download("/api/institute/upload-template.csv", "qclonejob_student_upload_template.csv", "text/csv;charset=utf-8");
+  const dlStudents = () => download("/api/institute/students-export", "qclonejob_students.xlsx", XLSX_TYPE);
+  const pill = "focus:outline-none focus-visible:ring-2 focus-visible:ring-navy/40";
+
   return (
-    <div className="max-w-5xl">
-      <h1 className="mb-1.5 text-base font-semibold text-slate-800">Data upload</h1>
-      <p className="mb-4 text-sm text-gray-600">
-        Upload an Excel or CSV of one or many students. A resume is auto-created from the
-        available columns, stored in the database, and each student is emailed their login
-        credentials.
-      </p>
-
-      {errorTable}
-
-      {/* --- Upload box + Submit (requirements 46-47) ---
-           w-fit: the card hugs the small upload tile instead of stretching
-           across the page with empty space on the right. */}
-      <div className="card w-fit max-w-full">
-        <label className="label">Upload box</label>
-        <FileDrop
-          minimal
-          title="Choose file or drag here"
-          accept=".xlsx,.xls,.xlsm,.csv"
-          file={file}
-          onPick={pickFile}
-          onClear={() => setFile(null)}
-          hint="XLSX, XLS, XLSM or CSV" />
-
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <button className="btn !px-8" onClick={submit} disabled={busy || !file}>
-            {busy ? "Uploading…" : "Submit"}
-          </button>
-          {!file && (
-            <span className="text-xs text-slate-400">
-              Submit becomes available once a file is chosen.
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* --- Downloads (requirement 50) --- */}
-      <div className="card mt-4">
-        <SectionHead title="Downloads" />
-        <div className="flex flex-wrap items-center gap-2">
-          <button className="btn-outline flex items-center gap-1.5"
-                  onClick={() => download("/api/institute/upload-template",
-                                          "qclonejob_student_upload_template.xlsx", XLSX_TYPE)}>
-            <IconDownload size={14} /> Template (Excel)
-          </button>
-          <button className="btn-outline btn-sm"
-                  onClick={() => download("/api/institute/upload-template.csv",
-                                          "qclonejob_student_upload_template.csv",
-                                          "text/csv;charset=utf-8")}>
-            Template (CSV)
-          </button>
-          <button className="btn-outline btn-sm"
-                  onClick={() => download("/api/institute/students-export",
-                                          "qclonejob_students.xlsx", XLSX_TYPE)}>
-            My students (Excel)
-          </button>
-        </div>
-        <p className="mt-3 text-xs text-slate-400">
-          Every download is listed under Download history below, with the date and time.
-          Excel may open these in "Protected View" — click <b>Enable Editing</b>.
+    <div className="max-w-6xl space-y-6">
+      {/* ---- page title ---- */}
+      <div>
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-navy">Students</p>
+        <h1 className="mt-1 font-heading text-[26px] font-bold leading-tight text-slate-900">Data upload</h1>
+        <p className="mt-1 max-w-2xl text-[13.5px] text-slate-500">
+          Upload an Excel or CSV of one or many students. A resume is auto-created from the
+          available columns, stored in the database, and each student is emailed their login
+          credentials.
         </p>
       </div>
 
-      {batch && (
-        <div className="card mt-4 border-brandgreen-100 bg-brandgreen-50/40">
-          <div className="flex items-start gap-2">
-            <h3 className="flex-1 font-semibold text-brandgreen-600">Data upload is successful</h3>
-            <button type="button" className="btn-outline btn-sm" onClick={clearResult}>
-              Clear result
-            </button>
+      {errorTable}
+
+      <div className="grid items-stretch gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+        {/* ================= hero upload card (requirements 46-47) ================= */}
+        <div className="rounded-3xl bg-gradient-to-br from-navy via-violet-400 to-brandgreen p-[1.5px] shadow-[0_24px_50px_-28px_rgba(79,70,229,.55)]">
+          <div className="relative h-full overflow-hidden rounded-[22px] bg-white p-6 sm:p-8">
+            <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-indigo-100/60 blur-3xl" />
+            <div aria-hidden="true" className="pointer-events-none absolute -bottom-28 -left-16 h-64 w-64 rounded-full bg-emerald-100/50 blur-3xl" />
+
+            <div className="relative grid items-center gap-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+              {/* left: message */}
+              <div>
+                <UploadArt />
+                <h2 className="mt-5 font-heading text-[22px] font-bold leading-tight text-slate-900">
+                  Import your students in one go
+                </h2>
+                <p className="mt-2 text-[13.5px] leading-relaxed text-slate-500">
+                  Drop your filled sheet — every new student gets a profile, a ready resume and a
+                  login sent to their email.
+                </p>
+                <ul className="mt-4 space-y-2 text-[13px] text-slate-700">
+                  {["One row per student, using the template columns",
+                    "Students already registered are skipped automatically",
+                    "Passwords are emailed — and shown to you once"].map((t) => (
+                    <li key={t} className="flex items-start gap-2">
+                      <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-brandgreen-50 text-brandgreen-600">
+                        <IconCheck size={11} strokeWidth={3} />
+                      </span>
+                      {t}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* right: drop zone + submit */}
+              <div>
+                <FileDrop
+                  title="Drag & drop your sheet here"
+                  accept=".xlsx,.xls,.xlsm,.csv"
+                  file={file}
+                  busy={busy}
+                  busyLabel="Uploading and creating accounts…"
+                  onPick={pickFile}
+                  onClear={() => setFile(null)}
+                  hint="or click to browse · XLSX, XLS, XLSM or CSV" />
+                <button className={`btn mt-4 w-full !rounded-full !py-3 text-[14.5px] shadow-[0_10px_24px_-10px_rgba(79,70,229,.8)] disabled:shadow-none ${pill}`}
+                        onClick={submit} disabled={busy || !file}>
+                  <IconUpload size={16} /> {busy ? "Uploading…" : file ? "Submit and create students" : "Submit"}
+                </button>
+                <p className="mt-2 text-center text-[11.5px] text-slate-400">
+                  {file ? `${file.name} is ready to upload.` : "Submit becomes available once a file is chosen."}
+                </p>
+              </div>
+            </div>
           </div>
-          <p className="mt-1 text-sm text-slate-700">
-            <b>{batch.filename}</b> · uploaded {new Date(batch.uploaded_at).toLocaleString()}
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2 text-xs">
-            <span className="badge bg-white text-slate-600">{batch.total_rows} rows read</span>
-            <span className="badge bg-brandgreen-50 text-brandgreen-600">{batch.created} created</span>
-            {batch.duplicates > 0 && <span className="badge bg-amber-100 text-amber-700">{batch.duplicates} duplicates ignored</span>}
-            {batch.skipped > 0 && <span className="badge bg-slate-100 text-slate-600">{batch.skipped} skipped</span>}
+        </div>
+
+        {/* ================= side guide + downloads (requirement 50) ================= */}
+        <aside className="flex flex-col rounded-3xl border border-slate-200 bg-white p-6">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">How it works</p>
+          <ol className="relative mt-4 space-y-5">
+            <span aria-hidden="true" className="absolute bottom-3 left-[13px] top-3 w-px bg-slate-200" />
+            <li className="relative flex gap-3">
+              <span className="z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy text-[12px] font-bold text-white ring-4 ring-white">1</span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13.5px] font-semibold text-slate-800">Download the template</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <button type="button" onClick={dlTemplateXlsx}
+                          className={`inline-flex items-center gap-1.5 rounded-full bg-brandgreen-50 px-3 py-1.5 text-[12px] font-semibold text-brandgreen-600 transition-colors hover:bg-brandgreen hover:text-white ${pill}`}>
+                    <IconDownload size={12} /> Excel
+                  </button>
+                  <button type="button" onClick={dlTemplateCsv}
+                          className={`inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1.5 text-[12px] font-semibold text-blue-600 transition-colors hover:bg-blue-600 hover:text-white ${pill}`}>
+                    <IconDownload size={12} /> CSV
+                  </button>
+                </div>
+              </div>
+            </li>
+            <li className="relative flex gap-3">
+              <span className="z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-500 text-[12px] font-bold text-white ring-4 ring-white">2</span>
+              <div>
+                <p className="text-[13.5px] font-semibold text-slate-800">Fill in your students</p>
+                <p className="mt-0.5 text-[12px] leading-snug text-slate-500">Name, email and mobile number are required — one student per row.</p>
+              </div>
+            </li>
+            <li className="relative flex gap-3">
+              <span className="z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brandgreen text-[12px] font-bold text-white ring-4 ring-white">3</span>
+              <div>
+                <p className="text-[13.5px] font-semibold text-slate-800">Upload and submit</p>
+                <p className="mt-0.5 text-[12px] leading-snug text-slate-500">Accounts are created and logins emailed straight away.</p>
+              </div>
+            </li>
+          </ol>
+
+          <div className="mt-auto pt-6">
+            <button type="button" onClick={dlStudents}
+                    className={`group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-3 text-left transition-all hover:border-navy-200 hover:bg-white hover:shadow-card ${pill}`}>
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-[10px] font-extrabold uppercase text-violet-600">xlsx</span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13px] font-semibold text-slate-800">Export my students</span>
+                <span className="block text-[11.5px] text-slate-500">Everyone uploaded so far</span>
+              </span>
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-slate-400 ring-1 ring-slate-200 transition-colors group-hover:bg-navy group-hover:text-white group-hover:ring-navy">
+                <IconDownload size={14} />
+              </span>
+            </button>
+            <p className="mt-3 text-[11px] leading-snug text-slate-400">
+              Downloads are listed under History. Excel may open them in "Protected View" — click <b>Enable Editing</b>.
+            </p>
+          </div>
+        </aside>
+      </div>
+
+      {/* ---- totals strip ---- */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {[["Sheets uploaded", history.length, IconUpload, "bg-navy-50 text-navy"],
+          ["Students created", totalCreated, IconUser, "bg-brandgreen-50 text-brandgreen-600"],
+          ["Duplicates skipped", totalDup, IconLayers, "bg-amber-50 text-amber-600"],
+          ["Files downloaded", downloads.length, IconDownload, "bg-violet-50 text-violet-600"]].map(([l, v, Ic, tone]) => (
+          <div key={l} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+            <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tone}`}><Ic size={18} /></span>
+            <div>
+              <p className="font-heading text-[22px] font-bold leading-none text-slate-900 tabular-nums">{v}</p>
+              <p className="mt-1 text-[11.5px] font-medium text-slate-500">{l}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ---- latest upload result ---- */}
+      {batch && (
+        <div className="overflow-hidden rounded-2xl border border-brandgreen-100 bg-white">
+          <div className="flex flex-wrap items-center gap-3 bg-gradient-to-r from-brandgreen-50 to-white px-6 py-4">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brandgreen text-white shadow-sm">
+              <IconCheck size={18} strokeWidth={3} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-heading text-[15px] font-bold text-slate-900">Data upload is successful</h3>
+              <p className="truncate text-[12.5px] text-slate-500">
+                <b className="text-slate-700">{batch.filename}</b> · uploaded {new Date(batch.uploaded_at).toLocaleString()}
+              </p>
+            </div>
+            <button type="button" className={`btn-outline btn-sm !rounded-full ${pill}`} onClick={clearResult}>Clear result</button>
+          </div>
+          <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-4">
+            {[["Rows read", batch.total_rows, "text-slate-900"],
+              ["Created", batch.created, "text-brandgreen-600"],
+              ["Duplicates ignored", batch.duplicates || 0, "text-amber-600"],
+              ["Skipped", batch.skipped || 0, "text-slate-500"]].map(([l, v, c]) => (
+              <div key={l} className="bg-white px-6 py-3">
+                <p className="text-[11.5px] font-medium text-slate-500">{l}</p>
+                <p className={`font-heading text-[22px] font-bold leading-tight tabular-nums ${c}`}>{v}</p>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
       {results && (
-        <div className="card mt-4">
-          <div className="mb-2 flex items-center gap-2">
-            <h2 className="flex-1 font-semibold">Result</h2>
-            {!batch && (
-              <button type="button" className="btn-outline btn-sm" onClick={clearResult}>
-                Clear result
-              </button>
-            )}
-          </div>
-          <div className="overflow-x-auto">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6">
+          <ProfHead icon={IconUser} title="Result" action={!batch && (
+            <button type="button" className={`btn-outline btn-sm !rounded-full ${pill}`} onClick={clearResult}>Clear result</button>
+          )} />
+          <div className="mt-4 overflow-x-auto rounded-xl border border-slate-100">
             <table className="table">
               <thead><tr><th>Student</th><th>User ID</th><th>Password</th><th>Status</th></tr></thead>
               <tbody>
                 {results.map((r, i) => (
                   <tr key={i}>
-                    <td>{r.row}</td>
+                    <td className="font-medium text-slate-800">{r.row}</td>
                     <td>{r.user_id || "—"}</td>
-                    <td>{r.password || "—"}</td>
-                    <td>{r.status}</td>
+                    <td className="font-mono text-[12.5px]">{r.password || "—"}</td>
+                    <td><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11.5px] font-semibold text-slate-600">{r.status}</span></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <p className="mt-2 text-xs text-gray-500">
+          <p className="mt-3 text-[11.5px] text-slate-400">
             Passwords are shown once here for your reference; students also receive them by email.
           </p>
         </div>
       )}
 
-      {/* --- History (requirement 51) --- */}
-      <div className="card mt-4">
-        <div className="mb-3 flex gap-2">
-          {[["uploads", `Upload history (${history.length})`],
-            ["downloads", `Download history (${downloads.length})`]].map(([key, label]) => (
-            <button key={key} type="button" onClick={() => setTab(key)}
-                    className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors
-                      ${tab === key ? "border-navy bg-navy-50 text-navy"
-                                    : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
-              {label}
-            </button>
-          ))}
+      {/* ---- History (requirement 51) ---- */}
+      <div className="rounded-2xl border border-slate-200 bg-white">
+        <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-6 py-4">
+          <h3 className="font-heading text-[16px] font-bold text-slate-900">History</h3>
+          <div className="flex gap-1">
+            {[["uploads", "Uploads", history.length], ["downloads", "Downloads", downloads.length]].map(([key, label, n]) => (
+              <button key={key} type="button" onClick={() => setTab(key)}
+                      className={`relative flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition-colors ${pill}
+                        ${tab === key ? "bg-navy-50 text-navy" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"}`}>
+                {label}
+                <span className={`rounded-full px-1.5 text-[11px] font-bold tabular-nums ${tab === key ? "bg-navy text-white" : "bg-slate-100 text-slate-500"}`}>{n}</span>
+              </button>
+            ))}
+          </div>
           <div className="flex-1" />
-          {(tab === "uploads" ? history.length : downloads.length) > 0 && (
-            <button type="button" className="btn-outline btn-sm" onClick={() => clearHistory(tab)}>
-              Clear {tab === "uploads" ? "upload" : "download"} history
+          {histCount > 0 && (
+            <button type="button" onClick={() => clearHistory(tab)}
+                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-semibold text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 ${pill}`}>
+              <IconClose size={12} /> Clear {tab === "uploads" ? "upload" : "download"} history
             </button>
           )}
         </div>
 
-        {tab === "uploads" ? (
-          <div className="overflow-x-auto">
-            <table className="table">
-              <thead><tr><th>File</th><th>Uploaded on</th><th className="text-right">Rows</th>
-                <th className="text-right">Created</th><th className="text-right">Duplicates</th></tr></thead>
-              <tbody>
-                {history.map((h) => (
-                  <tr key={h.id}>
-                    <td className="font-medium text-slate-700">{h.filename}</td>
-                    <td>{new Date(h.uploaded_at).toLocaleString()}</td>
-                    <td className="text-right">{h.total_rows}</td>
-                    <td className="text-right text-brandgreen-600">{h.created}</td>
-                    <td className="text-right text-amber-600">{h.duplicates}</td>
-                  </tr>
-                ))}
-                {history.length === 0 && (
-                  <tr><td colSpan={5} className="text-slate-400">Nothing uploaded yet.</td></tr>
-                )}
-              </tbody>
-            </table>
+        {histCount === 0 ? (
+          <div className="flex flex-col items-center px-6 py-12 text-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-slate-300">
+              {tab === "uploads" ? <IconUpload size={22} /> : <IconDownload size={22} />}
+            </span>
+            <p className="mt-3 text-[13.5px] font-semibold text-slate-700">
+              {tab === "uploads" ? "Nothing uploaded yet." : "Nothing downloaded yet."}
+            </p>
+            <p className="mt-0.5 text-[12px] text-slate-400">
+              {tab === "uploads" ? "Your uploaded sheets will be listed here." : "Templates and exports you download appear here."}
+            </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="table">
-              <thead><tr><th>File</th><th>Type</th><th>Format</th><th>Downloaded on</th></tr></thead>
-              <tbody>
-                {downloads.map((d) => (
-                  <tr key={d.id}>
-                    <td className="font-medium text-slate-700">{d.filename}</td>
-                    <td className="capitalize text-slate-500">{d.kind}</td>
-                    <td className="uppercase text-slate-500">{d.file_format}</td>
-                    <td>{new Date(d.downloaded_at).toLocaleString()}</td>
-                  </tr>
-                ))}
-                {downloads.length === 0 && (
-                  <tr><td colSpan={4} className="text-slate-400">Nothing downloaded yet.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <ul className="divide-y divide-slate-100">
+            {tab === "uploads" ? history.map((h) => (
+              <li key={h.id} className="flex flex-wrap items-center gap-4 px-6 py-3.5 transition-colors hover:bg-slate-50/60">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brandgreen-50 text-[9.5px] font-extrabold uppercase text-brandgreen-600">
+                  {(h.filename || "").split(".").pop().slice(0, 4)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13.5px] font-semibold text-slate-800">{h.filename}</p>
+                  <p className="text-[12px] text-slate-400">{new Date(h.uploaded_at).toLocaleString()}</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 text-[12px] font-semibold">
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600 tabular-nums">{h.total_rows} rows</span>
+                  <span className="rounded-full bg-brandgreen-50 px-2.5 py-1 text-brandgreen-600 tabular-nums">{h.created} created</span>
+                  <span className={`rounded-full px-2.5 py-1 tabular-nums ${h.duplicates ? "bg-amber-50 text-amber-600" : "bg-slate-50 text-slate-400"}`}>{h.duplicates} duplicates</span>
+                </div>
+              </li>
+            )) : downloads.map((d) => (
+              <li key={d.id} className="flex flex-wrap items-center gap-4 px-6 py-3.5 transition-colors hover:bg-slate-50/60">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-[9.5px] font-extrabold uppercase text-blue-600">
+                  {d.file_format}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13.5px] font-semibold text-slate-800">{d.filename}</p>
+                  <p className="text-[12px] text-slate-400">{new Date(d.downloaded_at).toLocaleString()}</p>
+                </div>
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[12px] font-semibold capitalize text-slate-600">{d.kind}</span>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </div>
+  );
+}
+
+/* Small illustration for the upload hero: a sheet turning into profiles. */
+function UploadArt() {
+  return (
+    <svg width="132" height="64" viewBox="0 0 132 64" fill="none" aria-hidden="true">
+      <rect x="1" y="6" width="44" height="54" rx="8" fill="#ecfdf3" stroke="#4faa38" strokeWidth="1.5" />
+      <path d="M9 20h28M9 29h28M9 38h28M9 47h18" stroke="#4faa38" strokeWidth="1.5" strokeLinecap="round" opacity=".7" />
+      <path d="M23 14v40" stroke="#4faa38" strokeWidth="1" opacity=".35" />
+      <path d="M54 33h18m0 0-5-5m5 5-5 5" stroke="#4f46e5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      {[[94, 14], [118, 22], [100, 44]].map(([x, y], n) => (
+        <g key={n}>
+          <circle cx={x} cy={y} r="11" fill={["#eef2ff", "#f5f3ff", "#eef2ff"][n]} stroke="#4f46e5" strokeWidth="1.3" />
+          <circle cx={x} cy={y - 3} r="3.2" fill="#4f46e5" />
+          <path d={`M${x - 5.5} ${y + 6}a5.5 5 0 0 1 11 0`} fill="#4f46e5" />
+        </g>
+      ))}
+    </svg>
   );
 }
 
@@ -1708,11 +1894,13 @@ function DataUpload() {
 function PostAd() {
   const toast = useToast();
   const confirm = useConfirm();
-  const [format, setFormat] = useState("flyer");
+  const [kind, setKind] = useState("image");       // image | gif | video | link | text
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
-  const [flyerFile, setFlyerFile] = useState(null);
+  const [mediaUrl_, setMediaUrl] = useState("");
+  const [mediaType, setMediaType] = useState("image");
+  const [videoLink, setVideoLink] = useState("");
+  const [file, setFile] = useState(null);
   const [ctaLink, setCtaLink] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadNote, setUploadNote] = useState(null);
@@ -1726,40 +1914,58 @@ function PostAd() {
   }).catch(() => {});
   useEffect(() => { load(); }, []);
 
-  const reset = () => {
-    setTitle(""); setText(""); setImageUrl(""); setCtaLink("");
-    setUploadNote(null); setFlyerFile(null);
+  const clearMedia = () => { setFile(null); setMediaUrl(""); setUploadNote(null); setVideoLink(""); };
+  const reset = () => { setTitle(""); setText(""); setCtaLink(""); clearMedia(); };
+  const pickKind = (k) => { setKind(k); clearMedia(); if (k === "text") setText(""); };
+
+  const ACCEPT = {
+    image: ".jpg,.jpeg,.jfif,.png,.webp",
+    gif: ".gif",
+    video: ".mp4,.webm,.mov",
   };
 
-  /* Requirement 55 — JPG in, mobile ad slot out. The shrinking happens on the
-     server, so the institute can upload whatever their designer sent and the
-     ad still fits the app's slot exactly. */
-  const pickFlyer = async (f) => {
+  /* Stills go through /uploads/flyer, which cover-crops them to the ad slot
+     on the server. GIFs and videos go through /uploads/media untouched —
+     re-encoding would kill the animation — and the slot crops them visually
+     with object-cover, so they still fill it edge to edge. */
+  const pickFile = async (f) => {
     if (!f) return;
-    if (!/\.(jpe?g|jfif|png|webp)$/i.test(f.name)) {
-      setFlyerFile(null);
-      return toast("Wrong File Format — upload a JPG image for the flyer.", "error");
+    const ok = {
+      image: /\.(jpe?g|jfif|png|webp)$/i, gif: /\.gif$/i, video: /\.(mp4|webm|mov)$/i,
+    }[kind];
+    if (ok && !ok.test(f.name)) {
+      setFile(null);
+      return toast(kind === "image" ? "Wrong File Format — upload a JPG, PNG or WEBP image."
+        : kind === "gif" ? "Wrong File Format — upload an animated .gif file."
+        : "Wrong File Format — upload an MP4, WEBM or MOV video.", "error");
     }
-    setFlyerFile(f);
-    setUploading(true);
-    setUploadNote(null);
+    setFile(f); setUploading(true); setUploadNote(null);
     try {
-      const r = await api.uploadFile("/api/uploads/flyer", f);
-      setImageUrl(r.url);
+      const r = await api.uploadFile(kind === "image" ? "/api/uploads/flyer" : "/api/uploads/media", f);
+      setMediaUrl(r.url);
+      setMediaType(kind === "image" ? "image" : (r.media_type || kind));
       setUploadNote(r.message);
-      toast("Flyer uploaded and resized.");
+      toast(kind === "image" ? "Flyer uploaded and resized." : "Uploaded.");
     } catch (e) {
-      setFlyerFile(null);
+      setFile(null);
       toast(e.message, "error");
     } finally { setUploading(false); }
   };
+
+  const linkOk = !!toEmbedUrl(videoLink);
+  const ready = kind === "text" ? !!text.trim()
+    : kind === "link" ? linkOk : !!mediaUrl_;
 
   const post = async () => {
     setBusy(true);
     try {
       const r = await api.post("/api/institute/ads", {
-        ad_format: format, title, text_content: text,
-        image_url: imageUrl, cta_link: ctaLink,
+        ad_format: kind === "text" ? "scroller" : "flyer",
+        title, text_content: text,
+        image_url: kind === "link" ? "" : mediaUrl_,
+        media_type: kind === "link" ? "video" : mediaType,
+        video_url: kind === "link" ? videoLink.trim() : "",
+        cta_link: ctaLink,
       });
       reset(); load();
       confirm("Your ad is live", { message: r.message });
@@ -1784,224 +1990,200 @@ function PostAd() {
     },
   });
 
+  const previewBanner = {
+    ad_format: kind === "text" ? "scroller" : "flyer",
+    title, text_content: text,
+    media_type: kind === "link" ? "video" : mediaType,
+    media_url: kind === "link" ? "" : mediaUrl_,
+    video_url: kind === "link" && linkOk ? videoLink : "",
+    theme: "navy", autoplay: true, muted: true,
+  };
+  const live = ads.filter((a) => a.status === "active").length;
+  const totalViews = ads.reduce((a, x) => a + (x.impressions || 0), 0);
+  const totalClicks = ads.reduce((a, x) => a + (x.clicks || 0), 0);
 
   return (
-    <div className="max-w-4xl space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold">Post a Ad</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Your ad runs in the mobile app's ad slot, shown to job seekers.
-        </p>
-      </div>
-
-      {/* Requirements 53-54 — the two formats, as buttons. */}
-      <div className="grid gap-3 sm:grid-cols-2">
-        {[
-          { key: "flyer", label: "Flyer ads", tag: "A JPG image, resized to the app\u2019s ad slot" },
-          { key: "scroller", label: "Scroller ads", tag: "A short line of text that scrolls" },
-        ].map((f) => {
-          const active = format === f.key;
-          return (
-            <button key={f.key} type="button" onClick={() => { setFormat(f.key); reset(); }}
-              className={`rounded-xl border p-4 text-left transition-all
-                ${active ? "border-navy bg-navy-50 shadow-sm"
-                         : "border-slate-200 bg-white hover:border-navy-200 hover:bg-slate-50"}`}>
-              <span className={`block text-base font-extrabold ${active ? "text-navy" : "text-slate-700"}`}>
-                {f.label}
-              </span>
-              <span className="mt-0.5 block text-xs text-slate-400">{f.tag}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="card space-y-4">
+    <div className="max-w-6xl space-y-6">
+      {/* ---- header ---- */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <label className="label">Ad title <span className="text-red-400">*</span></label>
-          <input className="input" value={title} onChange={(e) => setTitle(e.target.value)}
-                 placeholder="e.g. Admissions open — 2027 batch" />
-          <p className="mt-1 text-xs text-slate-400">
-            For your own reference in the list below. It isn't shown in the ad.
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-navy">Promote</p>
+          <h1 className="mt-1 font-heading text-[26px] font-bold leading-tight text-slate-900">Post a Ad</h1>
+          <p className="mt-1 text-[13.5px] text-slate-500">
+            Your ad runs in the portal's ad slot on the website and in the mobile app, shown to job seekers.
           </p>
         </div>
-
-        {format === "flyer" ? (
-          <>
-            <div>
-              <label className="label">
-                Flyer image (JPG) <span className="text-red-400">*</span>
-              </label>
-              {/* Same drop zone as Data upload. This was the browser's raw
-                  "Choose File | No file chosen" — the one unstyled control in
-                  the whole portal, sitting two clicks from a designed one. */}
-              <FileDrop
-                compact
-                accept=".jpg,.jpeg,.jfif,.png,.webp"
-                file={flyerFile}
-                busy={uploading}
-                busyLabel="Uploading and resizing…"
-                onPick={pickFlyer}
-                onClear={() => { setFlyerFile(null); setImageUrl(""); setUploadNote(null); }}
-                title="Drop your flyer here, or click to browse"
-                hint="Any size — we shrink it to the mobile ad space automatically. JPG, PNG or WEBP, up to 5 MB."
-                preview={imageUrl && (
-                  <div className="mt-4">
-                    <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-brandgreen-600">
-                      <IconCheck size={13} /> {uploadNote}
-                    </p>
-                    <p className="label">Preview — actual size in the app's ad slot</p>
-                    {/* Framed like a phone slot so the institute judges the
-                        crop against what a job seeker will see, rather than
-                        against a bare rectangle. */}
-                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-900
-                                    p-2 shadow-inner">
-                      <div className="overflow-hidden rounded-lg" style={{ aspectRatio: "3 / 1" }}>
-                        <img src={mediaUrl(imageUrl)} alt="Flyer preview"
-                             className="h-full w-full object-cover" />
-                      </div>
-                    </div>
-                    <p className="mt-1.5 text-xs text-slate-400">
-                      Anything outside this 3:1 frame was trimmed evenly from the edges.
-                    </p>
-                  </div>
-                )} />
-            </div>
-            <div>
-              <label className="label">Caption (optional)</label>
-              <input className="input" value={text} maxLength={200}
-                     onChange={(e) => setText(e.target.value)}
-                     placeholder="e.g. Diploma and B.Tech seats available" />
-            </div>
-          </>
-        ) : (
-          <div>
-            <div className="flex items-center justify-between">
-              <label className="label !mb-0">
-                Scroller text <span className="text-red-400">*</span>
-              </label>
-              {/* Requirement 56 — the limit is visible while typing, not a
-                  surprise at submit. maxLength stops the overflow; the counter
-                  turns amber then red as it closes in. */}
-              <span className={`mb-1.5 text-xs font-bold tabular-nums
-                ${text.length >= maxChars ? "text-red-500"
-                  : text.length > maxChars - 20 ? "text-amber-600" : "text-slate-400"}`}>
-                {text.length} / {maxChars}
-              </span>
-            </div>
-            <textarea className="input !h-auto resize-none" rows={3} value={text}
-                      maxLength={maxChars}
-                      onChange={(e) => setText(e.target.value)}
-                      placeholder="e.g. Admissions open for the 2027 batch — call 040-1234 5678" />
-            <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-slate-400">
-                Kept short so the whole message scrolls past before someone moves on.
-              </p>
-              {text.length >= maxChars && (
-                <p className="text-xs font-semibold text-red-500">
-                  You've hit the {maxChars}-character limit.
-                </p>
-              )}
-            </div>
-
-            <div className="mt-4">
-              <p className="label">Preview — as it scrolls in the app</p>
-              {/* A scroller ad IS the movement. The old preview truncated the
-                  text with an ellipsis, which showed the institute neither how
-                  it reads nor how long it takes. Hover to pause. */}
-              <div className="rounded-xl border border-slate-200 bg-slate-900 p-2 shadow-inner">
-                <div className="marquee flex items-center rounded-lg bg-navy py-3 text-sm
-                                font-semibold text-white"
-                     style={{ "--marquee-duration": `${Math.max(8, (text.length || 20) / 7)}s` }}>
-                  <div className="marquee-track">
-                    <span className="px-8">{text || "Your scroller text appears here"}</span>
-                    <span className="px-8" aria-hidden>{text || "Your scroller text appears here"}</span>
-                  </div>
-                </div>
-              </div>
-              <p className="mt-1.5 text-xs text-slate-400">
-                Hover to pause. Longer text scrolls for longer, so it stays readable.
-              </p>
-            </div>
-          </div>
-        )}
-
-        <div>
-          <label className="label">Link (optional)</label>
-          <input className="input" value={ctaLink} onChange={(e) => setCtaLink(e.target.value)}
-                 placeholder="e.g. www.yourinstitute.edu/admissions" />
-        </div>
-
         <div className="flex gap-2">
-          <button className="btn" onClick={post}
-                  disabled={busy || uploading || !title.trim()
-                            || (format === "flyer" ? !imageUrl : !text.trim())}>
-            {busy ? "Posting…" : "Post ad"}
-          </button>
-          <button className="btn-outline" onClick={reset} disabled={busy}>Clear</button>
+          {[["Live ads", live, "bg-brandgreen"], ["Views", totalViews, "bg-navy"], ["Clicks", totalClicks, "bg-violet-500"]].map(([l, v, dot]) => (
+            <div key={l} className="rounded-xl border border-slate-200 bg-white px-4 py-2">
+              <p className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500"><span className={`h-1.5 w-1.5 rounded-full ${dot}`} />{l}</p>
+              <p className="font-heading text-[18px] font-bold leading-tight text-slate-900 tabular-nums">{v}</p>
+            </div>
+          ))}
         </div>
       </div>
 
-      <div className="card">
-        <SectionHead title={`Your ads (${ads.length})`} />
-        <div className="space-y-3">
-          {ads.map((ad) => (
-            <div key={ad.id}
-                 className="flex flex-wrap items-center gap-4 rounded-xl border border-slate-200
-                            p-3 transition-colors hover:border-navy-200 hover:bg-slate-50/60">
-              {/* The thumbnail shows the ad in its real 3:1 shape, so a flyer
-                  reads as a flyer and a scroller as a bar of text. They used
-                  to share one squat tile that flattered neither. */}
-              <div className="w-36 shrink-0 overflow-hidden rounded-lg bg-slate-100 shadow-sm"
-                   style={{ aspectRatio: "3 / 1" }}>
-                {ad.ad_format === "flyer" && ad.image_url ? (
-                  <img src={mediaUrl(ad.image_url)} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full w-full items-center bg-navy px-2">
-                    <span className="line-clamp-2 text-[10px] font-semibold leading-tight text-white">
-                      {ad.text_content || ad.title}
-                    </span>
-                  </div>
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="min-w-0 space-y-5">
+          {/* ---- 1. format (requirements 53-54) ---- */}
+          <AdStep n={1} title="Choose your ad type" sub="Every type fits the ad slot perfectly on desktop and mobile.">
+            <AdTypePicker value={kind} onChange={pickKind} types={[
+              ["image", "Image flyer", "JPG, PNG or WEBP — auto-fitted"],
+              ["gif", "GIF / animation", "Animated .gif, up to 12 MB"],
+              ["video", "Video", "MP4, WEBM or MOV, up to 50 MB"],
+              ["link", "Video link", "YouTube, Vimeo or .mp4 URL"],
+              ["text", "Scroller text", "A short line that scrolls"],
+            ]} />
+          </AdStep>
+
+          {/* ---- 2. content ---- */}
+          <AdStep n={2} title={kind === "text" ? "Write your message" : kind === "link" ? "Paste your video link" : "Upload your creative"}
+                  sub={kind === "text" ? "Kept short so the whole message scrolls past before someone moves on."
+                    : kind === "link" ? "Nothing is uploaded — the ad plays the video from where it already lives."
+                    : "Any size works — it is fitted to the ad slot automatically."}>
+            {kind === "text" ? (
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="label !mb-0">Scroller text <span className="text-red-400">*</span></label>
+                  {/* Requirement 56 — the limit is visible while typing. */}
+                  <span className={`mb-1.5 text-xs font-bold tabular-nums
+                    ${text.length >= maxChars ? "text-red-500" : text.length > maxChars - 20 ? "text-amber-600" : "text-slate-400"}`}>
+                    {text.length} / {maxChars}
+                  </span>
+                </div>
+                <textarea className="input !h-auto resize-none" rows={3} value={text} maxLength={maxChars}
+                          onChange={(e) => setText(e.target.value)}
+                          placeholder="e.g. Admissions open for the 2027 batch — call 040-1234 5678" />
+                {text.length >= maxChars && (
+                  <p className="mt-1 text-xs font-semibold text-red-500">You've hit the {maxChars}-character limit.</p>
                 )}
               </div>
-
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-bold text-slate-700">{ad.title}</p>
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
-                  <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-semibold capitalize
-                                   text-slate-500">
-                    {ad.ad_format}
-                  </span>
-                  <span>{ad.impressions} views</span>
-                  <span aria-hidden>·</span>
-                  <span>{ad.clicks} clicks</span>
-                  <span aria-hidden>·</span>
-                  <span>{new Date(ad.created_at).toLocaleDateString()}</span>
-                </div>
+            ) : kind === "link" ? (
+              <div>
+                <FField label="Video link" value={videoLink} onChange={setVideoLink} placeholder="https://youtube.com/watch?v=…"
+                        validate={(v) => (toEmbedUrl(v) ? null : "Paste a YouTube, Vimeo or direct .mp4 link")} />
+                {linkOk && (
+                  <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-brandgreen-600">
+                    <IconCheck size={13} /> Link recognised — it plays muted and loops in the ad slot.
+                  </p>
+                )}
               </div>
+            ) : (
+              <div>
+                <FileDrop
+                  compact
+                  accept={ACCEPT[kind]}
+                  file={file}
+                  busy={uploading}
+                  busyLabel={kind === "image" ? "Uploading and resizing…" : "Uploading…"}
+                  onPick={pickFile}
+                  onClear={clearMedia}
+                  title={kind === "image" ? "Drop your flyer here, or click to browse"
+                    : kind === "gif" ? "Drop your GIF here, or click to browse"
+                    : "Drop your video here, or click to browse"}
+                  hint={kind === "image" ? "JPG, PNG or WEBP, up to 5 MB — cropped to the 3:1 ad slot."
+                    : kind === "gif" ? "Animated .gif up to 12 MB — the animation is kept as-is."
+                    : "MP4, WEBM or MOV up to 50 MB — plays muted on loop."} />
+                {uploadNote && (
+                  <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-brandgreen-600">
+                    <IconCheck size={13} /> {uploadNote}
+                  </p>
+                )}
+              </div>
+            )}
+          </AdStep>
 
-              <div className="flex shrink-0 items-center gap-2">
-                <span className={`badge ${ad.status === "active"
-                  ? "bg-brandgreen-50 text-brandgreen-600" : "bg-slate-100 text-slate-500"}`}>
-                  {ad.status}
-                </span>
-                <button className="btn-outline btn-sm"
-                        onClick={() => setStatus(ad, ad.status === "active" ? "paused" : "active")}>
-                  {ad.status === "active" ? "Pause" : "Resume"}
-                </button>
-                <button className="btn-outline btn-sm !text-red-500" onClick={() => remove(ad)}
-                        title={`Remove ${ad.title}`} aria-label={`Remove ${ad.title}`}>
-                  <IconClose size={13} />
-                </button>
+          {/* ---- 3. details ---- */}
+          <AdStep n={3} title="Details" sub="The title is for your own list; the caption and link appear on the ad.">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <FField label="Ad title" required value={title} onChange={setTitle} placeholder="e.g. Admissions open — 2027 batch"
+                        hint="For your own reference in the list below. It isn't shown in the ad." />
+              </div>
+              {kind !== "text" && (
+                <FField label="Caption (optional)" value={text} maxLength={200} onChange={setText}
+                        placeholder="e.g. Diploma and B.Tech seats available" />
+              )}
+              <div className={kind === "text" ? "sm:col-span-2" : ""}>
+                <FField label="Link (optional)" value={ctaLink} onChange={setCtaLink}
+                        placeholder="e.g. www.yourinstitute.edu/admissions" />
               </div>
             </div>
-          ))}
-          {ads.length === 0 && (
-            <EmptyState
-              icon={IconSparkle}
-              title="No ads running"
-              body="Post a flyer or a scroller above and it starts showing to job seekers straight away." />
-          )}
+            <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-5">
+              <button className="btn !rounded-full !px-7 shadow-[0_8px_20px_-8px_rgba(79,70,229,.7)] disabled:shadow-none"
+                      onClick={post} disabled={busy || uploading || !title.trim() || !ready}>
+                <IconSparkle size={15} /> {busy ? "Posting…" : "Publish ad"}
+              </button>
+              <button className="btn-outline !rounded-full" onClick={reset} disabled={busy}>Clear</button>
+              <span className="text-[12px] text-slate-400">
+                {!ready ? (kind === "text" ? "Type your message to continue." : kind === "link" ? "Paste a valid video link to continue." : "Upload your creative to continue.")
+                  : !title.trim() ? "Add a title to publish." : "Ready to publish."}
+              </span>
+            </div>
+          </AdStep>
         </div>
+
+        {/* ---- live preview ---- */}
+        <aside className="xl:sticky xl:top-4">
+          <AdPreview banner={previewBanner}
+                     note={kind === "text" ? "Hover to pause. Longer text scrolls for longer, so it stays readable."
+                       : "Images, GIFs and videos fill the frame edge to edge — anything outside it is trimmed evenly."} />
+        </aside>
+      </div>
+
+      {/* ---- your ads ---- */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-6">
+        <ProfHead icon={IconSparkle} title={`Your ads (${ads.length})`} />
+        {ads.length === 0 ? (
+          <div className="mt-4">
+            <EmptyState icon={IconSparkle} title="No ads running"
+                        body="Publish an image, GIF, video or scroller above and it starts showing to job seekers straight away." />
+          </div>
+        ) : (
+          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {ads.map((ad) => {
+              const b = { ...ad, media_url: ad.media_url || ad.image_url };
+              const isLive = ad.status === "active";
+              return (
+                <div key={ad.id} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white transition-all hover:-translate-y-0.5 hover:shadow-card">
+                  <div className="relative bg-slate-100" style={{ aspectRatio: "3 / 1" }}>
+                    {ad.ad_format === "scroller" ? (
+                      <div className="flex h-full items-center bg-gradient-to-br from-navy to-navy-600 px-3">
+                        <span className="line-clamp-2 text-[11.5px] font-semibold leading-tight text-white">{ad.text_content || ad.title}</span>
+                      </div>
+                    ) : adHasVisual(b) ? <AdMedia banner={b} /> : null}
+                    <span className={`absolute left-2 top-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide
+                      ${isLive ? "bg-brandgreen text-white" : "bg-white/90 text-slate-500"}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${isLive ? "animate-pulse bg-white" : "bg-slate-400"}`} />
+                      {isLive ? "Live" : "Paused"}
+                    </span>
+                  </div>
+                  <div className="p-4">
+                    <div className="flex items-start gap-2">
+                      <p className="min-w-0 flex-1 truncate font-heading text-[14px] font-bold text-slate-900">{ad.title}</p>
+                      <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-semibold capitalize text-slate-500">
+                        {ad.ad_format === "scroller" ? "Scroller" : ad.video_url ? "Video link" : ad.media_type === "gif" ? "GIF" : ad.media_type === "video" ? "Video" : "Image"}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11.5px] text-slate-400">
+                      {ad.impressions} views · {ad.clicks} clicks · {new Date(ad.created_at).toLocaleDateString()}
+                    </p>
+                    <div className="mt-3 flex gap-2">
+                      <button className="btn-outline btn-sm flex-1 !rounded-full"
+                              onClick={() => setStatus(ad, isLive ? "paused" : "active")}>
+                        {isLive ? "Pause" : "Resume"}
+                      </button>
+                      <button className="btn-outline btn-sm !rounded-full !text-red-500 hover:!bg-red-50" onClick={() => remove(ad)}
+                              title={`Remove ${ad.title}`} aria-label={`Remove ${ad.title}`}>
+                        <IconClose size={13} /> Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

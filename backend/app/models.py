@@ -380,6 +380,10 @@ class Job(Base):
     wage_basis = Column(String, default="monthly")   # daily | monthly | annual | ...
     wage_min = Column(String)
     wage_max = Column(String)
+    # ISO 4217 code for wage_min / wage_max ("INR", "USD", "AED" …) and the
+    # ISO country the job is in. Added columns — migrate.py adds them on start.
+    salary_currency = Column(String, default="INR")
+    country = Column(String, default="IN")
     education_level = Column(String)        # none | 10th | iti | graduate | ...
     is_urgent = Column(Boolean, default=False)
     accommodation = Column(Boolean, default=False)   # common for hotel/domestic/farm roles

@@ -849,6 +849,8 @@ def _ad_payload(b: models.Banner) -> dict:
     return {
         "id": b.id, "ad_format": b.ad_format or "flyer", "title": b.title,
         "text_content": b.text_content, "image_url": b.image_url or b.media_url,
+        "media_url": b.media_url or b.image_url, "media_type": b.media_type or "image",
+        "video_url": b.video_url, "poster_url": b.poster_url,
         "cta_label": b.cta_label, "cta_link": b.cta_link,
         "audience": b.audience, "status": b.status, "theme": b.theme,
         "start_date": b.start_date, "end_date": b.end_date,
@@ -883,11 +885,19 @@ def create_ad(body: dict, current: models.User = Depends(get_current_user),
         raise HTTPException(400, "Give the ad a title so you can find it later.")
 
     image_url = (body.get("image_url") or "").strip()
+    video_url = (body.get("video_url") or "").strip()
     text = (body.get("text_content") or "").strip()
+    # A flyer's visual can be a still, an animated GIF, an uploaded video or a
+    # linked video (YouTube / Vimeo / .mp4). All of them fill the same slot.
+    media_type = (body.get("media_type") or "image").lower()
+    if media_type not in ("image", "gif", "video"):
+        media_type = "image"
 
     if ad_format == "flyer":
-        if not image_url:
-            raise HTTPException(400, "Upload the flyer image (JPG) before posting.")
+        if not image_url and not video_url:
+            raise HTTPException(400, "Upload the flyer image, GIF or video (or paste a video link) before posting.")
+        if video_url and not image_url:
+            media_type = "video"
         text = text[:200]          # optional caption, not the ad itself
     else:
         limit = _scroller_limit()
@@ -897,6 +907,7 @@ def create_ad(body: dict, current: models.User = Depends(get_current_user),
             raise HTTPException(400, f"Scroller text must be {limit} characters or fewer — "
                                      f"yours is {len(text)}.")
         image_url = ""
+        video_url = ""
 
     ad = models.Banner(
         posted_by_user_id=current.id,
@@ -906,7 +917,8 @@ def create_ad(body: dict, current: models.User = Depends(get_current_user),
         logo_url=inst.logo_url,
         image_url=image_url or None,
         media_url=image_url or None,
-        media_type="image" if ad_format == "flyer" else "none",
+        media_type=media_type if ad_format == "flyer" else "none",
+        video_url=video_url or None,
         text_content=text or None,
         cta_label=(body.get("cta_label") or "").strip() or None,
         cta_link=(body.get("cta_link") or "").strip() or None,
@@ -942,11 +954,15 @@ def update_ad(ad_id: int, body: dict, current: models.User = Depends(get_current
     elif "text_content" in body:
         ad.text_content = (body.get("text_content") or "").strip()[:200] or None
 
-    if "image_url" in body and (ad.ad_format or "flyer") == "flyer":
-        url = (body.get("image_url") or "").strip()
-        if not url:
-            raise HTTPException(400, "A flyer needs an image.")
-        ad.image_url = ad.media_url = url
+    if (ad.ad_format or "flyer") == "flyer" and ("image_url" in body or "video_url" in body):
+        url = (body.get("image_url") if "image_url" in body else ad.media_url) or ""
+        vurl = (body.get("video_url") if "video_url" in body else ad.video_url) or ""
+        if not url.strip() and not vurl.strip():
+            raise HTTPException(400, "A flyer needs an image, GIF, video or video link.")
+        ad.image_url = ad.media_url = url.strip() or None
+        ad.video_url = vurl.strip() or None
+        mt = (body.get("media_type") or ad.media_type or "image").lower()
+        ad.media_type = mt if mt in ("image", "gif", "video") else "image"
 
     for field in ("title", "cta_label", "cta_link", "audience", "theme",
                   "start_date", "end_date"):

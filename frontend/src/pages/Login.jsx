@@ -294,7 +294,7 @@ export default function Login() {
           <Link to="/" className="mb-6 flex justify-center lg:hidden"><Logo className="h-10" /></Link>
 
           <div className="animate-in">
-            <h1 className="font-heading text-[30px] font-bold leading-tight tracking-tight text-slate-900">Sign in</h1>
+            <h1 className="font-heading text-[28px] font-bold uppercase leading-tight tracking-[0.04em]"><span className="bg-gradient-to-r from-slate-900 via-navy to-indigo-500 bg-clip-text text-transparent">Sign in</span></h1>
             <p className="mt-1 text-sm text-slate-500">Welcome back — choose your portal to continue.</p>
           </div>
 

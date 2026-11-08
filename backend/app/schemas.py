@@ -218,6 +218,8 @@ class JobBase(BaseModel):
     wage_basis: Optional[str] = "monthly"
     wage_min: Optional[str] = None
     wage_max: Optional[str] = None
+    salary_currency: Optional[str] = "INR"
+    country: Optional[str] = "IN"
     education_level: Optional[str] = None
     is_urgent: Optional[bool] = False
     accommodation: Optional[bool] = False

@@ -26,7 +26,7 @@ export default function PhoneField({
   error,
   variant,
 }) {
-  const reg = variant === "reg";
+  const reg = variant !== "plain";
   const [touched, setTouched] = useState(false);
   const [focus, setFocus] = useState(false);
   // Like the other registration fields: show "required" once Submit is pressed.
