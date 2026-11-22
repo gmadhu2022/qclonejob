@@ -15,7 +15,7 @@ const GLYPH = {
 
 export function useTaxonomy() {
   const [tax, setTax] = useState(null);
-  useEffect(() => { api.get("/api/public/taxonomy", { auth: false }).then(setTax).catch(() => {}); }, []);
+  useEffect(() => { api.get("/api/public/taxonomy", { auth: false }).then((t) => { if (Array.isArray(t?.sectors)) setTax(t); }).catch(() => {}); }, []);
   return tax;
 }
 

@@ -28,7 +28,15 @@ async function request(path, { method = "GET", body, form, auth = true } = {}) {
     throw new Error(detail);
   }
   const ct = res.headers.get("content-type") || "";
-  return ct.includes("application/json") ? res.json() : res;
+  if (ct.includes("application/json")) return res.json();
+  // An HTML page here means the request never reached the API — usually the
+  // static host answering /api/* with index.html because VITE_API_BASE was not
+  // set at build time. Treat it as an error, never as data.
+  if (ct.includes("text/html")) {
+    throw new Error("Cannot reach the JobBay server. Please try again shortly.");
+  }
+  const txt = await res.text();
+  return txt ? txt : null;
 }
 
 /**

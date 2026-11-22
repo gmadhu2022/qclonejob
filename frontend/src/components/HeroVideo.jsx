@@ -34,7 +34,9 @@ const V = "9";
    the role / industry counts come live from the job taxonomy. */
 const ACTS = [
   { at: 0,    chip: "Jobs",       tag: "Plenty of jobs",
-    title: (t) => t ? `${t.role_count.toLocaleString("en-IN")}+ roles across ${t.sectors.length} industries` : "Jobs across every industry",
+    title: (t) => (typeof t?.role_count === "number" && Array.isArray(t?.sectors))
+      ? `${t.role_count.toLocaleString("en-IN")}+ roles across ${t.sectors.length} industries`
+      : "Jobs across every industry",
     line: "" },
   { at: 30,   chip: "Job search", tag: "Advanced job search",
     title: () => "Smart matching. Instant alerts.",

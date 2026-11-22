@@ -579,7 +579,7 @@ export default function PostJobForm({
                     <p className="text-[13px] font-semibold text-slate-800">What kind of work is this?</p>
                     <div className="flex items-center gap-3">
                       <p className="text-[11.5px] text-slate-400">
-                        {tax ? `${tax.sectors.length} sectors · ${tax.role_count}+ roles — daily wage to postgraduate` : "Loading sectors…"}
+                        {tax?.sectors?.length ? `${tax.sectors.length} sectors · ${tax.role_count}+ roles — daily wage to postgraduate` : "Loading sectors…"}
                       </p>
                       {form.sector && (
                         <button type="button" onClick={() => setPickerOpen(false)} title="Minimise"

@@ -1287,7 +1287,7 @@ function FindJobs() {
             <div className="card !p-4">
               <h3 className="text-[13.5px] font-bold text-slate-800">Browse by industry</h3>
               <p className="mt-0.5 text-[11.5px] leading-snug text-slate-400">
-                {tax ? `${tax.sectors.length} sectors · ${tax.role_count}+ roles` : "Loading…"}
+                {tax?.sectors?.length ? `${tax.sectors.length} sectors · ${tax.role_count}+ roles` : "Loading…"}
               </p>
               <div className="mt-3">
                 <SectorList sectors={tax?.sectors || []} value={sector}
