@@ -293,7 +293,7 @@ export function Managers() {
             </div>
             <div>
               <label className="label">Email (becomes User ID) <span className="text-red-400">*</span></label>
-              <input className="input" type="email" placeholder="e.g. priya@qclonejob.com"
+              <input className="input" type="email" placeholder="e.g. priya@jobbay.com"
                      value={form.email || ""}
                      onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
             </div>

@@ -20,7 +20,7 @@ from email.mime.multipart import MIMEMultipart
 
 from .config import settings
 
-logger = logging.getLogger("qclonejob.email")
+logger = logging.getLogger("jobbay.email")
 
 
 # Email log rows are buffered and written by a background worker.
@@ -108,9 +108,9 @@ def _send_via_brevo(to_email: str, subject: str, body: str) -> dict:
     import urllib.request
 
     sender_email = (getattr(settings, "BREVO_SENDER_EMAIL", "")
-                    or settings.EMAIL_FROM or "no-reply@qclonejob.com")
+                    or settings.EMAIL_FROM or "no-reply@jobbay.com")
     payload = json.dumps({
-        "sender": {"name": getattr(settings, "BREVO_SENDER_NAME", "QCloneJob"),
+        "sender": {"name": getattr(settings, "BREVO_SENDER_NAME", "JobBay"),
                    "email": sender_email},
         "to": [{"email": to_email}],
         "subject": subject,
@@ -159,7 +159,7 @@ def _send_via_resend(to_email: str, subject: str, body: str) -> dict:
     import urllib.request
 
     payload = json.dumps({
-        "from": settings.EMAIL_FROM or "no-reply@qclonejob.com",
+        "from": settings.EMAIL_FROM or "no-reply@jobbay.com",
         "to": [to_email],
         "subject": subject,
         "text": body,

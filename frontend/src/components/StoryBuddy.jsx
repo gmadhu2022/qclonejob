@@ -198,11 +198,11 @@ function Screen({ m }) {
         <rect x="3" y="14" width="64" height="15" rx="2.5" fill="#eef2ff" stroke="#a5b4fc" strokeWidth=".8" className="rv-pulse" />
         <rect x="6" y="17" width="11" height="8" rx="1.5" fill="#fff" stroke="#4f46e5" strokeWidth=".9" />
         <path d="M6 17 l5.5 4 l5.5 -4" stroke="#4f46e5" strokeWidth=".9" fill="none" />
-        {T(20, 21.5, 5, "Your login")}{T(20, 27, 4.4, "QCloneJob", "#64748b", 600)}
+        {T(20, 21.5, 5, "Your login")}{T(20, 27, 4.4, "JobBay", "#64748b", 600)}
         <rect x="5" y="34" width="60" height="5" rx="2" fill="#e2e8f0" />
         <rect x="5" y="42" width="44" height="5" rx="2" fill="#e2e8f0" /></g>);
     case "welcome":
-      return (<g>{header("QCLONEJOB")}
+      return (<g>{header("JOBBAY")}
         <circle cx="35" cy="27" r="8" fill="#4faa38" className="rv-pop" style={{ transformBox: "fill-box", transformOrigin: "center" }} />
         <path d="M31 27 l3 3 l6 -6" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
         {T(14.5, 45, 6.2, "Welcome, Ravi!")}</g>);
@@ -366,7 +366,7 @@ export default function StoryBuddy({ idx, t }) {
   const [hover, setHover] = useState(false);
   const [hopTick, setHopTick] = useState(0);
   const m = moment(idx, t);
-  const line = hover && m.scene !== "hired" ? "Hi! I'm Ravi — I found my job on QCloneJob 👋" : m.line;
+  const line = hover && m.scene !== "hired" ? "Hi! I'm Ravi — I found my job on JobBay 👋" : m.line;
   const speakerX = m.scene === "interview" && !hover ? m.speaker : m.scene === "hired" ? 230 : 196;
   const left = Math.min(78, Math.max(22, (speakerX / W) * 100));
 

@@ -29,7 +29,7 @@ from .. import models
 from ..database import get_db
 from ..auth import get_current_user
 
-logger = logging.getLogger("qclonejob.uploads")
+logger = logging.getLogger("jobbay.uploads")
 
 router = APIRouter(prefix="/api/uploads", tags=["uploads"])
 

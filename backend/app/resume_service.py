@@ -592,7 +592,7 @@ def build_template_workbook() -> bytes:
 
     info = wb.create_sheet("Instructions")
     lines = [
-        ("QCloneJob — student upload template", True),
+        ("JobBay — student upload template", True),
         ("", False),
         ("1. Row 2 is a filled-in example. Replace it with your first student.", False),
         ("2. Email is the ONLY required column — it becomes the student's User ID.", False),

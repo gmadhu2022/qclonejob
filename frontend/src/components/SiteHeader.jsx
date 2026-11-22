@@ -34,13 +34,15 @@ const LOGINS = [
 export default function SiteHeader({ sub }) {
   const { pathname } = useLocation();
   const onServices = pathname.startsWith("/services");
+  const [mobileOpen, setMobileOpen] = useState(false);
+  useEffect(() => { setMobileOpen(false); }, [pathname]);
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
-        <Link to="/" aria-label="QCloneJob home"><Logo className="h-10" /></Link>
+        <Link to="/" aria-label="JobBay home"><Logo className="h-10" /></Link>
 
-        <nav className="flex items-center gap-0.5 sm:gap-1">
+        <nav className="hidden items-center gap-0.5 md:flex lg:gap-1">
           <TopLink to="/about" active={pathname === "/about"}>About us</TopLink>
           <NavMenu label="Services" items={SERVICES} active={onServices} />
           <NavMenu label="Login" items={LOGINS} active={pathname.startsWith("/login")} />
@@ -53,7 +55,27 @@ export default function SiteHeader({ sub }) {
             Register
           </Link>
         </nav>
+
+        {/* Phones / small tablets: the five links don't fit in one row, so they
+            fold into a menu; Register stays visible. */}
+        <div className="flex items-center gap-2 md:hidden">
+          <Link to="/register" className="rounded-lg bg-navy px-3.5 py-2 text-sm font-semibold text-white">Register</Link>
+          <button type="button" aria-label={mobileOpen ? "Close menu" : "Open menu"} aria-expanded={mobileOpen}
+                  onClick={() => setMobileOpen((o) => !o)}
+                  className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-700">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              {mobileOpen ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
+            </svg>
+          </button>
+        </div>
       </div>
+      {mobileOpen && (
+        <nav className="border-t border-slate-100 bg-white px-4 pb-4 pt-2 md:hidden" aria-label="Main">
+          {[["/about", "About us"], ...SERVICES.map((x) => [x.to, x.label]), ...LOGINS.map((x) => [x.to, `${x.label} login`]), ["/contact", "Contact us"]].map(([to, label]) => (
+            <Link key={to} to={to} className="block rounded-lg px-3 py-2.5 text-[15px] font-medium text-slate-700 hover:bg-slate-50 hover:text-navy">{label}</Link>
+          ))}
+        </nav>
+      )}
       {sub}
     </header>
   );

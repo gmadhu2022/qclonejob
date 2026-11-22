@@ -72,7 +72,7 @@ const INST_WIDGETS = [
 function Dashboard() {
   const [d, setD] = useState(null);
   const [openCourse, setOpenCourse] = useState(null);
-  const [prefs, toggle, resetPrefs] = useDashPrefs("qcj.institute.dashboard.v1", INST_WIDGETS);
+  const [prefs, toggle, resetPrefs] = useDashPrefs("jobbay.institute.dashboard.v1", INST_WIDGETS);
 
   useEffect(() => { api.get("/api/institute/summary").then(setD).catch(() => {}); }, []);
   if (!d) return <DashboardSkeleton />;
@@ -1596,9 +1596,9 @@ function DataUpload() {
   const histCount = tab === "uploads" ? history.length : downloads.length;
   const totalCreated = history.reduce((a, h) => a + (h.created || 0), 0);
   const totalDup = history.reduce((a, h) => a + (h.duplicates || 0), 0);
-  const dlTemplateXlsx = () => download("/api/institute/upload-template", "qclonejob_student_upload_template.xlsx", XLSX_TYPE);
-  const dlTemplateCsv = () => download("/api/institute/upload-template.csv", "qclonejob_student_upload_template.csv", "text/csv;charset=utf-8");
-  const dlStudents = () => download("/api/institute/students-export", "qclonejob_students.xlsx", XLSX_TYPE);
+  const dlTemplateXlsx = () => download("/api/institute/upload-template", "jobbay_student_upload_template.xlsx", XLSX_TYPE);
+  const dlTemplateCsv = () => download("/api/institute/upload-template.csv", "jobbay_student_upload_template.csv", "text/csv;charset=utf-8");
+  const dlStudents = () => download("/api/institute/students-export", "jobbay_students.xlsx", XLSX_TYPE);
   const pill = "focus:outline-none focus-visible:ring-2 focus-visible:ring-navy/40";
 
   return (

@@ -1,8 +1,8 @@
 """Seed initial data. Run once after install:  python seed.py
 
 Creates:
-  - Super Admin           admin@qclonejob.com / admin123
-  - Default institute     coco@qclonejob.com  / inst123   (Coco Soft Institute)
+  - Super Admin           admin@jobbay.com / admin123
+  - Default institute     coco@jobbay.com  / inst123   (Coco Soft Institute)
   - Demo enterprise       hr@campus.com  / ent123    (Campus Connect Limited) + one job
 """
 from app.database import Base, engine, SessionLocal
@@ -34,13 +34,13 @@ def ensure_user(email, password, role):
 
 
 # --- Admin ---
-ensure_user("admin@qclonejob.com", "admin123", models.ROLE_ADMIN)
+ensure_user("admin@jobbay.com", "admin123", models.ROLE_ADMIN)
 
 # --- Default institute (for voluntary registrations) ---
-inst_user, created = ensure_user("coco@qclonejob.com", "inst123", models.ROLE_INSTITUTE)
+inst_user, created = ensure_user("coco@jobbay.com", "inst123", models.ROLE_INSTITUTE)
 if created:
     db.add(models.Institute(
-        user_id=inst_user.id, name="Coco Soft Institute", email="coco@qclonejob.com",
+        user_id=inst_user.id, name="Coco Soft Institute", email="coco@jobbay.com",
         city="Hyderabad", state="Telangana", country="INDIA",
         promoter_name="Coco Soft", authorised_person_name="Admin",
         courses=["B.Tech", "Diploma", "MBA"], present_strength=500,
@@ -116,7 +116,7 @@ if ent_row and db.query(models.Job).count() < 5:
 
 db.commit()
 print("Seed complete.")
-print("  Admin      : admin@qclonejob.com / admin123")
-print("  Institute  : coco@qclonejob.com  / inst123")
+print("  Admin      : admin@jobbay.com / admin123")
+print("  Institute  : coco@jobbay.com  / inst123")
 print("  Enterprise : hr@campus.com  / ent123")
 db.close()

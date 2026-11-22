@@ -44,7 +44,7 @@ app = FastAPI(title=f"{settings.APP_NAME} API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
-    # Allow Render preview/subdomain URLs too (e.g. https://qclonejob-web-abc.onrender.com)
+    # Allow Render preview/subdomain URLs too (e.g. https://jobbay-web-abc.onrender.com)
     allow_origin_regex=r"https://.*\.onrender\.com|https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],

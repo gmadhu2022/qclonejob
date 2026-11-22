@@ -105,7 +105,7 @@ const DASH_WIDGETS = [
   ["location", "Jobs by location chart"],
   ["funnel", "Hiring funnel"],
 ];
-const DASH_KEY = "qcj.recruiter.dashboard.v1";
+const DASH_KEY = "jobbay.recruiter.dashboard.v1";
 
 function useDashPrefs() {
   const all = Object.fromEntries(DASH_WIDGETS.map(([k]) => [k, true]));

@@ -1,4 +1,4 @@
-# QCloneJob — Qualification Meets Job
+# JobBay — Advanced Job Searching Platform
 
 > **Never commit secrets.** API keys, database passwords and SMTP credentials go in
 > `backend/.env` (git-ignored). Tracked files keep empty defaults only. Run
@@ -81,9 +81,9 @@ Passwords are bcrypt-hashed and **cannot be decoded** — that's the protection.
 ```bash
 cd backend
 python reset_password.py --list                          # see every account
-python reset_password.py admin@qclonejob.com                  # generate a new password
-python reset_password.py admin@qclonejob.com --password Abc123 # set a specific one
-python reset_password.py admin@qclonejob.com --link           # print a reset link instead
+python reset_password.py admin@jobbay.com                  # generate a new password
+python reset_password.py admin@jobbay.com --password Abc123 # set a specific one
+python reset_password.py admin@jobbay.com --link           # print a reset link instead
 ```
 
 **Why "forgot password" seems broken:** with `EMAIL_ENABLED=False` (the default) no email is
@@ -95,8 +95,8 @@ sent — the reset link prints in the **backend terminal** instead, in a banner 
 
 | Role       | Email           | Password |
 |------------|-----------------|----------|
-| Admin      | admin@qclonejob.com  | admin123 |
-| Institute  | coco@qclonejob.com   | inst123  |
+| Admin      | admin@jobbay.com  | admin123 |
+| Institute  | coco@jobbay.com   | inst123  |
 | Enterprise | hr@campus.com   | ent123   |
 
 Job-seeker accounts are created by uploading an Excel in the Institute portal (Data upload) —

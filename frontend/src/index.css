@@ -349,7 +349,7 @@
   .zoom-media img, .zoom-media:hover img { transform: none; transition: none; }
 }
 
-/* ---- "How QCloneJob works" scroll story (components/ScrollStory.jsx) ---- */
+/* ---- "How JobBay works" scroll story (components/ScrollStory.jsx) ---- */
 .story-dots {
   background-image: radial-gradient(rgba(79,70,229,.18) 1px, transparent 1px);
   background-size: 22px 22px;
@@ -840,4 +840,9 @@ svg .chart-pop, svg.chart-spin { transform-box: fill-box; transform-origin: cent
 .icon-bob { animation: iconBob 3.4s ease-in-out infinite; }
 .group:hover .icon-bob, .icon-bob:hover { animation: iconJump .6s cubic-bezier(.3,1.4,.5,1) 1, iconBob 3.4s ease-in-out .6s infinite; }
 @media (prefers-reduced-motion: reduce) { .icon-bob { animation: none !important; } }
+
+/* Hero film chapter caption: soft rise when the act changes. */
+@keyframes heroCap { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.hero-cap { animation: heroCap .6s cubic-bezier(.2,.8,.2,1) both; }
+@media (prefers-reduced-motion: reduce) { .hero-cap { animation: none; } }
 

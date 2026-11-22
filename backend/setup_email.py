@@ -125,9 +125,9 @@ def test_smtp(host, port, user, password, sender, to_addr) -> tuple[bool, str]:
     msg = MIMEMultipart()
     msg["From"] = sender
     msg["To"] = to_addr
-    msg["Subject"] = "QCloneJob — test email"
+    msg["Subject"] = "JobBay — test email"
     msg.attach(MIMEText(
-        "This is a test from your QCloneJob backend.\n\n"
+        "This is a test from your JobBay backend.\n\n"
         "If you're reading this, outgoing email works.\n", "plain"))
     try:
         ctx = ssl.create_default_context()
@@ -220,7 +220,7 @@ def main() -> int:
         return run_test_only()
 
     print("=" * 66)
-    print("  QCloneJob — email setup")
+    print("  JobBay — email setup")
     print("=" * 66)
     print("\nSend from YOUR OWN email address, for free.\n")
     for key, p in PROVIDERS.items():

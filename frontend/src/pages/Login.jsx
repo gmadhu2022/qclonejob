@@ -247,7 +247,7 @@ export default function Login() {
   const RoleIcon = { jobseeker: IconUser, enterprise: IconBriefcase, institute: IconBuilding };
   const roleIdx = Math.max(0, ROLES.findIndex((r) => r.key === role));
   const QUOTE = {
-    jobseeker: ["Find work that fits you.", "From daily-wage to post-graduate roles, across India."],
+    jobseeker: ["Find work that fits you.", "From daily-wage to post-graduate roles, across the world."],
     enterprise: ["Hire the right people, faster.", "Search resumes by skill and city, and manage every applicant."],
     institute: ["Put every student in front of employers.", "Upload one sheet — every student gets a profile and login."],
   }[role];
@@ -340,7 +340,7 @@ export default function Login() {
           </form>
 
           <div className="animate-in delay-3 mt-6 flex items-center gap-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-            <span className="h-px flex-1 bg-slate-200" /> New to QCloneJob? <span className="h-px flex-1 bg-slate-200" />
+            <span className="h-px flex-1 bg-slate-200" /> New to JobBay? <span className="h-px flex-1 bg-slate-200" />
           </div>
           <Link to={`/register/${role}`}
                 className="animate-in delay-3 mt-4 flex w-full items-center justify-center gap-2 rounded-full border-[1.5px] border-navy py-3 text-[14px] font-semibold text-navy transition-colors hover:bg-navy hover:text-white">

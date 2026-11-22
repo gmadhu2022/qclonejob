@@ -264,7 +264,7 @@ export function RecruitmentServices() {
     <ServiceShell
       title="Connecting Employers with the Right Talent"
       lede={[
-        "At QCloneJob, we help organizations connect with suitable candidates through our recruitment services. Our platform enables employers to publish job openings, reach potential candidates, identify relevant talent, and simplify their hiring process.",
+        "At JobBay, we help organizations connect with suitable candidates through our recruitment services. Our platform enables employers to publish job openings, reach potential candidates, identify relevant talent, and simplify their hiring process.",
         "Whether you are a startup, a growing business, or an established organization, our recruitment solutions are designed to support your hiring requirements across different industries, experience levels, and job functions.",
         "Our goal is to bridge the gap between employers and job seekers by making recruitment more accessible, efficient, and convenient.",
       ]}
@@ -338,7 +338,7 @@ export function RecruitmentServices() {
           </p>
           <p>
             Whether you need to hire a single professional, build a specialized technical team, or
-            recruit employees for multiple locations, QCloneJob provides a platform to help you
+            recruit employees for multiple locations, JobBay provides a platform to help you
             connect with potential talent.
           </p>
         </div>
@@ -355,7 +355,7 @@ export function JobSearchService() {
     <ServiceShell
       title="Discover Opportunities. Build Your Career."
       lede={[
-        "Welcome to QCloneJob, your destination for exploring career opportunities and connecting with potential employers.",
+        "Welcome to JobBay, your destination for exploring career opportunities and connecting with potential employers.",
         "We make job searching easier by providing a platform where job seekers can explore vacancies across industries, discover opportunities that match their skills and experience, and take the next step in their professional journey.",
         "Whether you are a fresher looking for your first job, an experienced professional seeking career growth, or someone planning a career change, our platform helps you explore employment opportunities in one convenient place.",
       ]}
@@ -363,7 +363,7 @@ export function JobSearchService() {
         title: "Start Your Job Search Today",
         body: [
           "Your next career opportunity could begin with the right search. Create your profile, explore available vacancies, and discover opportunities that align with your skills, qualifications, and professional ambitions.",
-          "Whether you are beginning your career or looking for your next professional challenge, QCloneJob is here to support your job search journey.",
+          "Whether you are beginning your career or looking for your next professional challenge, JobBay is here to support your job search journey.",
         ],
         primary: "Create your profile",
       }}>

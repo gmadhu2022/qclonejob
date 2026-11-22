@@ -244,8 +244,8 @@ def register_institute(body: schemas.InstituteRegister, db: Session = Depends(ge
     db.commit()
 
     if chosen:
-        res = send_email(email, "Welcome to QCloneJob",
-                         f"Thank you for registering {body.name} on QCloneJob.\n\n"
+        res = send_email(email, "Welcome to JobBay",
+                         f"Thank you for registering {body.name} on JobBay.\n\n"
                          f"  User ID  : {email}\n"
                          f"  Password : the one you chose during registration\n\n"
                          f"Log in here: {settings.FRONTEND_URL}\n", kind="credentials")
@@ -410,7 +410,7 @@ def search_places(q: str = "", country: str = "IN", limit: int = 12):
     url = "https://photon.komoot.io/api/?" + _uparse.urlencode(
         {"q": q, "limit": 40, "lang": "en"}) + "&osm_tag=place"
     try:
-        req = _ureq.Request(url, headers={"User-Agent": "QCloneJob/1.0 (job location search)"})
+        req = _ureq.Request(url, headers={"User-Agent": "JobBay/1.0 (job location search)"})
         with _ureq.urlopen(req, timeout=6) as r:
             data = _json.loads(r.read().decode("utf-8"))
     except Exception:

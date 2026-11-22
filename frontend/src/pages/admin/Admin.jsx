@@ -87,7 +87,7 @@ function Reports() {
     <div className="max-w-6xl space-y-6">
       <div>
         <h2 className="text-xl font-bold text-navy">Platform overview</h2>
-        <p className="text-sm text-slate-500">Live across every account on QCloneJob.</p>
+        <p className="text-sm text-slate-500">Live across every account on JobBay.</p>
       </div>
 
       {/* attention strip — only shows when something needs doing */}

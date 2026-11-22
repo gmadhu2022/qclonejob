@@ -5,7 +5,7 @@ import {
   IconChart, IconLayers, IconClipboard, IconSparkle, IconBlock, IconDoc,
 } from "./icons";
 
-/* "How QCloneJob works" — a pinned, scroll-driven story.
+/* "How JobBay works" — a pinned, scroll-driven story.
 
    The section is several screens tall; its stage stays pinned while you
    scroll through it, and scroll position drives every scene frame by frame.
@@ -21,7 +21,7 @@ const STEPS = [
     who: "Institutes", short: "Upload", tone: "navy", Icon: IconBuilding,
     url: () => "institute/upload",
     title: "Upload one sheet. Every student gets a login.",
-    desc: "Drop in an Excel or CSV. QCloneJob checks for duplicates, creates every new student's profile and emails their login.",
+    desc: "Drop in an Excel or CSV. JobBay checks for duplicates, creates every new student's profile and emails their login.",
     points: ["Excel or CSV", "Duplicates skipped", "Credentials emailed"],
   },
   {
@@ -58,12 +58,12 @@ const STEPS = [
    the phone tells the same journey from the job seeker's side.
    [step, local progress at which it arrives, app, title, body] */
 const PHONE_NOTES = [
-  [0, 0.92, "Gmail", "Your QCloneJob login", "User ID: ravi.kumar@gmail.com · Password inside"],
-  [1, 0.88, "QCloneJob", "Your resume is ready", "Executive template · download as PDF"],
-  [2, 0.86, "QCloneJob", "BuildRight Infra downloaded your resume", "Electrician · Hyderabad"],
-  [3, 0.58, "QCloneJob", "New message · BuildRight Infra", "Great — 10 AM at our Hyderabad office."],
-  [4, 0.5, "QCloneJob", "Application update", "Electrician · now Shortlisted"],
-  [4, 0.86, "QCloneJob", "Congratulations, you're hired!", "Electrician · BuildRight Infra"],
+  [0, 0.92, "Gmail", "Your JobBay login", "User ID: ravi.kumar@gmail.com · Password inside"],
+  [1, 0.88, "JobBay", "Your resume is ready", "Executive template · download as PDF"],
+  [2, 0.86, "JobBay", "BuildRight Infra downloaded your resume", "Electrician · Hyderabad"],
+  [3, 0.58, "JobBay", "New message · BuildRight Infra", "Great — 10 AM at our Hyderabad office."],
+  [4, 0.5, "JobBay", "Application update", "Electrician · now Shortlisted"],
+  [4, 0.86, "JobBay", "Congratulations, you're hired!", "Electrician · BuildRight Infra"],
 ];
 
 const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
@@ -128,14 +128,14 @@ export default function ScrollStory() {
       <div className="relative mx-auto max-w-3xl px-6 pb-6 pt-20 text-center">
         <span className="text-xs font-bold uppercase tracking-[0.2em] text-brandgreen-600">How it works</span>
         <h3 className="mt-3 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
-          See <span className="bg-gradient-to-r from-navy to-brandgreen-600 bg-clip-text text-transparent">QCloneJob</span> in action
+          See <span className="bg-gradient-to-r from-navy to-brandgreen-600 bg-clip-text text-transparent">JobBay</span> in action
         </h3>
         <p className="mx-auto mt-3 max-w-xl text-base text-slate-500">
           Five steps from a student list to a job offer — shown on the real institute, job seeker and recruiter screens.
         </p>
       </div>
 
-      <section ref={ref} className="relative" style={{ height: `${N * 120 + 60}vh` }} aria-label="How QCloneJob works">
+      <section ref={ref} className="relative" style={{ height: `${N * 120 + 60}vh` }} aria-label="How JobBay works">
         <div className="sticky top-16 flex h-[calc(100vh-4rem)] items-center overflow-hidden">
           <div className="relative mx-auto grid w-full max-w-7xl items-center gap-6 px-6 lg:grid-cols-[minmax(0,4fr)_minmax(0,8fr)] lg:gap-10">
             {/* ---------- Left: step list, active one expanded ---------- */}
@@ -206,7 +206,7 @@ export default function ScrollStory() {
                       <span className="h-2 w-2 rounded-full bg-brandgreen-400" />
                       <span className="ml-2 flex flex-1 items-center gap-1 truncate rounded-md bg-white px-2.5 py-0.5 text-[10px] text-slate-400 ring-1 ring-slate-200">
                         <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
-                        qclonejob.com/<span key={url} className="story-url text-slate-600">{url}</span>
+                        jobbay.com/<span key={url} className="story-url text-slate-600">{url}</span>
                       </span>
                     </div>
                     <div className="relative aspect-[4/5] sm:aspect-[16/10]">
@@ -303,7 +303,7 @@ function AppShell({ role, active, children, cursor }) {
       <aside className="hidden w-[27%] shrink-0 flex-col border-r border-slate-100 bg-white px-2 py-3 sm:flex">
         <div className="flex items-center gap-1 px-1.5">
           <span className="text-[13px] font-black leading-none text-navy">Q<span className="text-brandgreen-600">J</span></span>
-          <span className="text-[9px] font-bold tracking-wide text-slate-700">QCLONEJOB</span>
+          <span className="text-[9px] font-bold tracking-wide text-slate-700">JOBBAY</span>
         </div>
         <span className="mt-3 px-1.5 text-[8px] font-bold tracking-wider text-slate-400">{ROLE_LABEL[role]}</span>
         <nav className="mt-1.5 space-y-0.5">

@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     # BREVO_SENDER_EMAIL must be a sender you have verified in Brevo
     # (Senders, Domains & Dedicated IPs -> Senders).
     BREVO_API_KEY: str = ""
-    BREVO_SENDER_NAME: str = "QCloneJob"
+    BREVO_SENDER_NAME: str = "JobBay"
     BREVO_SENDER_EMAIL: str = ""
     BREVO_BASE_URL: str = "https://api.brevo.com/v3/smtp/email"
 
@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
-    EMAIL_FROM: str = "no-reply@qclonejob.com"
+    EMAIL_FROM: str = "no-reply@jobbay.com"
 
     # --- AI (Groq) ---
     # Get a free key at https://console.groq.com/keys
@@ -153,10 +153,10 @@ class Settings(BaseSettings):
     AD_SCROLLER_MAX_CHARS: int = 120
 
     # --- App ---
-    APP_NAME: str = "QCloneJob"
+    APP_NAME: str = "JobBay"
     FRONTEND_URL: str = "http://localhost:5173"
     # Extra origins allowed to call the API, comma-separated.
-    # On Render set this to your static site URL, e.g. https://qclonejob-web.onrender.com
+    # On Render set this to your static site URL, e.g. https://jobbay-web.onrender.com
     CORS_ORIGINS: str = ""
 
     # The institute all voluntary self-registrations are attached to (per user story).

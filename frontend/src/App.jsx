@@ -29,7 +29,7 @@ export default function App() {
       <Route path="/services/job-search"  element={<JobSearchService />} />
       <Route path="/contact" element={
         <StaticPage title="Contact us">
-          <p>Email: support@qclonejob.com · Phone: +91-00000-00000</p>
+          <p>Email: support@jobbay.com · Phone: +91-00000-00000</p>
         </StaticPage>
       } />
 

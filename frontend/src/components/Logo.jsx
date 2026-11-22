@@ -1,49 +1,57 @@
-import logoMark from "../assets/logo-mark.png";
+import jobbayMark from "../assets/brand/jobbay-mark.svg";
 
 /**
- * Crisp logo. The source PNG has a white background, so on dark surfaces we sit it
- * inside a white "pill" rather than CSS-inverting it (inverting an anti-aliased raster
- * is what caused the fuzzy halo).
+ * JobBay logo — vector mark (assets/brand/jobbay-mark.svg) + live-text
+ * wordmark ("Job" navy, "Bay" teal, Poppins Bold), so it is sharp at every
+ * size and on every screen density.
  *
- * variant: "plain" (light backgrounds) | "pill" (dark backgrounds)
+ * Sizing: pass a Tailwind height class as before (h-8, h-9, h-10, h-11 …);
+ * the mark takes that height and the wordmark scales with it.
  *
- * BETA BADGE
- * ----------
- * Added here rather than in each header because the logo is the one thing
- * every screen already shows — public pages, all four portals and both login
- * screens. One change, no layout touched, nothing to miss.
+ * variant: "plain" (light backgrounds) | "pill" (dark backgrounds — white pill)
+ *          | "light" (dark backgrounds — white "Job", no pill)
  *
- * Driven by VITE_APP_STAGE so dropping the badge at launch is an environment
- * change, not a code change and a redeploy of a component. Set
- * VITE_APP_STAGE=live (or anything other than "beta") and it disappears.
+ * BETA BADGE — driven by VITE_APP_STAGE; set VITE_APP_STAGE=live to hide it.
  * Pass beta={false} to hide it on a specific instance.
  */
 const STAGE = (import.meta.env.VITE_APP_STAGE ?? "beta").toLowerCase();
 
+function heightPx(className) {
+  const m = /(?:^|\s)h-(\d+(?:\.\d+)?)(?:\s|$)/.exec(className || "");
+  return m ? Number(m[1]) * 4 : 36;
+}
+
 export default function Logo({ className = "h-9", variant = "plain", beta = true }) {
   const showBeta = beta && STAGE === "beta";
-  const img = (
-    <img
-      src={logoMark}
-      alt="QCloneJob — Qualification Meets Job"
-      className={`${className} w-auto select-none`}
-      draggable="false"
-      style={{ imageRendering: "auto" }}
-    />
+  const h = heightPx(className);
+  const onDark = variant === "light";
+  const jobColor = onDark ? "#ffffff" : "#0b2350";
+  // "Bay" in a teal → green gradient (brighter on dark backgrounds).
+  const bayStyle = {
+    backgroundImage: onDark ? "linear-gradient(90deg,#2ee6c8,#34d399)" : "linear-gradient(90deg,#0ea5a0,#10b981)",
+    WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
+  };
+
+  const mark = (
+    <span className="inline-flex select-none items-center" style={{ gap: Math.round(h * 0.22) }}
+          role="img" aria-label="JobBay">
+      <img src={jobbayMark} alt="" draggable="false" style={{ height: h, width: h }} className="shrink-0" />
+      <span aria-hidden="true" className="font-heading font-bold leading-none"
+            style={{ fontSize: Math.round(h * 0.66), letterSpacing: "-0.02em" }}>
+        <span style={{ color: jobColor }}>Job</span><span style={bayStyle}>Bay</span>
+      </span>
+    </span>
   );
 
-  /* aria-hidden on the text: the logo's alt text already names the product,
-     and a screen reader announcing "QCloneJob … BETA" twice per page is
-     noise. The title attribute carries the meaning for anyone who hovers. */
   const badge = showBeta ? (
     <span title="This product is in beta — features may change."
           className="beta-badge relative inline-flex select-none items-center gap-1.5 overflow-hidden rounded-full
-                     bg-gradient-to-r from-navy to-brandgreen-600 py-[3px] pl-2 pr-2.5 text-[10px] font-extrabold
+                     bg-gradient-to-r from-[#0c3060] to-[#0ea5a0] py-[3px] pl-2 pr-2.5 text-[10px] font-extrabold
                      uppercase leading-none tracking-[0.14em] text-white
-                     shadow-[0_4px_12px_-3px_rgba(79,70,229,.55)] ring-1 ring-white/40">
+                     shadow-[0_4px_12px_-3px_rgba(18,150,138,.55)] ring-1 ring-white/40">
       <span aria-hidden="true" className="relative flex h-1.5 w-1.5">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white/80" />
-        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white" />
+        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#ffb020]" />
       </span>
       Beta
     </span>
@@ -52,19 +60,15 @@ export default function Logo({ className = "h-9", variant = "plain", beta = true
   if (variant === "pill") {
     return (
       <span className="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 shadow-sm ring-1 ring-white/20">
-        {img}
+        {mark}
         {badge}
       </span>
     );
   }
-
-  /* No badge: return the bare <img> exactly as before, so nothing that
-     positions or sizes the logo today can shift. */
-  if (!badge) return img;
-
+  if (!badge) return mark;
   return (
     <span className="inline-flex items-center gap-2 align-middle">
-      {img}
+      {mark}
       {badge}
     </span>
   );

@@ -18,7 +18,7 @@ from .auth import hash_password, verify_password
 from .config import settings
 from .email_utils import send_email
 
-logger = logging.getLogger("qclonejob.otp")
+logger = logging.getLogger("jobbay.otp")
 
 CODE_TTL_MINUTES = 10
 MAX_ATTEMPTS = 5

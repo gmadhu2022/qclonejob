@@ -587,7 +587,7 @@ function renderChart(type, data, height) {
 export function SwitchableChart({ title, subtitle, data = [], types = ALL_TYPES, height = 200 }) {
   const preferred = types.filter((t) => CHART_TYPES[t]);
   const ordered = [...preferred, ...ALL_TYPES.filter((t) => !preferred.includes(t))];
-  const key = `qcj.chart.v2.${title || "chart"}`;
+  const key = `jobbay.chart.v2.${title || "chart"}`;
   const [type, setTypeState] = useState(() => {
     try { const s = localStorage.getItem(key); if (s && CHART_TYPES[s]) return s; } catch { /* ignore */ }
     return ordered[0] || "bar";

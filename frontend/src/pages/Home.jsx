@@ -3,10 +3,8 @@ import { Link } from "react-router-dom";
 import { api, mediaUrl } from "../lib/api";
 import Logo from "../components/Logo";
 import SiteHeader from "../components/SiteHeader";
-// Same artwork as logo.png with the white background removed, so the
-// animated network shows around it instead of behind a white box.
-import logoFull from "../assets/logo-transparent.png";
-import { HeroBackdrop, HeroNetwork, Reveal, ScrollProgress, ScrollCue } from "../components/HeroScene";
+import { Reveal, ScrollProgress } from "../components/HeroScene";
+import HeroVideo from "../components/HeroVideo";
 import ScrollStory from "../components/ScrollStory";
 import PortalSummary from "../components/PortalSummary";
 
@@ -41,43 +39,40 @@ export default function Home() {
       <SiteHeader />
       <ScrollProgress />
 
-      {/* Hero */}
-      <section className="relative overflow-hidden">
-        <HeroBackdrop />
-        <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-6 py-16 lg:grid-cols-2 lg:pb-24">
-          <div>
-            <span className="badge animate-in bg-brandgreen-50 text-brandgreen-600">Advanced job searching platform</span>
-            <h1 className="animate-in delay-1 mt-4 text-4xl font-extrabold leading-tight text-slate-900 sm:text-5xl">
-              A to Z Jobs.<br />One Platform.<br /><span className="text-brandgreen-600">Unlimited Opportunities.</span>
-            </h1>
-            <p className="animate-in delay-2 mt-4 max-w-md text-lg text-slate-600">
-              From daily-wage worker to post-graduate roles — one place for every job seeker,
-              employer and institute across India.
-            </p>
-            <div className="animate-in delay-3 mt-7 flex flex-wrap gap-3">
-              <Link to="/register/jobseeker" className="btn-green">Find a job</Link>
-              <Link to="/register/enterprise" className="btn-outline">Hire talent</Link>
-            </div>
-            <div className="mt-8 flex items-center gap-x-2 gap-y-1 overflow-x-auto whitespace-nowrap pb-1
-                            text-[12px] font-semibold sm:gap-x-3 sm:text-[13px]">
-              {/* {PILLARS.map((c, i) => (
-                <span key={c.name} className="flex shrink-0 items-center gap-2">
-                  {i > 0 && <span className="h-1 w-1 rounded-full bg-slate-300" />}
-                  <span className={c.color}>{c.name}</span>
-                </span>
-              ))} */}
-            </div>
-          </div>
-          <div className="animate-in delay-2 flex justify-center">
-            <HeroNetwork>
-              <img src={logoFull} alt="QCloneJob" className="w-full drop-shadow-sm" />
-            </HeroNetwork>
+      {/* Hero — full-bleed recruitment film behind centred, medium-size copy. */}
+      <section className="relative isolate flex min-h-[540px] items-center justify-center overflow-hidden
+                          h-[calc(100svh-65px)] text-center text-white">
+        <HeroVideo />
+        <div className="mx-auto w-full max-w-3xl px-6 pb-44 pt-10 sm:pb-48">
+          <span className="animate-in inline-flex items-center gap-2 rounded-full bg-white/10 px-3.5 py-1 text-[10.5px] font-semibold
+                           uppercase tracking-[0.12em] text-white/90 ring-1 ring-white/25 backdrop-blur sm:text-[12px] sm:tracking-[0.14em]">
+            <span className="h-1.5 w-1.5 rounded-full bg-brandgreen-400" /> Advanced job searching platform
+          </span>
+          <h1 className="animate-in delay-1 mt-5 font-heading text-[30px] font-semibold leading-[1.18] tracking-tight
+                         [text-shadow:0_2px_24px_rgba(0,0,0,.35)] sm:text-[38px] lg:text-[44px]">
+            A to Z Jobs. <span className="whitespace-nowrap">One Platform.</span><br />
+            <span className="text-[#8bd86d]">Unlimited Opportunities.</span>
+          </h1>
+          <p className="animate-in delay-2 mx-auto mt-4 max-w-xl text-[15px] leading-relaxed text-white/80 sm:text-[17px]">
+            From daily-wage worker to post-graduate roles — one place for every job seeker,
+            employer and institute across the world.
+          </p>
+          <div className="animate-in delay-3 mt-8 flex flex-wrap items-center justify-center gap-3">
+            <Link to="/register/jobseeker"
+                  className="inline-flex min-w-[150px] items-center justify-center rounded-full bg-brandgreen px-6 py-3 text-[15px] font-semibold text-white
+                             shadow-[0_10px_30px_-10px_rgba(79,170,56,.9)] transition hover:-translate-y-0.5 hover:bg-brandgreen-600
+                             focus:outline-none focus-visible:ring-4 focus-visible:ring-white/40">
+              Find a job
+            </Link>
+            <Link to="/register/enterprise"
+                  className="inline-flex min-w-[150px] items-center justify-center rounded-full bg-white/10 px-6 py-3 text-[15px] font-semibold text-white
+                             ring-1 ring-white/40 backdrop-blur transition hover:-translate-y-0.5 hover:bg-white hover:text-slate-900
+                             focus:outline-none focus-visible:ring-4 focus-visible:ring-white/40">
+              Hire talent
+            </Link>
           </div>
         </div>
-        <ScrollCue />
       </section>
-
-
 
       {/* How it works: replaces the static feature + audience sections,
           telling the same content as a scroll-driven story. */}
@@ -98,7 +93,7 @@ export default function Home() {
       <footer className="border-t border-slate-100 bg-white px-6 py-8">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 sm:flex-row">
           <Logo className="h-8" />
-          <p className="text-xs text-slate-400">© {new Date().getFullYear()} QCloneJob — Qualification Meets Job.</p>
+          <p className="text-xs text-slate-400">© {new Date().getFullYear()} JobBay. All rights reserved.</p>
         </div>
       </footer>
     </div>

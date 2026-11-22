@@ -63,7 +63,7 @@ Squash everything into one clean commit:
 git add -A
 git reset --soft $(git rev-list --max-parents=0 HEAD)   # back to the very first commit, files kept
 git add -A
-git commit -m "Initial commit: QCloneJob job platform"
+git commit -m "Initial commit: JobBay job platform"
 git push -u origin main --force
 ```
 

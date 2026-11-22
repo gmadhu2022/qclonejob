@@ -17,7 +17,7 @@ def redact(url: str) -> str:
 def main() -> int:
     url = settings.DATABASE_URL
     print("=" * 68)
-    print("QCloneJob — database check")
+    print("JobBay — database check")
     print("=" * 68)
     print(f"DATABASE_URL : {redact(url)}")
 

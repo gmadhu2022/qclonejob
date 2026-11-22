@@ -37,7 +37,7 @@ TTL_SECONDS = 10 * 60          # long enough to fill in a whole form, twice
 
 
 def _key() -> bytes:
-    return (getattr(settings, "SECRET_KEY", "") or "qclonejob-dev-secret").encode()
+    return (getattr(settings, "SECRET_KEY", "") or "jobbay-dev-secret").encode()
 
 
 def _sign(payload: str) -> str:

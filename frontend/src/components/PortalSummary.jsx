@@ -72,7 +72,7 @@ export default function PortalSummary() {
       <div className="mx-auto max-w-6xl">
         <div className="text-center">
           <h2 id="join-title" className="join-item text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
-            Register now on <span className="bg-gradient-to-r from-brandgreen-600 to-navy bg-clip-text text-transparent">QCloneJob</span>
+            Register now on <span className="bg-gradient-to-r from-brandgreen-600 to-navy bg-clip-text text-transparent">JobBay</span>
           </h2>
           <span aria-hidden="true" className="join-item mx-auto mt-4 block h-1 w-16 rounded-full bg-gradient-to-r from-brandgreen to-navy"
                 style={{ "--d": "100ms" }} />

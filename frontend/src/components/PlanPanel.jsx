@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { useToast } from "./ui";
 import { useConfirm, useDialog } from "./Dialog";
 import { IconCheck, IconLock, IconSparkle } from "./icons";
+import jobbayMark from "../assets/brand/jobbay-mark.svg";
 
 /* =====================================================================
    Plan, quota and (mocked) checkout.
@@ -298,7 +299,7 @@ export function QuotaBar({ label, used, limit }) {
    authentication step, success / failure — so the upgrade can be exercised
    end to end. NOTHING typed here leaves the browser: no field is sent to the
    server, stored or logged; only the plan key is posted once the simulated
-   payment succeeds. It is styled as QCloneJob's own checkout and labelled
+   payment succeeds. It is styled as JobBay's own checkout and labelled
    TEST MODE throughout, so it can never be mistaken for a live payment page.
 
    Going live = replace this component with the payment provider's official
@@ -430,9 +431,9 @@ export function MockRazorpay({ plan, onBack, onPaid }) {
             <div aria-hidden="true" className="pointer-events-none absolute -bottom-20 -right-16 h-56 w-56 rounded-full bg-white/10 blur-2xl" />
             <div className="relative">
               <div className="flex items-center gap-2.5">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white font-heading text-[15px] font-extrabold text-navy">QJ</span>
+                <img src={jobbayMark} alt="" className="h-10 w-10 rounded-xl ring-1 ring-white/30" />
                 <div>
-                  <p className="font-heading text-[15px] font-bold leading-tight">QCloneJob</p>
+                  <p className="font-heading text-[15px] font-bold leading-tight">JobBay</p>
                   <p className="text-[11px] text-white/60">Secure checkout</p>
                 </div>
               </div>
@@ -559,7 +560,7 @@ export function MockRazorpay({ plan, onBack, onPaid }) {
                     <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9.5px] font-extrabold text-amber-950">SIMULATOR</span>
                   </div>
                   <div className="p-5">
-                    <p className="text-[13px] text-slate-600">Authorise a payment of <b className="text-slate-900">{inr(plan.price)}</b> to <b className="text-slate-900">QCloneJob</b></p>
+                    <p className="text-[13px] text-slate-600">Authorise a payment of <b className="text-slate-900">{inr(plan.price)}</b> to <b className="text-slate-900">JobBay</b></p>
                     <p className="mt-0.5 text-[12px] text-slate-400">{methodLabel}</p>
                     <label className="mb-1 mt-5 block text-[12px] font-semibold text-slate-600">One-time password</label>
                     <input value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}

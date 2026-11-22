@@ -175,7 +175,7 @@ def decide_approval(kind: str, obj_id: int, body: dict,
     if obj.user:
         notify(db, obj.user.id, "system",
                f"Your account was {decision}",
-               body.get("reason") or f"Your {kind} account has been {decision} by the QCloneJob team.",
+               body.get("reason") or f"Your {kind} account has been {decision} by the JobBay team.",
                notify_service.user_link(db, obj.user.id, "profile"), commit=False)
     db.commit()
 
@@ -183,11 +183,11 @@ def decide_approval(kind: str, obj_id: int, body: dict,
         email_to = getattr(obj, "email", None)
         if email_to:
             if decision == "approved":
-                send_email(email_to, "Your QCloneJob account is approved",
+                send_email(email_to, "Your JobBay account is approved",
                            f"Good news — your {kind} account has been approved.\n\n"
-                           f"You can now log in and start using QCloneJob.\n")
+                           f"You can now log in and start using JobBay.\n")
             else:
-                send_email(email_to, "About your QCloneJob registration",
+                send_email(email_to, "About your JobBay registration",
                            f"Thank you for registering.\n\nWe couldn't approve your {kind} "
                            f"account at this time.\n\nReason: {body.get('reason') or 'Not specified'}\n")
     except Exception:
@@ -406,7 +406,7 @@ def resend_email(log_id: int, db: Session = Depends(get_db)):
     if not row:
         raise HTTPException(404, "Log entry not found.")
     res = send_email(row.to_email, row.subject,
-                     "Resending your earlier QCloneJob message.\n\n"
+                     "Resending your earlier JobBay message.\n\n"
                      "If you were expecting login details and they are missing, "
                      "ask an administrator to reset your password.",
                      kind=row.kind or "other")

@@ -107,10 +107,10 @@ def login(form: OAuth2PasswordRequestForm = Depends(), expected_role: str | None
         raise HTTPException(status_code=403,
                             detail=f"Your registration was not approved."
                                    + (f" Reason: {reason}" if reason else "")
-                                   + " Please contact support@qclonejob.com.")
+                                   + " Please contact support@jobbay.com.")
     if not user.is_active:
         raise HTTPException(status_code=403,
-                            detail="This account is disabled. Please contact support@qclonejob.com.")
+                            detail="This account is disabled. Please contact support@jobbay.com.")
     # Portal lock — admins may use any portal, everyone else is held to theirs.
     # (portal mismatch is handled before the password check, above — the
     #  resolver guarantees user.role matches expected_role by this point)

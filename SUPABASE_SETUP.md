@@ -1,4 +1,4 @@
-# Moving QCloneJob from SQLite to Supabase (Postgres)
+# Moving JobBay from SQLite to Supabase (Postgres)
 
 The app uses plain SQLAlchemy, so switching databases is **one line in `.env`** — no code
 changes. Follow these steps in order.

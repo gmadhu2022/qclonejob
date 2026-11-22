@@ -29,7 +29,7 @@ export default function About() {
             Connecting Talent<br className="hidden sm:block" /> with Opportunities
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-[17px] leading-relaxed text-slate-700">
-            Welcome to <b className="font-semibold text-navy">QCloneJob</b>, your trusted platform
+            Welcome to <b className="font-semibold text-navy">JobBay</b>, your trusted platform
             for connecting job seekers with the right career opportunities and helping employers
             find the right talent.
           </p>
@@ -44,7 +44,7 @@ export default function About() {
       {/* ---------------- Who we are ---------------- */}
       <Section eyebrow="Who we are" title="An online employment platform">
         <p>
-          QCloneJob is an online employment platform designed to bridge the gap between job
+          JobBay is an online employment platform designed to bridge the gap between job
           seekers and recruiters. We provide a convenient platform where candidates can explore
           job opportunities, showcase their skills, and take the next step in their professional
           journey.

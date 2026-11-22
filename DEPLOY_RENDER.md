@@ -1,4 +1,4 @@
-# Deploying QCloneJob on Render (free)
+# Deploying JobBay on Render (free)
 
 Two services: the **backend API** (free web service) and the **frontend** (free static site).
 Database stays on **Supabase** — do not use Render's free Postgres, it gets deleted after ~30 days.
@@ -26,15 +26,15 @@ This repo has a `render.yaml`, so Render can create both services for you.
 
    | Service | Key | Value |
    |---|---|---|
-   | qclonejob-api | `DATABASE_URL` | your Supabase session-pooler URI |
-   | qclonejob-api | `FRONTEND_URL` | `https://qclonejob-web.onrender.com` |
-   | qclonejob-api | `CORS_ORIGINS` | `https://qclonejob-web.onrender.com` |
-   | qclonejob-web | `VITE_API_BASE` | `https://qclonejob-api.onrender.com` |
+   | jobbay-api | `DATABASE_URL` | your Supabase session-pooler URI |
+   | jobbay-api | `FRONTEND_URL` | `https://jobbay-web.onrender.com` |
+   | jobbay-api | `CORS_ORIGINS` | `https://jobbay-web.onrender.com` |
+   | jobbay-web | `VITE_API_BASE` | `https://jobbay-api.onrender.com` |
 
    `JWT_SECRET` is generated automatically. Leave the AI/email keys blank for now.
 
-4. First build takes ~5 minutes. When `qclonejob-api` is live, open
-   `https://qclonejob-api.onrender.com/healthz` — you should see `{"status":"ok"}`.
+4. First build takes ~5 minutes. When `jobbay-api` is live, open
+   `https://jobbay-api.onrender.com/healthz` — you should see `{"status":"ok"}`.
 
 **Chicken-and-egg note:** you won't know the exact URLs until the services exist. Deploy first,
 then go back and set `FRONTEND_URL`, `CORS_ORIGINS` and `VITE_API_BASE` to the real URLs, and
@@ -64,8 +64,8 @@ Environment variables:
 ```
 DATABASE_URL   = postgresql+psycopg2://postgres.<ref>:<password>@<host>.pooler.supabase.com:5432/postgres
 JWT_SECRET     = <a long random string>
-FRONTEND_URL   = https://qclonejob-web.onrender.com
-CORS_ORIGINS   = https://qclonejob-web.onrender.com
+FRONTEND_URL   = https://jobbay-web.onrender.com
+CORS_ORIGINS   = https://jobbay-web.onrender.com
 PYTHON_VERSION = 3.12.4
 ```
 
@@ -84,7 +84,7 @@ PYTHON_VERSION = 3.12.4
 Environment variable:
 
 ```
-VITE_API_BASE = https://qclonejob-api.onrender.com
+VITE_API_BASE = https://jobbay-api.onrender.com
 ```
 
 **Then add the SPA rewrite rule** — Settings → Redirects/Rewrites:
@@ -110,7 +110,7 @@ python seed.py
 That creates the tables, adds any missing columns, and inserts the demo accounts and sample jobs.
 You do not need to run it on Render — both connect to the same Supabase.
 
-**Test the chain:** open your static site URL, log in as `admin@qclonejob.com / admin123`.
+**Test the chain:** open your static site URL, log in as `admin@jobbay.com / admin123`.
 If the page loads but login fails, it's almost always CORS or `VITE_API_BASE` — see below.
 
 ---

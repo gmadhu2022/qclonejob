@@ -273,7 +273,7 @@ function RegShell({ role, onRole, steps, form, stage, complete, title, subtitle,
                 <div className="hidden rounded-2xl bg-gradient-to-br from-navy to-indigo-500 p-3 text-white shadow-lg lg:block [@media(max-height:620px)]:!hidden">
                   <span className="text-[12px] font-bold">Need help signing up?</span>
                   <span className="mt-0.5 block text-[11px] leading-snug text-white/75">
-                    Write to <a href="mailto:support@qclonejob.com" className="font-semibold text-white underline-offset-2 hover:underline">support@qclonejob.com</a>
+                    Write to <a href="mailto:support@jobbay.com" className="font-semibold text-white underline-offset-2 hover:underline">support@jobbay.com</a>
                   </span>
                   <span className="mt-2 block border-t border-white/15 pt-2 text-[11px] text-white/75">
                     Already registered?{" "}

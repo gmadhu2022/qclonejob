@@ -1,6 +1,6 @@
 """Everyday and entry-level work, by sector.
 
-QCloneJob is built first for daily-wage, domestic, helper and trade work —
+JobBay is built first for daily-wage, domestic, helper and trade work —
 the jobs people see around them every day. The original taxonomy leaned
 toward office and IT roles, so a maid, sweeper, dhobi, ward boy or kirana
 helper could not find themselves in the skills list at all.

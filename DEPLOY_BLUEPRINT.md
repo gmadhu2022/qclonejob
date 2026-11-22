@@ -1,6 +1,6 @@
-# Deploying QCloneJob on Render via Blueprint
+# Deploying JobBay on Render via Blueprint
 
-Two services from one file: **qclonejob-api** (FastAPI) and **qclonejob-web** (React static site).
+Two services from one file: **jobbay-api** (FastAPI) and **jobbay-web** (React static site).
 Database stays on Supabase. Total cost on the free tier: **$0**.
 
 ---
@@ -50,7 +50,7 @@ See [SUPABASE_SETUP.md](SUPABASE_SETUP.md).
 2. Connect your GitHub account and pick the repo.
 3. Branch: **main** (or whatever `git branch --show-current` printed).
 4. Blueprint Path: leave blank (defaults to `render.yaml` at the root).
-5. Give the Blueprint a name, e.g. `qclonejob`, then **Apply**.
+5. Give the Blueprint a name, e.g. `jobbay`, then **Apply**.
 
 Render reads the file and shows both services. It will prompt for the variables marked
 `sync: false` — these are the ones only you can know.
@@ -59,13 +59,13 @@ Render reads the file and shows both services. It will prompt for the variables 
 
 ## Step 2 — Environment variables
 
-### qclonejob-api (backend)
+### jobbay-api (backend)
 
 | Key | Value | Notes |
 |---|---|---|
 | `DATABASE_URL` | `postgresql+psycopg2://postgres.<ref>:<password>@<host>.pooler.supabase.com:5432/postgres` | **Session pooler** string. Percent-encode specials: `@`→`%40` |
-| `FRONTEND_URL` | `https://qclonejob-web.onrender.com` | Fill in after step 3 |
-| `CORS_ORIGINS` | `https://qclonejob-web.onrender.com` | Same value, no trailing slash |
+| `FRONTEND_URL` | `https://jobbay-web.onrender.com` | Fill in after step 3 |
+| `CORS_ORIGINS` | `https://jobbay-web.onrender.com` | Same value, no trailing slash |
 | `GROQ_API_KEY` | your Groq key, or leave blank | Blank = AI features hidden, app still works |
 | `SMTP_HOST` | `smtp-relay.brevo.com` | Or leave blank for console-only email |
 | `SMTP_USER` | your Brevo SMTP login | |
@@ -76,11 +76,11 @@ Set automatically, no action needed: `PYTHON_VERSION` (3.12.4), `JWT_SECRET` (Re
 strong random value), `GROQ_MODEL`, `SMTP_PORT` (587), `AI_ENABLED` and `EMAIL_ENABLED` (both
 `False` — flip to `True` once the keys above are filled in).
 
-### qclonejob-web (frontend)
+### jobbay-web (frontend)
 
 | Key | Value |
 |---|---|
-| `VITE_API_BASE` | `https://qclonejob-api.onrender.com` |
+| `VITE_API_BASE` | `https://jobbay-api.onrender.com` |
 
 ---
 
@@ -116,14 +116,14 @@ You don't run it on Render — both connect to the same Supabase.
 
 ## Step 5 — Verify
 
-Open `https://qclonejob-api.onrender.com/healthz`:
+Open `https://jobbay-api.onrender.com/healthz`:
 
 ```json
 {
   "status": "ok",
   "revision": "2026-08-24",
   "database": "postgres",
-  "cors_origins": ["https://qclonejob-web.onrender.com", ...],
+  "cors_origins": ["https://jobbay-web.onrender.com", ...],
   "ai_enabled": false,
   "email_enabled": false
 }
@@ -131,14 +131,14 @@ Open `https://qclonejob-api.onrender.com/healthz`:
 
 Check `database` says **postgres** (not sqlite) and `cors_origins` contains your frontend URL.
 
-Then open the site and log in as `admin@qclonejob.com / admin123`. **Change that password
+Then open the site and log in as `admin@jobbay.com / admin123`. **Change that password
 immediately** — it's in a public repo.
 
 ---
 
 ## Turning on AI and email after deployment
 
-Both are just environment variables on **qclonejob-api**; no code change, no redeploy of the
+Both are just environment variables on **jobbay-api**; no code change, no redeploy of the
 frontend:
 
 - **AI** — set `GROQ_API_KEY` and `AI_ENABLED=True`. Verify in Admin → Reports → AI model check.

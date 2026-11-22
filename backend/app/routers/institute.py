@@ -415,7 +415,7 @@ def download_upload_template(current: models.User = Depends(get_current_user),
                              db: Session = Depends(get_db)):
     """Download a blank .xlsx the institute can fill in and upload."""
     _log_download(db, _institute(current, db), current, "template",
-                  "qclonejob_student_upload_template.xlsx", "xlsx")
+                  "jobbay_student_upload_template.xlsx", "xlsx")
     data = build_template_workbook()
     # Response (not StreamingResponse) so Content-Length is set — some Excel
     # versions reject a download whose length the browser couldn't verify.
@@ -423,7 +423,7 @@ def download_upload_template(current: models.User = Depends(get_current_user),
         content=data,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={
-            "Content-Disposition": 'attachment; filename="qclonejob_student_upload_template.xlsx"',
+            "Content-Disposition": 'attachment; filename="jobbay_student_upload_template.xlsx"',
             "Content-Length": str(len(data)),
             "Cache-Control": "no-store",
         },
@@ -435,13 +435,13 @@ def download_template_csv(current: models.User = Depends(get_current_user),
                           db: Session = Depends(get_db)):
     """CSV fallback — opens anywhere, including Google Sheets and old Office."""
     _log_download(db, _institute(current, db), current, "template",
-                  "qclonejob_student_upload_template.csv", "csv")
+                  "jobbay_student_upload_template.csv", "csv")
     df = sample_template_dataframe()
     csv = df.to_csv(index=False)
     return Response(
         content=csv.encode("utf-8-sig"),      # BOM so Excel reads UTF-8 correctly
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": 'attachment; filename="qclonejob_student_upload_template.csv"'},
+        headers={"Content-Disposition": 'attachment; filename="jobbay_student_upload_template.csv"'},
     )
 
 
@@ -493,7 +493,7 @@ def export_students(current: models.User = Depends(get_current_user),
     buf = io.BytesIO()
     wb.save(buf)
     data = buf.getvalue()
-    filename = f"qclonejob_students_{inst.id}.xlsx"
+    filename = f"jobbay_students_{inst.id}.xlsx"
     _log_download(db, inst, current, "students", filename, "xlsx")
     return Response(
         content=data,

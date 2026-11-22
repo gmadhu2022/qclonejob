@@ -102,12 +102,12 @@ def seed(db, admin_pw: str, inst_pw: str, rec_pw: str, seeker_pw: str | None) ->
     """Create one working account per portal."""
     made = []
 
-    admin = models.User(email="admin@qclonejob.com", password_hash=hash_password(admin_pw),
+    admin = models.User(email="admin@jobbay.com", password_hash=hash_password(admin_pw),
                         role=models.ROLE_ADMIN, is_active=True, must_change_password=False)
     db.add(admin)
     made.append(("Admin", admin.email, admin_pw))
 
-    inst_user = models.User(email="institute@qclonejob.com", password_hash=hash_password(inst_pw),
+    inst_user = models.User(email="institute@jobbay.com", password_hash=hash_password(inst_pw),
                             role=models.ROLE_INSTITUTE, is_active=True, must_change_password=False)
     db.add(inst_user)
     db.flush()
@@ -130,7 +130,7 @@ def seed(db, admin_pw: str, inst_pw: str, rec_pw: str, seeker_pw: str | None) ->
         contact_phone=inst.phone))
     made.append(("Institute", inst_user.email, inst_pw))
 
-    rec_user = models.User(email="recruiter@qclonejob.com", password_hash=hash_password(rec_pw),
+    rec_user = models.User(email="recruiter@jobbay.com", password_hash=hash_password(rec_pw),
                            role=models.ROLE_ENTERPRISE, is_active=True, must_change_password=False)
     db.add(rec_user)
     db.flush()
@@ -143,7 +143,7 @@ def seed(db, admin_pw: str, inst_pw: str, rec_pw: str, seeker_pw: str | None) ->
     made.append(("Recruiter", rec_user.email, rec_pw))
 
     if seeker_pw:
-        sk_user = models.User(email="jobseeker@qclonejob.com",
+        sk_user = models.User(email="jobseeker@jobbay.com",
                               password_hash=hash_password(seeker_pw),
                               role=models.ROLE_JOBSEEKER, is_active=True,
                               must_change_password=False)
@@ -176,9 +176,9 @@ def main() -> int:
 
     if not a.yes:
         print("\nWould erase every row in:\n  " + ", ".join(TABLES))
-        print("\nWould then create: admin@qclonejob.com, institute@qclonejob.com, "
-              "recruiter@qclonejob.com"
-              + ("" if a.no_seeker else ", jobseeker@qclonejob.com"))
+        print("\nWould then create: admin@jobbay.com, institute@jobbay.com, "
+              "recruiter@jobbay.com"
+              + ("" if a.no_seeker else ", jobseeker@jobbay.com"))
         print("\nDRY RUN — nothing was changed. Re-run with --yes. Back up first.")
         return 0
 

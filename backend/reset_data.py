@@ -86,9 +86,9 @@ KEEP_ROLES = {models.ROLE_INSTITUTE, models.ROLE_ENTERPRISE,
 # Pass --keep-all-staff to fall back to the old behaviour (every admin,
 # institute and recruiter account stays).
 KEEP_EMAILS = {
-    "admin@qclonejob.com",
-    "institute@qclonejob.com",
-    "recruiter@qclonejob.com",
+    "admin@jobbay.com",
+    "institute@jobbay.com",
+    "recruiter@jobbay.com",
 }
 
 

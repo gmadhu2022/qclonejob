@@ -11,7 +11,7 @@
 services:
   # ---------------- Backend API (FastAPI) ----------------
   - type: web
-    name: qclonejob-api
+    name: jobbay-api
     runtime: python
     plan: free
     region: singapore              # closest Render region to India
@@ -29,7 +29,7 @@ services:
       - key: JWT_SECRET
         generateValue: true       # Render generates a strong random value
       - key: FRONTEND_URL
-        sync: false               # https://qclonejob-web.onrender.com
+        sync: false               # https://jobbay-web.onrender.com
       - key: CORS_ORIGINS
         sync: false               # same as FRONTEND_URL (comma-separated if several)
       # Optional integrations — leave blank to run without them.
@@ -54,7 +54,7 @@ services:
 
   # ---------------- Frontend (React static site) ----------------
   - type: web
-    name: qclonejob-web
+    name: jobbay-web
     runtime: static
     rootDir: frontend
     buildCommand: npm ci && npm run build
@@ -62,7 +62,7 @@ services:
     autoDeploy: true
     envVars:
       - key: VITE_API_BASE
-        sync: false               # https://qclonejob-api.onrender.com
+        sync: false               # https://jobbay-api.onrender.com
     routes:
       # Single-page app: every unknown path must serve index.html,
       # otherwise refreshing /jobseeker/profile returns 404.

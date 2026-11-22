@@ -1,4 +1,4 @@
--- QCloneJob — erase ALL DATA, keep every table.
+-- JobBay — erase ALL DATA, keep every table.
 -- Paste into the Supabase SQL Editor (Database -> SQL Editor -> New query).
 --
 -- TAKE A BACKUP FIRST. There is no undo.

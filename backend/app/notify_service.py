@@ -92,7 +92,7 @@ def notify_job_alert(db: Session, job: models.Job) -> int:
                 send_email(seeker.email, f"New job on Hire: {job.title}",
                            f"A new job matching your skills was posted.\n\n"
                            f"  {job.title}\n  {job.location or ''}\n\n"
-                           f"Log in to QCloneJob to view and apply.")
+                           f"Log in to JobBay to view and apply.")
             except Exception:
                 pass
 
