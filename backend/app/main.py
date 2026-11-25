@@ -125,6 +125,10 @@ def healthz():
         # "console" here is why an OTP email never arrives.
         "email_provider": provider or "console",
         "email_enabled": bool(provider),
+        # The From address mail actually goes out with. If this is not a sender
+        # verified in the provider, sends are "accepted" but never delivered.
+        "email_sender": ((getattr(settings, "BREVO_SENDER_EMAIL", "") if provider == "brevo" else "")
+                         or settings.EMAIL_FROM or "no-reply@jobbay.com") if provider else None,
     }
 
 
