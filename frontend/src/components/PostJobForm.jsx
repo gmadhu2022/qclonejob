@@ -728,8 +728,8 @@ export default function PostJobForm({
                   </button>
                 </AIResult>
               )}
-              <div><label className="label">Technical requirement</label>
-                <input className="input" value={form.requirement_technical || ""} onChange={set("requirement_technical")} /></div>
+              {/* "Technical requirement" is hidden: the Job title above already covers it.
+                  form.requirement_technical is still kept and saved, so nothing else changes. */}
               <div>
                 <label className="label">Job description <span className="text-red-400">*</span></label>
 <div data-invalid={bad("description") ? "true" : undefined}>

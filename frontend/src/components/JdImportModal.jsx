@@ -17,7 +17,7 @@ const SECTIONS = [
                    ["no_of_positions", "No. of positions"], ["category", "Qualification"]]],
   ["Requirements & pay", [["job_type", "Job type"], ["experience", "Experience"], ["shift", "Shift"],
                           ["salary", "Salary"], ["key_skills", "Skills"], ["perks", "Perks"]]],
-  ["Description", [["requirement_technical", "Technical requirement"], ["description", "Job description"]]],
+  ["Description", [["description", "Job description"]]],      // "Technical requirement" hidden on the post-job form
   ["Contact", [["recruiter_name", "Recruiter name"], ["recruiter_phone", "Recruiter phone"], ["recruiter_email", "Recruiter email"]]],
 ];
 const ACCEPT = ".pdf,.docx,.txt,.md,.csv,.xlsx,.xls";
