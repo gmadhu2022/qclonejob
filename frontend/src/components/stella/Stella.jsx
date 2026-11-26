@@ -308,8 +308,8 @@ export default function Stella() {
   const lastAssistant = [...msgs].reverse().find((m) => m.role === "assistant");
 
   const p = loc.pathname.replace(/\/+$/, "") || "/";
-  // Public pages only — never inside a logged-in portal.
-  const visible = !auth && (p === "/" || p === "/register" || p.startsWith("/register/") ||
+  // Public pages only (for everyone, logged in or not) — never inside the portal pages.
+  const visible = (p === "/" || p === "/register" || p.startsWith("/register/") ||
     p === "/login" || p.startsWith("/login/") || p === "/about" || p === "/contact" || p.startsWith("/services/"));
   useEffect(() => { if (!visible) setOpen(false); }, [visible]);
   if (!visible) return null;
