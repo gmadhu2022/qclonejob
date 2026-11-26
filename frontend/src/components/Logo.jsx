@@ -1,18 +1,20 @@
-import jobbayMark from "../assets/brand/jobbay-mark.svg";
+import { useId } from "react";
 
 /**
- * JobBay logo — vector mark (assets/brand/jobbay-mark.svg) + live-text
- * wordmark ("Job" navy, "Bay" teal, Poppins Bold), so it is sharp at every
- * size and on every screen density.
+ * JobBay logo — animated mark + fixed wordmark (styles: .jb-* in index.css).
  *
- * Sizing: pass a Tailwind height class as before (h-8, h-9, h-10, h-11 …);
- * the mark takes that height and the wordmark scales with it.
+ * The MARK loops its story every 10s:
+ *   a small "j" draws itself with its dot above the stem → the dot slides
+ *   down into the J's cup and settles → holds → J un-draws → repeat.
+ * The WORDMARK "JobBay" (and the BETA badge) stay fixed — always visible,
+ * never animated — so the brand name is readable at every moment.
  *
- * variant: "plain" (light backgrounds) | "pill" (dark backgrounds — white pill)
- *          | "light" (dark backgrounds — white "Job", no pill)
+ * prefers-reduced-motion → the finished mark, still.
  *
- * BETA BADGE — driven by VITE_APP_STAGE; set VITE_APP_STAGE=live to hide it.
- * Pass beta={false} to hide it on a specific instance.
+ * Sizing: pass a Tailwind height class (h-8, h-9, h-10 …); the mark takes
+ * that height and the wordmark scales with it.
+ * variant: "plain" (light bg) | "pill" (dark bg — white pill) | "light" (dark bg, white "Job")
+ * BETA badge: driven by VITE_APP_STAGE (set to "live" to hide); beta={false} hides it per instance.
  */
 const STAGE = (import.meta.env.VITE_APP_STAGE ?? "beta").toLowerCase();
 
@@ -21,21 +23,51 @@ function heightPx(className) {
   return m ? Number(m[1]) * 4 : 36;
 }
 
+function AnimatedMark({ size }) {
+  const id = useId().replace(/[^a-zA-Z0-9]/g, "");
+  const u = (n) => `${n}${id}`;
+  return (
+    <svg viewBox="0 0 120 120" width={size} height={size} className="jb-mark shrink-0 overflow-visible" aria-hidden="true">
+      <defs>
+        <linearGradient id={u("t")} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#123f75" /><stop offset="0.55" stopColor="#0c3060" /><stop offset="1" stopColor="#0a5b6b" />
+        </linearGradient>
+        <linearGradient id={u("s")} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#fff" stopOpacity=".18" /><stop offset=".5" stopColor="#fff" stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id={u("j")} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#5ef2d6" /><stop offset="1" stopColor="#14b8a6" />
+        </linearGradient>
+        <radialGradient id={u("d")} cx=".38" cy=".35" r=".7">
+          <stop offset="0" stopColor="#ffd166" /><stop offset="1" stopColor="#ff9f1c" />
+        </radialGradient>
+        <filter id={u("g")} x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3" /></filter>
+      </defs>
+      <rect width="120" height="120" rx="28" fill={`url(#${u("t")})`} />
+      <rect width="120" height="120" rx="28" fill={`url(#${u("s")})`} />
+      <rect x=".75" y=".75" width="118.5" height="118.5" rx="27.3" fill="none" stroke="#fff" strokeOpacity=".16" strokeWidth="1.5" />
+      <circle className="jb-glow" cx="51" cy="67" r="13" fill="#ffb020" filter={`url(#${u("g")})`} />
+      <path className="jb-j" pathLength="100" d="M75 25 V65 A24 24 0 0 1 27 65 V61" fill="none"
+            stroke={`url(#${u("j")})`} strokeWidth="17" strokeLinecap="round" strokeLinejoin="round" />
+      <circle className="jb-dot" cx="51" cy="67" r="10" fill={`url(#${u("d")})`} />
+    </svg>
+  );
+}
+
 export default function Logo({ className = "h-9", variant = "plain", beta = true }) {
   const showBeta = beta && STAGE === "beta";
   const h = heightPx(className);
   const onDark = variant === "light";
   const jobColor = onDark ? "#ffffff" : "#0b2350";
-  // "Bay" in a teal → green gradient (brighter on dark backgrounds).
   const bayStyle = {
     backgroundImage: onDark ? "linear-gradient(90deg,#2ee6c8,#34d399)" : "linear-gradient(90deg,#0ea5a0,#10b981)",
     WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
   };
 
   const mark = (
-    <span className="inline-flex select-none items-center" style={{ gap: Math.round(h * 0.22) }}
+    <span className="jb-logo inline-flex select-none items-center" style={{ gap: Math.round(h * 0.22) }}
           role="img" aria-label="JobBay">
-      <img src={jobbayMark} alt="" draggable="false" style={{ height: h, width: h }} className="shrink-0" />
+      <AnimatedMark size={h} />
       <span aria-hidden="true" className="font-heading font-bold leading-none"
             style={{ fontSize: Math.round(h * 0.66), letterSpacing: "-0.02em" }}>
         <span style={{ color: jobColor }}>Job</span><span style={bayStyle}>Bay</span>

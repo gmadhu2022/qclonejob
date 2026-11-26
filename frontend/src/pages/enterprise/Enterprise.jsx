@@ -818,7 +818,7 @@ function ManageJobs() {
         </Section>
 
         {/* ---- sticky save bar ---- */}
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-6 py-3 backdrop-blur">
+        <div data-bottom-bar className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-6 py-3 backdrop-blur">
           <div className="mx-auto flex max-w-5xl items-center gap-3">
             <span className="text-sm text-slate-500">
               {dirtyKeys.length

@@ -9,9 +9,11 @@ import JobSeeker from "./pages/jobseeker/JobSeeker";
 import Enterprise from "./pages/enterprise/Enterprise";
 import Institute from "./pages/institute/Institute";
 import Admin from "./pages/admin/Admin";
+import Stella from "./components/stella/Stella";
 
 export default function App() {
   return (
+    <>
     <Routes>
       {/* Public */}
       <Route path="/" element={<Home />} />
@@ -49,5 +51,8 @@ export default function App() {
 
       <Route path="*" element={<Home />} />
     </Routes>
+    {/* Stella, the AI assistant: floating on every page */}
+    <Stella />
+    </>
   );
 }

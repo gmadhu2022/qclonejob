@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .database import Base, engine
 from .routers import (auth, admin, enterprise, institute, jobseeker, public,
-                      chat, health, uploads, notifications, ai, admin_extra)
+                      chat, health, uploads, notifications, ai, admin_extra, stella)
 from .migrate import sync_schema
 
 # Create tables on startup (for production use Alembic migrations instead).
@@ -63,6 +63,7 @@ app.include_router(notifications.router)
 app.include_router(uploads.router)
 app.include_router(ai.router)
 app.include_router(admin_extra.router)
+app.include_router(stella.router)
 
 # Serve uploaded images (swap for Supabase Storage in production)
 UPLOAD_DIR = Path(__file__).resolve().parents[1] / "uploads"
