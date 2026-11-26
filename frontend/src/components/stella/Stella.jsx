@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
@@ -25,43 +25,10 @@ const QUICK = {
     { icon: "🛠️", t: "Our services", q: "What services do you offer?" },
     { icon: "📞", t: "Contact us", q: "Contact us" },
   ],
-  jobseeker: [
-    { icon: "🎯", t: "Jobs for my skills", q: "Find jobs that match my skills" },
-    { icon: "📄", t: "Improve my resume", q: "How can I improve my profile and resume?" },
-    { icon: "📬", t: "My applications", q: "What's the status of my applications?" },
-    { icon: "💬", t: "Interview tips", q: "Give me quick interview tips" },
-  ],
-  enterprise: [
-    { icon: "✍️", t: "Write a job post", q: "Help me write a great job post" },
-    { icon: "🧑‍💼", t: "Find candidates", q: "How do I find the right candidates?" },
-    { icon: "⚡", t: "Hire faster", q: "Tips to hire faster on JobBay" },
-    { icon: "💳", t: "Plans & pricing", q: "What plans are available for recruiters?" },
-  ],
-  institute: [
-    { icon: "📤", t: "Upload students", q: "How do I upload student data?" },
-    { icon: "📢", t: "Post a job", q: "How do I post a job for my students?" },
-    { icon: "🏫", t: "Promote institute", q: "How can I promote my institute with ads?" },
-    { icon: "🏆", t: "Placement tips", q: "Tips to improve placements for my students" },
-  ],
-  admin: [
-    { icon: "📊", t: "Platform overview", q: "Give me a quick overview of the platform" },
-    { icon: "🧭", t: "Where is…", q: "Where can I approve jobs?" },
-  ],
-};
-const INTRO = {
-  visitor: "I can help you find jobs, sign up, hire talent or place students.",
-  jobseeker: "I can find jobs for your skills, polish your resume and prep you for interviews.",
-  enterprise: "I can help you write job posts, find candidates and hire faster.",
-  institute: "I can help you upload students, post jobs and boost placements.",
-  admin: "I can help you find your way around the admin tools.",
 };
 
 
 
-const greeting = () => {
-  const h = new Date().getHours();
-  return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
-};
 
 const fmtTime = (t) => (t ? new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "");
 
@@ -98,10 +65,12 @@ function pickVoice() {
 
 export default function Stella() {
   const { auth } = useAuth();
-  const role = auth?.role || "visitor";
+  // Stella is the same for everyone (logged in or not): one greeting, one set of options,
+  // answers about every portal.
+  const role = "visitor";
   const nav = useNavigate();
   const loc = useLocation();
-  const key = `jobbay.stella.v1.${role}`;
+  const key = "jobbay.stella.v1";
 
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState(() => { try { return JSON.parse(sessionStorage.getItem(key)) || []; } catch { return []; } });
@@ -133,7 +102,8 @@ export default function Stella() {
   // Switching account (login / logout) loads that role's own conversation.
   useEffect(() => { try { setMsgs(JSON.parse(sessionStorage.getItem(key)) || []); } catch { setMsgs([]); } }, [key]);
   useEffect(() => { sessionStorage.setItem(key, JSON.stringify(msgs.slice(-40))); }, [key, msgs]);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [msgs, busy, open]);
+  // Follow the conversation; on the welcome screen stay at the top so Stella's photo is visible.
+  useEffect(() => { if (msgs.length || busy) endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [msgs, busy, open]);
   useEffect(() => { if (open) setTimeout(() => inputRef.current?.focus(), 250); }, [open]);
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && setOpen(false);
@@ -161,7 +131,7 @@ export default function Stella() {
   const ask = useCallback(async (q, history) => {
     setBusy(true);
     try {
-      const r = await api.post("/api/stella/chat", { message: q, history, page: loc.pathname });
+      const r = await api.post("/api/stella/chat", { message: q, history, page: loc.pathname }, { auth: false });
       const links = (r.links || []).filter((l) => ALLOWED_PATHS.has(l?.to));
       setMsgs((m) => [...m, { role: "assistant", content: r.reply, suggestions: r.suggestions || [], links, at: Date.now() }]);
       speak(r.reply);
@@ -300,11 +270,6 @@ export default function Stella() {
   };
   const clear = () => { setMsgs([]); setConfirmClear(false); window.speechSynthesis?.cancel?.(); sessionStorage.removeItem(key); };
   const quick = QUICK[role] || QUICK.visitor;
-  const firstName = useMemo(() => {
-    const e = auth?.email || "";
-    const n = e.split("@")[0].split(/[._\d-]/)[0];
-    return n && role !== "visitor" ? n.charAt(0).toUpperCase() + n.slice(1) : "";
-  }, [auth, role]);
   const lastAssistant = [...msgs].reverse().find((m) => m.role === "assistant");
 
   const p = loc.pathname.replace(/\/+$/, "") || "/";
@@ -409,10 +374,9 @@ export default function Stella() {
             {msgs.length === 0 ? (
               <div className="stella-welcome flex flex-col items-center pt-1 text-center">
                 <StellaAvatar size={84} className="!ring-4" />
-                <h3 className="mt-3 font-heading text-[19px] font-bold text-slate-900">
-                  {greeting()}{firstName ? `, ${firstName}` : ""}! I'm Stella
+                <h3 className="mt-3 font-heading text-[17px] font-bold leading-snug text-slate-900">
+                  Hi, I'm Stella, AI assistant from JobBay
                 </h3>
-                <p className="mt-1 max-w-[300px] text-[13.5px] leading-snug text-slate-500">{INTRO[role] || INTRO.visitor}</p>
                 <div className="mt-4 w-full rounded-2xl bg-white/70 p-2 text-left shadow-[0_10px_30px_-18px_rgba(15,23,42,.5)] ring-1 ring-white/80 backdrop-blur-md">
                   <div className="px-2 pb-1.5 pt-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">Popular questions</div>
                   {quick.map((c) => (
